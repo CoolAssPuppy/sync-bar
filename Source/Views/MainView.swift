@@ -10,8 +10,6 @@ import AppKit
 
 enum MainSelection: Hashable {
     case welcome
-    case notebooks
-    case syncLog
     case notionWorkspace(String)
     case linearAccount(String)
     case googleAccount(String)
@@ -24,8 +22,9 @@ struct MainView: View {
     @ObservedObject var coordinator: SyncCoordinator
     @ObservedObject private var themeStore = ThemeStore.shared
     @ObservedObject private var ledger = Ledger.shared
-    @State private var selection: MainSelection = .notebooks
+    @State private var selection: MainSelection = .remarkable
     @State private var isSettingsOpen = false
+    @State private var isLogOpen = false
     @State private var selectedNotebookId: String?
 
     var body: some View {
@@ -33,8 +32,10 @@ struct MainView: View {
         return ZStack(alignment: .top) {
             HStack(spacing: 0) {
                 Sidebar(
+                    coordinator: coordinator,
                     selection: $selection,
-                    onOpenSettings: { isSettingsOpen = true }
+                    onOpenSettings: { isSettingsOpen = true },
+                    onOpenLog: { isLogOpen = true }
                 )
                 .frame(width: 260)
 
@@ -44,6 +45,7 @@ struct MainView: View {
             .background(theme.background)
 
             SettingsDrawer(isPresented: $isSettingsOpen)
+            SyncLogDrawer(isPresented: $isLogOpen)
         }
         .frame(minWidth: 880, minHeight: 580)
         .background(WindowChrome(palette: theme))
@@ -61,7 +63,7 @@ struct MainView: View {
             isSettingsOpen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSyncLog)) { _ in
-            selection = .syncLog
+            isLogOpen = true
         }
     }
 
@@ -69,15 +71,7 @@ struct MainView: View {
     private var content: some View {
         switch selection {
         case .welcome:
-            WelcomeView(onFinish: { selection = .notebooks })
-        case .notebooks:
-            NotebookListView(
-                selectedNotebookId: $selectedNotebookId,
-                coordinator: coordinator,
-                onRefresh: refreshNotebooks
-            )
-        case .syncLog:
-            SyncLogView()
+            WelcomeView(onFinish: { selection = .remarkable })
         case .notionWorkspace(let id):
             NotionWorkspaceDetailView(workspaceId: id)
         case .linearAccount(let id):
@@ -89,7 +83,15 @@ struct MainView: View {
         case .appleNotesTarget(let id):
             AppleNotesTargetDetailView(targetId: id)
         case .remarkable:
-            RemarkableDetailView()
+            if ledger.remarkableAccount != nil {
+                NotebookListView(
+                    selectedNotebookId: $selectedNotebookId,
+                    coordinator: coordinator,
+                    onRefresh: refreshNotebooks
+                )
+            } else {
+                RemarkableDetailView()
+            }
         }
     }
 

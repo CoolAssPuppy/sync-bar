@@ -9,10 +9,22 @@ import SwiftUI
 
 struct Sidebar: View {
     @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject private var coordinator: SyncCoordinator
     @Environment(\.theme) private var theme
     @Binding var selection: MainSelection
     var onOpenSettings: () -> Void
+    var onOpenLog: () -> Void
     @State private var showAddDestination = false
+
+    init(coordinator: SyncCoordinator,
+         selection: Binding<MainSelection>,
+         onOpenSettings: @escaping () -> Void,
+         onOpenLog: @escaping () -> Void) {
+        self.coordinator = coordinator
+        self._selection = selection
+        self.onOpenSettings = onOpenSettings
+        self.onOpenLog = onOpenLog
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +34,6 @@ struct Sidebar: View {
                 VStack(spacing: 14) {
                     sourceSection
                     destinationsSection
-                    navigationSection
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
@@ -76,9 +87,8 @@ struct Sidebar: View {
             AccountRow(
                 title: "reMarkable",
                 subtitle: ledger.remarkableAccount.map { "Paired \(Formatters.relativeLabel(for: $0.pairedAt))" } ?? "Not connected",
-                systemImage: "pencil.tip.crop.circle",
-                isSelected: selection == .remarkable,
-                isAccent: ledger.remarkableAccount != nil
+                icon: .systemSymbol("pencil.tip.crop.circle", accent: ledger.remarkableAccount != nil),
+                isSelected: selection == .remarkable
             )
             .onTapGesture { selection = .remarkable }
         }
@@ -108,36 +118,21 @@ struct Sidebar: View {
             .padding(.bottom, 2)
 
             if isEmptyOfDestinations {
-                Button(action: { showAddDestination = true }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("Add destination")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundStyle(theme.foreground)
+                Text("Add a destination to start syncing")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                            .fill(theme.card)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .foregroundStyle(theme.borderStrong)
-                    )
-                }
-                .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 14)
             }
 
             ForEach(ledger.notionWorkspaces) { workspace in
                 AccountRow(
                     title: workspace.workspaceName,
                     subtitle: "Notion",
-                    systemImage: DestinationKind.notion.systemImage,
-                    isSelected: selection == .notionWorkspace(workspace.id),
-                    isAccent: true
+                    icon: .destination(.notion),
+                    isSelected: selection == .notionWorkspace(workspace.id)
                 )
                 .onTapGesture { selection = .notionWorkspace(workspace.id) }
             }
@@ -145,9 +140,8 @@ struct Sidebar: View {
                 AccountRow(
                     title: account.name,
                     subtitle: "Linear · \(account.organizationName)",
-                    systemImage: DestinationKind.linear.systemImage,
-                    isSelected: selection == .linearAccount(account.id),
-                    isAccent: true
+                    icon: .destination(.linear),
+                    isSelected: selection == .linearAccount(account.id)
                 )
                 .onTapGesture { selection = .linearAccount(account.id) }
             }
@@ -155,9 +149,8 @@ struct Sidebar: View {
                 AccountRow(
                     title: account.displayName,
                     subtitle: "Google Docs",
-                    systemImage: DestinationKind.googleDocs.systemImage,
-                    isSelected: selection == .googleAccount(account.id),
-                    isAccent: true
+                    icon: .destination(.googleDocs),
+                    isSelected: selection == .googleAccount(account.id)
                 )
                 .onTapGesture { selection = .googleAccount(account.id) }
             }
@@ -165,9 +158,8 @@ struct Sidebar: View {
                 AccountRow(
                     title: target.displayName,
                     subtitle: "Markdown · \((target.folderPath as NSString).lastPathComponent)",
-                    systemImage: DestinationKind.markdownFolder.systemImage,
-                    isSelected: selection == .markdownTarget(target.id),
-                    isAccent: true
+                    icon: .destination(.markdownFolder),
+                    isSelected: selection == .markdownTarget(target.id)
                 )
                 .onTapGesture { selection = .markdownTarget(target.id) }
             }
@@ -175,9 +167,8 @@ struct Sidebar: View {
                 AccountRow(
                     title: target.folderName,
                     subtitle: "Apple Notes",
-                    systemImage: DestinationKind.appleNotes.systemImage,
-                    isSelected: selection == .appleNotesTarget(target.id),
-                    isAccent: true
+                    icon: .destination(.appleNotes),
+                    isSelected: selection == .appleNotesTarget(target.id)
                 )
                 .onTapGesture { selection = .appleNotesTarget(target.id) }
             }
@@ -192,28 +183,6 @@ struct Sidebar: View {
         && ledger.appleNotesTargets.isEmpty
     }
 
-    // MARK: Navigation
-
-    private var navigationSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            sectionLabel("View")
-            NavRow(
-                title: "Notebooks",
-                systemImage: "book.closed",
-                isSelected: selection == .notebooks,
-                badge: ledger.notebooks.isEmpty ? nil : "\(ledger.notebooks.count)"
-            )
-            .onTapGesture { selection = .notebooks }
-
-            NavRow(
-                title: "Sync log",
-                systemImage: "list.bullet.rectangle",
-                isSelected: selection == .syncLog,
-                badge: ledger.events.isEmpty ? nil : "\(ledger.events.count)"
-            )
-            .onTapGesture { selection = .syncLog }
-        }
-    }
 
     private func sectionLabel(_ text: LocalizedStringKey) -> some View {
         HStack {
@@ -229,36 +198,85 @@ struct Sidebar: View {
         .padding(.bottom, 2)
     }
 
-    // MARK: Footer
+    // MARK: Footer status bar
 
+    /// Compact bar that mirrors the popover header: a "Last synced …" status
+    /// label on the left, a logs button, then the gear. Replaces the older
+    /// big Onboarding button.
     private var footer: some View {
-        HStack(spacing: 8) {
-            Button(action: { NotificationCenter.default.post(name: .openOnboarding, object: nil) }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Onboarding")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(theme.foreground)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .fill(theme.card)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .strokeBorder(theme.borderStrong, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
+        HStack(spacing: 6) {
+            statusLabel
 
-            Button(action: onOpenSettings) {
-                Image(systemName: "gearshape")
+            Spacer(minLength: 6)
+
+            footerButton(systemName: "list.bullet.rectangle",
+                         help: "Open sync log",
+                         badgeCount: ledger.events.count) {
+                onOpenLog()
+            }
+
+            footerButton(systemName: "gearshape", help: "Settings (⌘,)") {
+                onOpenSettings()
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .overlay(
+            Rectangle().fill(theme.divider).frame(height: 1),
+            alignment: .top
+        )
+    }
+
+    private var statusLabel: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusDot)
+                .frame(width: 6, height: 6)
+                .shadow(color: statusDot.opacity(0.5), radius: 3)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(statusPrimary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(theme.foregroundSoft)
+                Text(statusSecondary)
+                    .font(.system(size: 9))
+                    .foregroundStyle(theme.tertiary)
+            }
+        }
+    }
+
+    private var statusDot: Color {
+        if coordinator.isSyncing { return theme.primary }
+        if AppSettings.shared.pauseSyncing { return theme.warning }
+        if ledger.rules.contains(where: { !$0.destinations.isEmpty }) { return theme.success }
+        return theme.tertiary
+    }
+
+    private var statusPrimary: String {
+        if coordinator.isSyncing { return "Syncing now" }
+        if let last = coordinator.lastTickAt { return "Last synced \(Formatters.relativeLabel(for: last))" }
+        if ledger.rules.isEmpty { return "No rules yet" }
+        return "Never synced"
+    }
+
+    private var statusSecondary: String {
+        if AppSettings.shared.pauseSyncing { return "Syncing paused" }
+        if let next = coordinator.nextTickAt {
+            return "Next at \(Formatters.shortTime.string(from: next))"
+        }
+        return "Manual only"
+    }
+
+    private func footerButton(systemName: String,
+                              help: LocalizedStringKey,
+                              badgeCount: Int = 0,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: systemName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(theme.muted)
-                    .frame(width: 34, height: 32)
+                    .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                             .fill(theme.card)
@@ -267,45 +285,41 @@ struct Sidebar: View {
                         RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                             .strokeBorder(theme.borderStrong, lineWidth: 1)
                     )
+                if badgeCount > 0 {
+                    Circle()
+                        .fill(theme.warning)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 2, y: -2)
+                }
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(",", modifiers: .command)
-            .help(LocalizedStringKey("Settings (⌘,)"))
         }
-        .padding(12)
-        .overlay(
-            Rectangle().fill(theme.divider).frame(height: 1),
-            alignment: .top
-        )
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
 // MARK: - Rows (reused from prior version)
 
+/// Visual variant for the icon slot on `AccountRow`. Sources (reMarkable)
+/// use SF symbols; destinations use the bundled brand asset.
+enum AccountRowIcon {
+    case systemSymbol(String, accent: Bool)
+    case destination(DestinationKind)
+}
+
 private struct AccountRow: View {
     let title: String
     let subtitle: String
-    let systemImage: String
+    let icon: AccountRowIcon
     let isSelected: Bool
-    let isAccent: Bool
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(theme.cardElevated)
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isAccent ? theme.primary : theme.tertiary)
-            }
-            .frame(width: 22, height: 22)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(theme.borderStrong, lineWidth: 1)
-            )
+            iconView
+                .frame(width: 22, height: 22)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -342,6 +356,26 @@ private struct AccountRow: View {
                 .fill(Color.white.opacity(0.02))
         } else {
             Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case .systemSymbol(let name, let accent):
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(theme.cardElevated)
+                Image(systemName: name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(accent ? theme.primary : theme.tertiary)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(theme.borderStrong, lineWidth: 1)
+            )
+        case .destination(let kind):
+            DestinationIcon(kind: kind, size: 22)
         }
     }
 }

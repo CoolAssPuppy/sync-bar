@@ -321,29 +321,43 @@ struct RemarkableDetailView: View {
     }
 
     private var pairForm: some View {
-        AppCard("Pair your device") {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Sign in at my.remarkable.com, open Connect, generate a one-time code, and paste it below.")
+        VStack(spacing: 22) {
+            VStack(spacing: 8) {
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(theme.primary)
+                Text("Pair your reMarkable")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("Sign in at my.remarkable.com, open the Connect section, and generate an 8-character one-time code.")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.muted)
-                TextField("8-character one-time code", text: $oneTimeCode)
-                    .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
-                    .frame(maxWidth: 280)
-                if let errorMessage {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(theme.destructive)
-                        Text(errorMessage)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(theme.destructive)
-                    }
-                }
-                AppPrimaryButton(title: isPairing ? "Pairing…" : "Pair device", systemImage: "qrcode.viewfinder", isDisabled: oneTimeCode.count < 4 || isPairing) {
-                    Task { await pair() }
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+
+            CodeBoxField(value: $oneTimeCode, length: 8)
+
+            if let errorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(theme.destructive)
+                    Text(errorMessage)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.destructive)
                 }
             }
+
+            AppPrimaryButton(
+                title: isPairing ? "Pairing…" : "Pair device",
+                systemImage: "qrcode.viewfinder",
+                isDisabled: oneTimeCode.count != 8 || isPairing
+            ) {
+                Task { await pair() }
+            }
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
     }
 
     private func pair() async {

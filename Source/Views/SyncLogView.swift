@@ -16,36 +16,24 @@ struct SyncLogView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider().background(theme.divider)
+            filterBar
             if filteredEvents.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(filteredEvents) { event in
-                            EventRow(event: event)
-                        }
+                LazyVStack(spacing: 6) {
+                    ForEach(filteredEvents) { event in
+                        EventRow(event: event)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
             }
         }
         .background(theme.background)
     }
 
-    private var header: some View {
+    private var filterBar: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Sync log")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text("\(ledger.events.count) event\(ledger.events.count == 1 ? "" : "s") recorded")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
-            }
-            Spacer()
             Picker("", selection: $selectedEventType) {
                 Text("All events").tag("all")
                 Text("Page synced").tag(SyncEventType.pageSynced.rawValue)
@@ -58,14 +46,12 @@ struct SyncLogView: View {
 
             TextField("Filter…", text: $search)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
+                .frame(maxWidth: 240)
 
-            AppSecondaryButton(title: "Clear log", systemImage: "trash", tint: .destructive) {
-                ledger.clearEvents()
-            }
+            Spacer()
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.vertical, 10)
     }
 
     private var emptyState: some View {

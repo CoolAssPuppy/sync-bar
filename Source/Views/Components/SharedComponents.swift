@@ -256,6 +256,32 @@ struct AppIconButton: View {
     }
 }
 
+// MARK: - Destination icon
+
+/// Renders the bundled brand asset for a destination, falling back to the
+/// SF Symbol if the asset file is missing. Centralises the lookup so the
+/// rest of the app doesn't branch on `Image(_:) vs Image(systemName:)`.
+struct DestinationIcon: View {
+    let kind: DestinationKind
+    var size: CGFloat = 18
+
+    var body: some View {
+        let bundleImage = NSImage(named: kind.assetName)
+        Group {
+            if let bundleImage, bundleImage.isValid {
+                Image(nsImage: bundleImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                Image(systemName: kind.systemImage)
+                    .font(.system(size: size * 0.7, weight: .medium))
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - Brand mark
 
 struct BrandMark: View {
@@ -355,6 +381,69 @@ struct ThemeStrip: View {
                     )
                 )
         }
+    }
+}
+
+// MARK: - 8-box code field
+
+/// Visual stand-in for `length` individual single-character boxes backed by
+/// one hidden TextField. Pasting an 8-character code or typing fills the
+/// boxes left-to-right. Focusing any box focuses the underlying field.
+struct CodeBoxField: View {
+    @Binding var value: String
+    var length: Int = 8
+
+    @Environment(\.theme) private var theme
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        ZStack {
+            // Hidden field accepts the actual keystrokes.
+            TextField("", text: Binding(
+                get: { value },
+                set: { newValue in
+                    let cleaned = newValue.uppercased()
+                        .filter { $0.isLetter || $0.isNumber }
+                    value = String(cleaned.prefix(length))
+                }
+            ))
+            .textFieldStyle(.plain)
+            .focused($isFocused)
+            .opacity(0.001)
+            .frame(width: 1, height: 1)
+
+            HStack(spacing: 8) {
+                ForEach(0..<length, id: \.self) { index in
+                    box(at: index)
+                }
+            }
+        }
+        .onTapGesture { isFocused = true }
+        .onAppear { isFocused = true }
+    }
+
+    private func box(at index: Int) -> some View {
+        let chars = Array(value)
+        let isFilled = index < chars.count
+        let isCaret = isFocused && index == chars.count
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(theme.card)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isCaret ? theme.primary : theme.borderStrong,
+                              lineWidth: isCaret ? 1.5 : 1)
+            if isFilled {
+                Text(String(chars[index]))
+                    .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(theme.foreground)
+            } else if isCaret {
+                Rectangle()
+                    .fill(theme.primary)
+                    .frame(width: 1.5, height: 18)
+            }
+        }
+        .frame(width: 36, height: 44)
     }
 }
 

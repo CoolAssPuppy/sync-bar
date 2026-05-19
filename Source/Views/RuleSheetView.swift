@@ -198,9 +198,7 @@ struct RuleSheetView: View {
     private func addBindingButton(kind: DestinationKind) -> some View {
         Button(action: { addBindingKind = kind }) {
             HStack(spacing: 8) {
-                Image(systemName: kind.systemImage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.primary)
+                DestinationIcon(kind: kind, size: 18)
                 Text("Add \(kind.label)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(theme.foreground)
@@ -319,14 +317,7 @@ private struct DestinationBindingRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
-                Image(systemName: binding.kind.systemImage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.primary)
-            }
-            .frame(width: 28, height: 28)
-
+            DestinationIcon(kind: binding.kind, size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(binding.configuration.summary)
                     .font(.system(size: 12, weight: .semibold))

@@ -21,15 +21,13 @@ struct SettingsView: View {
                 VStack(spacing: 14) {
                     generalCard
                     ocrCard
-                    accountsCard
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(spacing: 14) {
                     notificationsCard
                     updatesCard
-                    dataCard
-                    advancedCard
+                    contactCard
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -131,47 +129,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Accounts
-
-    private var accountsCard: some View {
-        AppCard("Accounts") {
-            VStack(spacing: 0) {
-                AppSettingRow("reMarkable", description: ledger.remarkableAccount == nil ? "Not paired" : "Paired") {
-                    if let account = ledger.remarkableAccount {
-                        Text(account.userIdentifier)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(theme.muted)
-                    } else {
-                        AppSecondaryButton(title: "Pair", systemImage: "qrcode.viewfinder") {
-                            NotificationCenter.default.post(name: .openPairRemarkable, object: nil)
-                        }
-                    }
-                }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Notion workspaces",
-                              description: ledger.notionWorkspaces.isEmpty
-                                ? "No workspaces connected"
-                                : "\(ledger.notionWorkspaces.count) connected") {
-                    AppSecondaryButton(title: "Add", systemImage: "plus") {
-                        Task {
-                            let workspace = try? await MockNotionClient()
-                                .connectMockWorkspace(label: "Workspace \(ledger.notionWorkspaces.count + 1)")
-                            if let workspace { ledger.upsertNotionWorkspace(workspace) }
-                        }
-                    }
-                }
-                ForEach(ledger.notionWorkspaces) { workspace in
-                    AppRowDivider().padding(.vertical, 10)
-                    AppSettingRow(LocalizedStringKey(workspace.workspaceName), description: nil) {
-                        AppSecondaryButton(title: "Disconnect", tint: .destructive) {
-                            ledger.removeNotionWorkspace(id: workspace.id)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: Notifications
 
     private var notificationsCard: some View {
@@ -213,59 +170,40 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Data
+    // MARK: Contact
 
-    private var dataCard: some View {
-        AppCard("Data") {
-            VStack(spacing: 0) {
-                AppSettingRow("Export ledger as JSON",
-                              description: "All accounts, rules, and recent events as a snapshot.") {
-                    AppSecondaryButton(title: "Export…", systemImage: "square.and.arrow.up") {
-                        exportLedger()
-                    }
-                }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Clear sync log",
-                              description: "Removes the local event history. CloudKit data is untouched.") {
-                    AppSecondaryButton(title: "Clear", tint: .destructive) {
-                        ledger.clearEvents()
-                    }
-                }
+    private var contactCard: some View {
+        AppCard("Contact") {
+            VStack(alignment: .leading, spacing: 10) {
+                contactRow(systemName: "ladybug.fill",
+                           title: "bugs@strategicnerds.com",
+                           url: "mailto:bugs@strategicnerds.com")
+                contactRow(systemName: "chevron.left.forwardslash.chevron.right",
+                           title: "Contribute on GitHub",
+                           url: "https://github.com/CoolAssPuppy/syncnerds")
+                contactRow(systemName: "cup.and.saucer.fill",
+                           title: "Buy me coffee",
+                           url: "https://venmo.com/u/coolasspuppy")
+                contactRow(systemName: "book.closed.fill",
+                           title: "Buy my book",
+                           url: "https://www.strategicnerds.com/picksandshovels")
             }
         }
     }
 
-    // MARK: Advanced
-
-    private var advancedCard: some View {
-        AppCard("Advanced") {
-            VStack(spacing: 0) {
-                AppSettingRow("Pause syncing",
-                              description: "Stop the background timer until you flip this back off.") {
-                    Toggle("", isOn: $settings.pauseSyncing)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
-                }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Reset settings to defaults",
-                              description: "Restores every preference. Rules and accounts are untouched.") {
-                    AppSecondaryButton(title: "Reset", tint: .destructive) {
-                        settings.resetToDefaults()
-                    }
-                }
+    private func contactRow(systemName: String, title: String, url: String) -> some View {
+        Link(destination: URL(string: url) ?? URL(string: "https://strategicnerds.com")!) {
+            HStack(spacing: 8) {
+                Image(systemName: systemName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
+                    .frame(width: 16, alignment: .center)
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.primary)
             }
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: Actions
-
-    private func exportLedger() {
-        guard let data = ledger.exportSnapshot() else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "syncnerds-ledger.json"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            try? data.write(to: url)
-        }
-    }
 }

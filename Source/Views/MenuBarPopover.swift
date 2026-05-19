@@ -308,10 +308,7 @@ private struct BindingMiniRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: binding.kind.systemImage)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(theme.primary)
-                .frame(width: 16)
+            DestinationIcon(kind: binding.kind, size: 14)
             Text(binding.configuration.summary)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(theme.foregroundSoft)

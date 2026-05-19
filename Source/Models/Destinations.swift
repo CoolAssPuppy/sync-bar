@@ -42,7 +42,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// SF Symbol used in the sidebar and the destination picker.
+    /// SF Symbol used as a fallback when the bundled brand asset is missing.
     var systemImage: String {
         switch self {
         case .notion:         return "square.grid.3x3.fill"
@@ -50,6 +50,19 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .googleDocs:     return "doc.text.fill"
         case .appleNotes:     return "note.text"
         case .markdownFolder: return "folder.fill"
+        }
+    }
+
+    /// Name of the brand asset shipped in `Images.xcassets/Destinations/`.
+    /// Asset slots ship with placeholder marks until the real brand artwork
+    /// drops in; we still render the SF Symbol if the asset is missing.
+    var assetName: String {
+        switch self {
+        case .notion:         return "Destinations/Notion"
+        case .linear:         return "Destinations/Linear"
+        case .googleDocs:     return "Destinations/GoogleDocs"
+        case .appleNotes:     return "Destinations/AppleNotes"
+        case .markdownFolder: return "Destinations/Markdown"
         }
     }
 

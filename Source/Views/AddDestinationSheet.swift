@@ -96,14 +96,12 @@ struct AddDestinationSheet: View {
 
     @ViewBuilder
     private func detailsCard(theme: ThemePalette) -> some View {
-        AppCard(LocalizedStringKey("Setup for \(selectedKind.label)")) {
-            switch selectedKind {
-            case .notion:         notionFields
-            case .linear:         linearFields
-            case .googleDocs:     googleFields
-            case .appleNotes:     appleNotesFields
-            case .markdownFolder: markdownFields
-            }
+        switch selectedKind {
+        case .notion:         notionFields
+        case .linear:         linearFields
+        case .googleDocs:     googleFields
+        case .appleNotes:     appleNotesFields
+        case .markdownFolder: markdownFields
         }
     }
 
@@ -280,14 +278,7 @@ private struct KindTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(theme.cardElevated)
-                        Image(systemName: kind.systemImage)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(isSelected ? theme.primary : theme.foregroundSoft)
-                    }
-                    .frame(width: 28, height: 28)
+                    DestinationIcon(kind: kind, size: 28)
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")

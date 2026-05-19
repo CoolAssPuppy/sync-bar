@@ -261,7 +261,13 @@ struct RuleSliderView: View {
                 .menuStyle(.borderlessButton)
                 .frame(maxWidth: .infinity)
 
-                Button(action: { addBindingKind = .notion }) {
+                Menu {
+                    ForEach(DestinationKind.allCases) { kind in
+                        Button(action: { addBindingKind = kind }) {
+                            Label("Add \(kind.label)", systemImage: kind.systemImage)
+                        }
+                    }
+                } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(theme.primaryForeground)
@@ -271,7 +277,9 @@ struct RuleSliderView: View {
                                 .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
                         )
                 }
-                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .help("Add a destination of any kind")
             }
 

@@ -225,11 +225,18 @@ private struct MarkdownFormState {
 
 // MARK: - Per-kind forms
 
+private enum LoadState<T> {
+    case idle
+    case loading
+    case loaded(T)
+    case failed(String)
+}
+
 private struct NotionForm: View {
     @Binding var binding: NotionFormState
     let workspaces: [NotionWorkspace]
-    @State private var destinations: [NotionDestination] = []
-    @State private var schema: [NotionDatabaseProperty] = []
+    @State private var destinations: LoadState<[NotionDestination]> = .idle
+    @State private var schema: LoadState<[NotionDatabaseProperty]> = .idle
     @Environment(\.theme) private var theme
     private let notion = MockNotionClient()
 
@@ -251,38 +258,33 @@ private struct NotionForm: View {
                         }
                     }
                     AppRowDivider().padding(.vertical, 10)
-                    AppSettingRow("Page or database", description: nil) {
+                    AppSettingRow("Page or database", description: destinationsHint) {
                         Picker("", selection: $binding.destinationId) {
                             Text("Select…").tag("")
-                            ForEach(destinations) { destination in
+                            ForEach(destinationsList) { destination in
                                 Text("\(destination.icon ?? "•") \(destination.title)").tag(destination.id)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 260)
+                        .disabled(!isDestinationsReady)
                         .onChange(of: binding.destinationId) { _, newValue in
-                            if let dest = destinations.first(where: { $0.id == newValue }) {
+                            if let dest = destinationsList.first(where: { $0.id == newValue }) {
                                 binding.destinationType = dest.type
                                 binding.destinationTitle = dest.title
                                 if dest.type == .database {
                                     Task { await loadSchema(destinationId: newValue) }
                                 } else {
-                                    schema = []
+                                    schema = .idle
                                 }
                             }
                         }
                     }
                 }
             }
-            if binding.destinationType == .database, !schema.isEmpty {
+            if binding.destinationType == .database {
                 AppCard("Column mapping") {
-                    VStack(spacing: 0) {
-                        ForEach(Array(schema.enumerated()), id: \.offset) { index, property in
-                            if index > 0 { AppRowDivider().padding(.vertical, 10) }
-                            NotionColumnMappingRow(property: property,
-                                                   mapping: bindingForProperty(property))
-                        }
-                    }
+                    schemaSection
                 }
             }
         }
@@ -290,6 +292,55 @@ private struct NotionForm: View {
             await loadDestinations(workspaceId: binding.workspaceId)
             if binding.destinationType == .database {
                 await loadSchema(destinationId: binding.destinationId)
+            }
+        }
+    }
+
+    private var destinationsList: [NotionDestination] {
+        if case .loaded(let list) = destinations { return list }
+        return []
+    }
+
+    private var isDestinationsReady: Bool {
+        if case .loaded = destinations { return true }
+        return false
+    }
+
+    private var destinationsHint: LocalizedStringKey? {
+        switch destinations {
+        case .idle:    return nil
+        case .loading: return "Loading from Notion…"
+        case .loaded:  return nil
+        case .failed(let message): return LocalizedStringKey(message)
+        }
+    }
+
+    @ViewBuilder
+    private var schemaSection: some View {
+        switch schema {
+        case .idle, .loading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Loading database schema…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed(let message):
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(theme.destructive)
+                Text(message)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.destructive)
+            }
+        case .loaded(let properties):
+            VStack(spacing: 0) {
+                ForEach(Array(properties.enumerated()), id: \.offset) { index, property in
+                    if index > 0 { AppRowDivider().padding(.vertical, 10) }
+                    NotionColumnMappingRow(property: property,
+                                           mapping: bindingForProperty(property))
+                }
             }
         }
     }
@@ -302,15 +353,25 @@ private struct NotionForm: View {
     }
 
     private func loadDestinations(workspaceId: String) async {
-        guard !workspaceId.isEmpty else { destinations = []; return }
-        let result = (try? await notion.listDestinations(workspaceId: workspaceId)) ?? []
-        await MainActor.run { destinations = result }
+        guard !workspaceId.isEmpty else { destinations = .idle; return }
+        destinations = .loading
+        do {
+            let list = try await notion.listDestinations(workspaceId: workspaceId)
+            destinations = .loaded(list)
+        } catch {
+            destinations = .failed(Formatters.userMessage(for: error))
+        }
     }
 
     private func loadSchema(destinationId: String) async {
-        guard !destinationId.isEmpty else { schema = []; return }
-        let result = (try? await notion.databaseSchema(destinationId: destinationId, workspaceId: binding.workspaceId)) ?? []
-        await MainActor.run { schema = result }
+        guard !destinationId.isEmpty else { schema = .idle; return }
+        schema = .loading
+        do {
+            let properties = try await notion.databaseSchema(destinationId: destinationId, workspaceId: binding.workspaceId)
+            schema = .loaded(properties)
+        } catch {
+            schema = .failed(Formatters.userMessage(for: error))
+        }
     }
 }
 

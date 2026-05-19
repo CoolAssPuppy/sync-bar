@@ -128,8 +128,24 @@ final class SyncCoordinator: ObservableObject {
         )
         var ocrResults: [(page: RmPage, result: OcrResult)] = []
         for page in pages {
+            // The real client (when paired) will return the rasterized PNG
+            // for this page. Until that lands, skip the OCR call entirely
+            // and synthesize a `[blank page]` result so the rules engine
+            // can still drive create/skip decisions deterministically and
+            // we don't upload empty bytes to OpenAI / Anthropic.
+            guard let imageData = await imageData(for: page), !imageData.isEmpty else {
+                ocrResults.append((page, OcrResult(
+                    text: "[blank page]",
+                    mermaidSource: nil,
+                    provider: ocr.name,
+                    model: nil,
+                    tokensIn: nil,
+                    tokensOut: nil
+                )))
+                continue
+            }
             do {
-                let result = try await ocr.transcribe(imageData: Data())
+                let result = try await ocr.transcribe(imageData: imageData)
                 ocrResults.append((page, result))
             } catch {
                 let message = Formatters.userMessage(for: error)
@@ -277,6 +293,15 @@ final class SyncCoordinator: ObservableObject {
 
     private func ruleHeader(_ rule: SyncRule, binding: DestinationBinding) -> String {
         "\(rule.rmNotebookName) → \(binding.configuration.summary)"
+    }
+
+    /// Page-image fetch is a placeholder until the real reMarkable client
+    /// rasterises pages. Returning nil short-circuits the OCR call so we
+    /// don't ship zero-byte uploads to the LLM providers.
+    private func imageData(for page: RmPage) async -> Data? {
+        // TODO(remarkable-cloud): replace with the rasterized PNG once the
+        // sync/v3 index walker lands.
+        return nil
     }
 
     private func postNotification(title: String, body: String) {

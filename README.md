@@ -50,7 +50,6 @@ Tweak the prompt in one place: `OCRPrompts.systemPrompt`.
 - A real reMarkable cloud client that walks the sync/v3 index graph (the protocol is reverse-engineered, not officially documented; there are no webhooks, only polling).
 - Notion / Linear / Google OAuth flows (today you paste tokens manually in Settings).
 - Real CloudKit reads/writes from `Ledger` (scaffolding is in `CloudKitLedger.swift` with the right entitlement; the active store is still UserDefaults until we can sign + entitle a build for real CloudKit testing).
-- App icon set (Images.xcassets/AppIcon.appiconset has the Contents.json but no PNGs yet).
 - Signed and notarized DMG release pipeline (scripts/release.sh is a stub).
 - Snapshot and UI tests.
 
@@ -82,7 +81,7 @@ make bootstrap   # one-time: generates SyncNerds.xcodeproj and resolves deps
 make build       # debug build → build/Build/Products/Debug/SyncNerds.app
 make run         # build + launch
 make release     # release build (no signing pipeline yet)
-make test        # unit tests (19 passing today)
+make test        # unit tests (24 passing today)
 make lint        # SwiftLint with the config under .swiftlint.yml
 make clean       # nuke build/ and the generated xcodeproj
 ```

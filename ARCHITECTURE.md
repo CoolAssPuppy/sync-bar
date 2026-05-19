@@ -138,10 +138,10 @@ Color tokens (background, surface, card, border*, foreground*, primary, success,
 
 ## Known tech debt (tracked separately)
 
-The full audit is in `tasks/lessons.md`. Highlights for v0.3:
+The full audit lives in `tasks/lessons.md`. Highlights for v0.3:
 
-- View layer reaches singletons (`Ledger.shared`, `AppSettings.shared`, `KeychainStore.shared`); migrate to `@Environment` injection.
-- App icon PNGs not yet generated.
-- `scripts/release.sh` is a stub; no notarization/DMG pipeline yet.
-- `BindingEditorSheet` and `DetailViews` are large multi-screen files that want splitting.
-- Real CloudKit reads/writes pending signed-build provisioning.
+- Views still reach `Ledger.shared` / `KeychainStore.shared` directly; migrating to `@Environment` injection across the view tree is still pending. `SyncCoordinator` is already DI-ready (ledger, settings, keychain, remarkable, engine all injectable).
+- `scripts/release.sh` is a stub; no notarization / DMG pipeline yet (Sparkle keys + feed URL are in Info.plist).
+- `BindingEditorSheet` is still 700+ lines — split per-kind forms into their own files.
+- Real reMarkable cloud client (sync/v3 index walker) and Notion / Linear / Google OAuth flows remain to be wired.
+- Real CloudKit reads/writes pending signed-build provisioning. Scaffolding ready in `CloudKitLedger.swift`.

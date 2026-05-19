@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.0-dev — 2026-05-20 (overnight)
+
+UI polish, real branding, audit-driven cleanup. Visible additions:
+
+### Added
+- App icon set (charcoal squircle + yellow interlocked-arrows mark) and a matching menu bar template image. The menu bar swaps to the yellow variant while syncing.
+- `scripts/generate-icons.py` renders every asset from one drawing routine.
+- Destination header gear → inline drawer with Rename / Reauthorize / Delete; rename helpers per kind on `Ledger`, including a cascade for Apple Notes folder renames.
+- Rule slider redesign: single "Add destination" picker when empty, a binding dropdown plus inline panel when populated. The big yellow + button now opens a kind menu (no longer hardcoded to Notion).
+- Notion column-mapping UI now writes its values into Notion: every `NotionPropertyMapping` case is translated to the v2022-06-28 properties payload.
+- LoadState&lt;T&gt; for the Notion catalog + schema fetch so 401 / 429 / network failures show up in the binding editor instead of presenting an empty picker.
+- `NotionClientFactory` picks the real Notion client when a workspace token is in Keychain.
+- Per-binding `titleStrategyOverride` and `ocrModeOverride` are now actually honored by `SyncCoordinator`.
+- Settings → OCR Save buttons compress to a 22×22 inline checkmark; Sync all / Refresh in the notebook header are icon-only.
+- Sync log drawer hosts Export ledger and Clear log in its footer; sync events now record OCR failures so the audit trail is complete.
+
+### Changed
+- `SyncCoordinator` now takes `AppSettings` and `KeychainStore` as init dependencies (alongside `Ledger`, `RemarkableClient`, `RulesEngine`).
+- Timer re-reads `syncIntervalSeconds` on each loop so settings changes apply on the next tick.
+- Don't ship empty bytes to LLM OCR providers; synthesize `[blank page]` results until the real reMarkable rasteriser lands.
+- Notify-on-success notifications no longer fire on zero-result cycles.
+- Markdown / Apple Notes removal no longer cascades bindings owned by sibling targets that share the same path / folder name.
+- `Ledger.upsert` uses Equatable directly instead of JSON-encoding both sides.
+
+### Removed
+- `connectMockWorkspace` from the `NotionClient` protocol (mock-only concept that the real client threw for).
+- Dead `NavRow`, `currentRule`, `showAddKindPicker`, `persistWorkspaces`, `areEqualEncoded`.
+
+### Docs
+- README + ARCHITECTURE refreshed to match the v0.3-dev surface; test count corrected to 24.
+
 ## 0.2.0 — 2026-05-19 (late)
 
 Multi-destination architecture and real services. Same overnight session as 0.1.0; bumped for the scope of the rewrite.
@@ -45,7 +76,7 @@ Multi-destination architecture and real services. Same overnight session as 0.1.
 - A pile of "for now" / "v0.1" / "overnight build" comments.
 
 ### Tests
-- 19 unit tests passing (was 14 at 0.1.0). New coverage:
+- 24 unit tests passing (was 14 at 0.1.0). New coverage:
   - `OCRPromptsTests` — mermaid extraction round-trip + prompt-sentinel guarantees.
   - `DestinationBindingTests` — Codable round-trip for each destination kind, aggregate-status rules.
   - `MarkdownDestinationClientTests` — end-to-end write with frontmatter and mermaid block.

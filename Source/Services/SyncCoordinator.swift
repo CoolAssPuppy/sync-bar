@@ -21,15 +21,21 @@ final class SyncCoordinator: ObservableObject {
     @Published private(set) var activeBindingId: String?
 
     private let ledger: Ledger
+    private let settings: AppSettings
+    private let keychain: KeychainStore
     private let remarkable: RemarkableClient
     private let engine: RulesEngine
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
     init(ledger: Ledger? = nil,
+         settings: AppSettings? = nil,
+         keychain: KeychainStore = .shared,
          remarkable: RemarkableClient = MockRemarkableClient(),
          engine: RulesEngine = RulesEngine()) {
         self.ledger = ledger ?? Ledger.shared
+        self.settings = settings ?? AppSettings.shared
+        self.keychain = keychain
         self.remarkable = remarkable
         self.engine = engine
 
@@ -51,22 +57,23 @@ final class SyncCoordinator: ObservableObject {
 
     private func restartTimer() {
         timerTask?.cancel()
-        guard AppSettings.shared.syncIntervalSeconds > 0,
-              !AppSettings.shared.pauseSyncing else {
+        guard self.settings.syncIntervalSeconds > 0,
+              !self.settings.pauseSyncing else {
             nextTickAt = nil
             return
         }
-        nextTickAt = Date().addingTimeInterval(TimeInterval(AppSettings.shared.syncIntervalSeconds))
+        nextTickAt = Date().addingTimeInterval(TimeInterval(self.settings.syncIntervalSeconds))
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard let self else { return }
                 // Re-read on every loop so a settings change picks up on
                 // the next tick without restarting the task.
-                let seconds = AppSettings.shared.syncIntervalSeconds
-                guard seconds > 0, !AppSettings.shared.pauseSyncing else { return }
+                let seconds = self.settings.syncIntervalSeconds
+                guard seconds > 0, !self.settings.pauseSyncing else { return }
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
-                await self?.runCycle(ruleId: nil, bindingId: nil)
-                self?.nextTickAt = Date().addingTimeInterval(TimeInterval(seconds))
+                await self.runCycle(ruleId: nil, bindingId: nil)
+                self.nextTickAt = Date().addingTimeInterval(TimeInterval(seconds))
             }
         }
     }
@@ -76,7 +83,7 @@ final class SyncCoordinator: ObservableObject {
             Log.sync.info("Skipping cycle: no reMarkable account paired.")
             return
         }
-        guard !AppSettings.shared.pauseSyncing else { return }
+        guard !self.settings.pauseSyncing else { return }
 
         let rules = ledger.rules.filter { rule in
             rule.enabled && (ruleId == nil || rule.id == ruleId) && !rule.destinations.isEmpty
@@ -116,8 +123,8 @@ final class SyncCoordinator: ObservableObject {
         // instead of once per (page × binding). Same image, same model, same
         // result, so destination-count multiplies cost without value.
         let ocr = OcrProviderFactory.make(
-            provider: rule.ocrProviderOverride ?? AppSettings.shared.ocrProvider,
-            model: AppSettings.shared.ocrModel
+            provider: rule.ocrProviderOverride ?? self.settings.ocrProvider,
+            model: self.settings.ocrModel
         )
         var ocrResults: [(page: RmPage, result: OcrResult)] = []
         for page in pages {
@@ -229,10 +236,10 @@ final class SyncCoordinator: ObservableObject {
             durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
         ))
 
-        if firstError != nil, AppSettings.shared.notifyOnFailure {
+        if firstError != nil, self.settings.notifyOnFailure {
             postNotification(title: "Sync failed",
                              body: "\(context.rule.rmNotebookName) → \(context.binding.configuration.summary)")
-        } else if firstError == nil, pagesSynced > 0, AppSettings.shared.notifyOnSuccess {
+        } else if firstError == nil, pagesSynced > 0, self.settings.notifyOnSuccess {
             // Quiet cycles (all pages skipped because unchanged) don't earn
             // a notification; otherwise opting in to success notifications
             // means a banner every interval.

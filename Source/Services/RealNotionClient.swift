@@ -15,6 +15,20 @@
 
 import Foundation
 
+/// Returns the real Notion client when a workspace token is in Keychain,
+/// the mock otherwise. Lets the binding editor and the sync coordinator
+/// stay client-agnostic.
+enum NotionClientFactory {
+    static func make(workspaceId: String?, keychain: KeychainStore = .shared) -> NotionClient {
+        if let workspaceId,
+           let token = keychain.value(for: .notionWorkspaceToken(workspaceId: workspaceId)),
+           !token.isEmpty {
+            return RealNotionClient(token: token)
+        }
+        return MockNotionClient()
+    }
+}
+
 struct RealNotionClient: NotionClient {
     let token: String
     private let session: URLSession

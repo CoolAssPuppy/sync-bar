@@ -238,7 +238,10 @@ private struct NotionForm: View {
     @State private var destinations: LoadState<[NotionDestination]> = .idle
     @State private var schema: LoadState<[NotionDatabaseProperty]> = .idle
     @Environment(\.theme) private var theme
-    private let notion = MockNotionClient()
+
+    private var notion: NotionClient {
+        NotionClientFactory.make(workspaceId: binding.workspaceId.isEmpty ? nil : binding.workspaceId)
+    }
 
     var body: some View {
         VStack(spacing: 14) {

@@ -219,7 +219,7 @@ struct WelcomeView: View {
             ledger.setNotebooks(notebooks)
             step = .connectNotion
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            errorMessage = Formatters.userMessage(for: error)
         }
     }
 
@@ -232,7 +232,7 @@ struct WelcomeView: View {
             workspaceLabel = ""
             step = .done
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            errorMessage = Formatters.userMessage(for: error)
         }
     }
 }

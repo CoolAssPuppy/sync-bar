@@ -37,27 +37,23 @@ struct AppleNotesDestinationClient: DestinationClient {
         end tell
         """
 
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<DestinationWriteResult, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var errorInfo: NSDictionary?
-                guard let appleScript = NSAppleScript(source: script) else {
-                    continuation.resume(throwing: DestinationError.scriptFailed("Couldn't construct Apple Notes script."))
-                    return
-                }
-                let descriptor = appleScript.executeAndReturnError(&errorInfo)
-                if let errorInfo {
-                    let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "Apple Notes script failed."
-                    continuation.resume(throwing: DestinationError.scriptFailed(message))
-                    return
-                }
-                let noteId = descriptor.stringValue ?? UUID().uuidString
-                continuation.resume(returning: DestinationWriteResult(
-                    externalId: noteId,
-                    externalURL: nil,
-                    notes: "Created in folder \"\(folderName)\""
-                ))
+        return try await Task.detached(priority: .userInitiated) { () throws -> DestinationWriteResult in
+            var errorInfo: NSDictionary?
+            guard let appleScript = NSAppleScript(source: script) else {
+                throw DestinationError.scriptFailed("Couldn't construct Apple Notes script.")
             }
-        }
+            let descriptor = appleScript.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "Apple Notes script failed."
+                throw DestinationError.scriptFailed(message)
+            }
+            let noteId = descriptor.stringValue ?? UUID().uuidString
+            return DestinationWriteResult(
+                externalId: noteId,
+                externalURL: nil,
+                notes: "Created in folder \"\(folderName)\""
+            )
+        }.value
     }
 
     // MARK: Helpers

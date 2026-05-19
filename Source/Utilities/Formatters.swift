@@ -48,4 +48,13 @@ enum Formatters {
         default: return "\(pageCount) notes synced"
         }
     }
+
+    /// User-presentable summary of any error. Prefer `LocalizedError.errorDescription`
+    /// when available so we don't leak raw `\(error)` strings into the UI.
+    static func userMessage(for error: Error) -> String {
+        if let localized = (error as? LocalizedError)?.errorDescription, !localized.isEmpty {
+            return localized
+        }
+        return (error as NSError).localizedDescription
+    }
 }

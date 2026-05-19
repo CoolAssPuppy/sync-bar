@@ -39,7 +39,8 @@ struct GoogleDocsDestinationClient: DestinationClient {
         if let folder = config.folderId, !folder.isEmpty { driveBody["parents"] = [folder] }
         createRequest.httpBody = try JSONSerialization.data(withJSONObject: driveBody)
 
-        let (createData, _) = try await URLSession.shared.data(for: createRequest)
+        let (createData, createResponse) = try await URLSession.shared.data(for: createRequest)
+        try Self.validate(response: createResponse, data: createData)
         struct DriveFile: Decodable { let id: String }
         let drive = try JSONDecoder().decode(DriveFile.self, from: createData)
 
@@ -61,13 +62,26 @@ struct GoogleDocsDestinationClient: DestinationClient {
             ]
         ]
         docsRequest.httpBody = try JSONSerialization.data(withJSONObject: docsBody)
-        _ = try await URLSession.shared.data(for: docsRequest)
+        let (docsData, docsResponse) = try await URLSession.shared.data(for: docsRequest)
+        try Self.validate(response: docsResponse, data: docsData)
 
         return DestinationWriteResult(
             externalId: drive.id,
             externalURL: URL(string: "https://docs.google.com/document/d/\(drive.id)/edit"),
             notes: nil
         )
+    }
+
+    private static func validate(response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else { return }
+        switch http.statusCode {
+        case 200..<300: return
+        case 401, 403:  throw DestinationError.apiFailed(status: http.statusCode, snippet: "Google rejected the token.")
+        case 429:       throw DestinationError.rateLimited
+        default:
+            let snippet = String(data: data, encoding: .utf8)?.prefix(200).description ?? "HTTP \(http.statusCode)"
+            throw DestinationError.apiFailed(status: http.statusCode, snippet: snippet)
+        }
     }
 
     // MARK: Mock fallback

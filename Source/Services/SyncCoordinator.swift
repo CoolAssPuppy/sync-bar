@@ -106,7 +106,7 @@ final class SyncCoordinator: ObservableObject {
         do {
             pages = try await remarkable.listPages(notebookId: rule.rmNotebookId)
         } catch {
-            recordFailure(rule: rule, binding: nil, message: "\(error)")
+            recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))
             return
         }
 
@@ -191,7 +191,7 @@ final class SyncCoordinator: ObservableObject {
                         durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
                     ))
                 } catch {
-                    let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+                    let msg = Formatters.userMessage(for: error)
                     if firstError == nil { firstError = msg }
                     ledger.appendEvent(makeEvent(
                         context: context, type: .pageFailed,

@@ -31,7 +31,7 @@ import Combine
 
 @MainActor
 final class CloudKitLedger: ObservableObject {
-    static let containerIdentifier = "iCloud.com.strategicnerds.syncnerds"
+    nonisolated static let containerIdentifier = "iCloud.com.strategicnerds.syncnerds"
 
     enum RecordType: String {
         case syncRule          = "SyncRule"

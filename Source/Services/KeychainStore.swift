@@ -10,7 +10,10 @@ import KeychainAccess
 
 /// Thin wrapper around KeychainAccess so callers never deal with raw service
 /// and account strings. Synchronizable items live in iCloud Keychain.
-final class KeychainStore {
+/// `Sendable` because KeychainAccess.Keychain is itself thread-safe — every
+/// method calls into the underlying Security framework which is safe for
+/// concurrent reads and writes.
+final class KeychainStore: @unchecked Sendable {
     static let shared = KeychainStore()
 
     enum Key {

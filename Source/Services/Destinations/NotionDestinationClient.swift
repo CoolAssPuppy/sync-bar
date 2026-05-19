@@ -18,7 +18,7 @@ struct NotionDestinationClient: DestinationClient {
 
     func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
         guard case .notion(let config) = configuration else {
-            throw NotionError.validationFailed("Wrong configuration type for Notion destination.")
+            throw DestinationError.wrongConfiguration(expected: .notion)
         }
         if let token = KeychainStore.shared.value(for: .notionWorkspaceToken(workspaceId: config.workspaceId)),
            !token.isEmpty {

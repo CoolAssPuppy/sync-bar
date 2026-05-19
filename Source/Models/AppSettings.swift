@@ -10,6 +10,7 @@ import Combine
 import SwiftUI
 
 /// User-facing knobs that aren't account or rule data.
+@MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 

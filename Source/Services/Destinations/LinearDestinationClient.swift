@@ -48,7 +48,17 @@ struct LinearDestinationClient: DestinationClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": mutation, "variables": variables])
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            switch http.statusCode {
+            case 200..<300: break
+            case 401, 403: throw DestinationError.apiFailed(status: http.statusCode, snippet: "Linear rejected the token.")
+            case 429:      throw DestinationError.rateLimited
+            default:
+                let snippet = String(data: data, encoding: .utf8)?.prefix(200).description ?? "HTTP \(http.statusCode)"
+                throw DestinationError.apiFailed(status: http.statusCode, snippet: snippet)
+            }
+        }
 
         struct Response: Decodable {
             struct Wrapper: Decodable { struct IssueCreate: Decodable { struct Issue: Decodable { let id: String; let identifier: String; let url: String }; let issue: Issue? }; let issueCreate: IssueCreate }

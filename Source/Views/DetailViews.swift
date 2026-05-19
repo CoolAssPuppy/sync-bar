@@ -357,7 +357,7 @@ struct RemarkableDetailView: View {
             ledger.setNotebooks(notebooks)
             oneTimeCode = ""
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            errorMessage = Formatters.userMessage(for: error)
         }
     }
 }

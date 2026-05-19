@@ -353,7 +353,7 @@ struct RuleSliderView: View {
 
     private var titleTemplateBinding: Binding<String> {
         Binding(
-            get: { rule?.titleTemplate ?? "{notebook} – page {page_n}" },
+            get: { rule?.titleTemplate ?? defaultTitleTemplate },
             set: { newValue in
                 var copy = ensureRule()
                 copy.titleTemplate = newValue

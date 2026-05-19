@@ -7,6 +7,11 @@
 
 import Foundation
 
+/// Default template applied when the user picks "Template" but hasn't
+/// customized one yet. Centralized so the rule sheet, engine, and any
+/// future migration code use the same string.
+let defaultTitleTemplate = "{notebook} – page {page_n}"
+
 /// Pure logic. Decides what to do with a given page for a given rule.
 struct RulesEngine {
     enum Directive: Equatable {
@@ -49,7 +54,7 @@ struct RulesEngine {
             }
             return fallbackTitle(rule: rule, page: page)
         case .template:
-            return applyTemplate(rule.titleTemplate ?? "{notebook} – page {page_n}", rule: rule, page: page)
+            return applyTemplate(rule.titleTemplate ?? defaultTitleTemplate, rule: rule, page: page)
         case .pageNumber:
             return "Page \(page.positionInNotebook + 1)"
         case .rmCreatedDate:

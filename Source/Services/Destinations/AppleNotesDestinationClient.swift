@@ -15,7 +15,7 @@ struct AppleNotesDestinationClient: DestinationClient {
 
     func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
         guard case .appleNotes(let config) = configuration else {
-            throw OcrError.providerRefused("Apple Notes binding has wrong configuration.")
+            throw DestinationError.wrongConfiguration(expected: .appleNotes)
         }
         let folderName = config.folderName.isEmpty ? "Notes" : config.folderName
 
@@ -41,13 +41,13 @@ struct AppleNotesDestinationClient: DestinationClient {
             DispatchQueue.global(qos: .userInitiated).async {
                 var errorInfo: NSDictionary?
                 guard let appleScript = NSAppleScript(source: script) else {
-                    continuation.resume(throwing: OcrError.providerRefused("Couldn't construct Apple Notes script."))
+                    continuation.resume(throwing: DestinationError.scriptFailed("Couldn't construct Apple Notes script."))
                     return
                 }
                 let descriptor = appleScript.executeAndReturnError(&errorInfo)
                 if let errorInfo {
                     let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "Apple Notes script failed."
-                    continuation.resume(throwing: OcrError.providerRefused(message))
+                    continuation.resume(throwing: DestinationError.scriptFailed(message))
                     return
                 }
                 let noteId = descriptor.stringValue ?? UUID().uuidString

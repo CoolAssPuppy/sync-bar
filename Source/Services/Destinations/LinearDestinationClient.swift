@@ -14,7 +14,7 @@ struct LinearDestinationClient: DestinationClient {
 
     func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
         guard case .linear(let config) = configuration else {
-            throw OcrError.providerRefused("Linear binding has wrong configuration.")
+            throw DestinationError.wrongConfiguration(expected: .linear)
         }
         if let token = KeychainStore.shared.value(for: .linearAccessToken),
            !token.isEmpty {
@@ -56,7 +56,7 @@ struct LinearDestinationClient: DestinationClient {
         }
         let parsed = try JSONDecoder().decode(Response.self, from: data)
         guard let issue = parsed.data?.issueCreate.issue else {
-            throw OcrError.providerRefused("Linear issue create returned no issue.")
+            throw DestinationError.apiFailed(status: 200, snippet: "Linear issueCreate returned no issue")
         }
         return DestinationWriteResult(externalId: issue.id, externalURL: URL(string: issue.url), notes: issue.identifier)
     }

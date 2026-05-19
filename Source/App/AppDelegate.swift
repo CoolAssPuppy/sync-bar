@@ -18,8 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverEventMonitor: Any?
     private var subscriptions = Set<AnyCancellable>()
     private var mainWindow: NSWindow?
-    private var rotationTask: Task<Void, Never>?
-    private var rotationAngle: Double = 0
+    private static let spinAnimationKey = "syncnerds.spin"
 
     let coordinator = SyncCoordinator()
     private let launchAtLogin = LaunchAtLoginManager.shared
@@ -50,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        applyStatusItemIcon(syncing: false)
+        applyStatusItemIcon()
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(statusItemClicked(_:))
@@ -58,15 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rightClickMenu = buildRightClickMenu()
     }
 
-    private func applyStatusItemIcon(syncing: Bool) {
+    private func applyStatusItemIcon() {
         guard let button = statusItem?.button else { return }
-        let symbol = syncing ? "arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath"
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "SyncNerds")?
+        let image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "SyncNerds")?
             .withSymbolConfiguration(config)
         image?.isTemplate = true
         button.image = image
-        button.toolTip = syncing ? "SyncNerds: syncing…" : "SyncNerds"
+        button.toolTip = "SyncNerds"
     }
 
     private func buildRightClickMenu() -> NSMenu {
@@ -234,38 +232,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Status spin
 
     private func startStatusItemSpin() {
-        rotationTask?.cancel()
         guard let button = statusItem?.button else { return }
         button.wantsLayer = true
-        button.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        rotationTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 33_000_000)
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.rotationAngle += 12
-                    self?.applyRotation()
-                }
-            }
-        }
+        guard let layer = button.layer else { return }
+        let bounds = layer.bounds
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+        animation.fromValue = 0
+        animation.toValue = -Double.pi * 2  // clockwise
+        animation.duration = 1.2
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        layer.add(animation, forKey: Self.spinAnimationKey)
     }
 
     private func stopStatusItemSpin() {
-        rotationTask?.cancel()
-        rotationTask = nil
-        rotationAngle = 0
-        applyRotation()
-    }
-
-    private func applyRotation() {
-        guard let layer = statusItem?.button?.layer else { return }
-        let bounds = layer.bounds
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        var transform = CATransform3DIdentity
-        transform = CATransform3DTranslate(transform, center.x, center.y, 0)
-        transform = CATransform3DRotate(transform, rotationAngle * .pi / 180, 0, 0, 1)
-        transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
-        layer.transform = transform
+        statusItem?.button?.layer?.removeAnimation(forKey: Self.spinAnimationKey)
     }
 }
 

@@ -15,7 +15,7 @@ struct GoogleDocsDestinationClient: DestinationClient {
 
     func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
         guard case .googleDocs(let config) = configuration else {
-            throw OcrError.providerRefused("Google Docs binding has wrong configuration.")
+            throw DestinationError.wrongConfiguration(expected: .googleDocs)
         }
         if let token = KeychainStore.shared.value(for: .googleAccessToken(email: config.accountEmail)),
            !token.isEmpty {

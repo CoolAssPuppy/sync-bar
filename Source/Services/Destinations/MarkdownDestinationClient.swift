@@ -15,10 +15,14 @@ struct MarkdownDestinationClient: DestinationClient {
 
     func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
         guard case .markdownFolder(let config) = configuration else {
-            throw OcrError.providerRefused("Markdown binding has wrong configuration.")
+            throw DestinationError.wrongConfiguration(expected: .markdownFolder)
         }
         let folderUrl = URL(fileURLWithPath: config.folderPath, isDirectory: true)
-        try FileManager.default.createDirectory(at: folderUrl, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: folderUrl, withIntermediateDirectories: true)
+        } catch {
+            throw DestinationError.fileSystem("Couldn't create folder \(folderUrl.path): \(error.localizedDescription)")
+        }
 
         let fileName = Self.resolveFileName(template: config.fileNameTemplate, payload: payload) + ".md"
         let fileUrl = folderUrl.appendingPathComponent(fileName)
@@ -27,7 +31,11 @@ struct MarkdownDestinationClient: DestinationClient {
         let mermaidBlock = payload.mermaidSource.map { "\n\n```mermaid\n\($0)\n```\n" } ?? ""
         let body = "\(frontmatter)# \(payload.title)\n\n\(payload.body)\(mermaidBlock)"
 
-        try body.write(to: fileUrl, atomically: true, encoding: .utf8)
+        do {
+            try body.write(to: fileUrl, atomically: true, encoding: .utf8)
+        } catch {
+            throw DestinationError.fileSystem("Couldn't write \(fileUrl.path): \(error.localizedDescription)")
+        }
         return DestinationWriteResult(
             externalId: fileUrl.path,
             externalURL: fileUrl,
@@ -38,14 +46,14 @@ struct MarkdownDestinationClient: DestinationClient {
     // MARK: Helpers
 
     private static func resolveFileName(template: String, payload: DestinationPayload) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        var out = template.isEmpty ? "{notebook}-page-{page_n}" : template
-        out = out.replacingOccurrences(of: "{notebook}", with: payload.ruleNotebookName)
-        out = out.replacingOccurrences(of: "{page_n}", with: "\(payload.pageNumber)")
-        out = out.replacingOccurrences(of: "{date}", with: dateFormatter.string(from: payload.sourceDate))
-        out = out.replacingOccurrences(of: "{title}", with: payload.title)
-        return sanitize(out)
+        let context = TitleTemplateContext(
+            notebook: payload.ruleNotebookName,
+            pageNumber: payload.pageNumber,
+            date: payload.sourceDate,
+            title: payload.title
+        )
+        let resolved = context.apply(to: template.isEmpty ? "{notebook}-page-{page_n}" : template)
+        return sanitize(resolved)
     }
 
     private static func frontmatter(payload: DestinationPayload) -> String {

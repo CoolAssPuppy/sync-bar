@@ -96,8 +96,12 @@ final class SyncCoordinator: ObservableObject {
         NotificationCenter.default.post(name: .syncFinished, object: nil)
     }
 
+    /// Maximum number of destinations we sync in parallel within one rule.
+    /// Apple Notes uses AppleScript and gets cranky under contention; three
+    /// is a comfortable ceiling.
+    private static let maxBindingConcurrency = 3
+
     private func runRule(_ rule: SyncRule, restrictedToBindingId: String?) async {
-        let runStart = Date()
         var pages: [RmPage] = []
         do {
             pages = try await remarkable.listPages(notebookId: rule.rmNotebookId)
@@ -106,51 +110,64 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
-        for binding in rule.destinations where binding.enabled
-            && (restrictedToBindingId == nil || binding.id == restrictedToBindingId) {
-            activeBindingId = binding.id
-            await runBinding(rule: rule, binding: binding, pages: pages, cycleStartedAt: runStart)
-        }
-    }
-
-    private func runBinding(rule: SyncRule, binding: DestinationBinding, pages: [RmPage], cycleStartedAt: Date) async {
-        let client = DestinationRouter.client(for: binding.kind)
+        // OCR once per page (one transcription, fanned out to every binding)
+        // instead of once per (page × binding). Same image, same model, same
+        // result, so destination-count multiplies cost without value.
         let ocr = OcrProviderFactory.make(
             provider: rule.ocrProviderOverride ?? AppSettings.shared.ocrProvider,
             model: AppSettings.shared.ocrModel
         )
+        var ocrResults: [(page: RmPage, result: OcrResult)] = []
+        for page in pages {
+            do {
+                let result = try await ocr.transcribe(imageData: Data())
+                ocrResults.append((page, result))
+            } catch {
+                Log.ocr.error("OCR failed for rule \(rule.id, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
 
-        ledger.appendEvent(SyncEvent(
-            id: UUID().uuidString, occurredAt: Date(),
-            ruleId: rule.id, ruleName: ruleHeader(rule, binding: binding),
-            eventType: .ruleRunStarted,
-            rmNotebookName: rule.rmNotebookName, rmPageId: nil,
-            notionPageUrl: nil, durationMs: nil, ocrProvider: ocr.name, errorMessage: nil
-        ))
+        let bindings = rule.destinations.filter { binding in
+            binding.enabled && (restrictedToBindingId == nil || binding.id == restrictedToBindingId)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            var inFlight = 0
+            for binding in bindings {
+                if inFlight >= Self.maxBindingConcurrency {
+                    await group.next()
+                    inFlight -= 1
+                }
+                let context = BindingRunContext(rule: rule, binding: binding, ocrResults: ocrResults, ocrName: ocr.name)
+                group.addTask { [weak self] in
+                    await self?.runBinding(context: context)
+                }
+                inFlight += 1
+            }
+        }
+    }
+
+    private struct BindingRunContext {
+        let rule: SyncRule
+        let binding: DestinationBinding
+        let ocrResults: [(page: RmPage, result: OcrResult)]
+        let ocrName: String
+    }
+
+    private func runBinding(context: BindingRunContext) async {
+        let client = DestinationRouter.client(for: context.binding.kind)
+        activeBindingId = context.binding.id
+        ledger.appendEvent(makeEvent(context: context, type: .ruleRunStarted))
 
         var pagesSynced = 0
         var firstError: String?
         let runStart = Date()
 
-        for page in pages {
-            // OCR. In v0.1 we send Data() (no rasterized page) so Vision returns
-            // [blank page] and the LLM providers return a polite placeholder.
-            // When the real reMarkable PDF rasterizer lands, this loop unchanged.
-            let ocrResult: OcrResult
-            do {
-                ocrResult = try await ocr.transcribe(imageData: Data())
-            } catch {
-                let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-                if firstError == nil { firstError = msg }
-                Log.ocr.error("OCR failed for rule \(rule.id, privacy: .public): \(msg, privacy: .public)")
-                continue
-            }
-
+        for (page, ocrResult) in context.ocrResults {
             let directive = engine.evaluate(
-                rule: rule, page: page,
+                rule: context.rule, page: page,
                 ocrText: ocrResult.text, previouslySyncedHash: nil
             )
-
             switch directive {
             case .skip:
                 continue
@@ -160,33 +177,25 @@ final class SyncCoordinator: ObservableObject {
                     body: ocrResult.text,
                     mermaidSource: ocrResult.mermaidSource,
                     sourceDate: page.createdAt,
-                    pdfData: rule.savePdfAttachment ? nil : nil,
-                    ocrProvider: ocr.name,
-                    ruleNotebookName: rule.rmNotebookName,
+                    pdfData: nil,
+                    ocrProvider: context.ocrName,
+                    ruleNotebookName: context.rule.rmNotebookName,
                     pageNumber: page.positionInNotebook + 1
                 )
                 do {
-                    let result = try await client.write(payload: payload, configuration: binding.configuration)
+                    let result = try await client.write(payload: payload, configuration: context.binding.configuration)
                     pagesSynced += 1
-                    ledger.appendEvent(SyncEvent(
-                        id: UUID().uuidString, occurredAt: Date(),
-                        ruleId: rule.id, ruleName: ruleHeader(rule, binding: binding),
-                        eventType: .pageSynced,
-                        rmNotebookName: rule.rmNotebookName, rmPageId: page.pageId,
-                        notionPageUrl: result.externalURL?.absoluteString,
-                        durationMs: Int(Date().timeIntervalSince(runStart) * 1_000),
-                        ocrProvider: ocr.name, errorMessage: nil
+                    ledger.appendEvent(makeEvent(
+                        context: context, type: .pageSynced,
+                        pageId: page.pageId, url: result.externalURL?.absoluteString,
+                        durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
                     ))
                 } catch {
                     let msg = (error as? LocalizedError)?.errorDescription ?? "\(error)"
                     if firstError == nil { firstError = msg }
-                    ledger.appendEvent(SyncEvent(
-                        id: UUID().uuidString, occurredAt: Date(),
-                        ruleId: rule.id, ruleName: ruleHeader(rule, binding: binding),
-                        eventType: .pageFailed,
-                        rmNotebookName: rule.rmNotebookName, rmPageId: page.pageId,
-                        notionPageUrl: nil, durationMs: nil,
-                        ocrProvider: ocr.name, errorMessage: msg
+                    ledger.appendEvent(makeEvent(
+                        context: context, type: .pageFailed,
+                        pageId: page.pageId, errorMessage: msg
                     ))
                 }
             }
@@ -197,27 +206,38 @@ final class SyncCoordinator: ObservableObject {
             return .success
         }()
         ledger.updateBindingRunResult(
-            ruleId: rule.id, bindingId: binding.id,
+            ruleId: context.rule.id, bindingId: context.binding.id,
             status: status, pagesSynced: pagesSynced, runAt: Date(),
             error: firstError
         )
-        ledger.appendEvent(SyncEvent(
-            id: UUID().uuidString, occurredAt: Date(),
-            ruleId: rule.id, ruleName: ruleHeader(rule, binding: binding),
-            eventType: .ruleRunCompleted,
-            rmNotebookName: rule.rmNotebookName, rmPageId: nil,
-            notionPageUrl: nil,
-            durationMs: Int(Date().timeIntervalSince(runStart) * 1_000),
-            ocrProvider: ocr.name, errorMessage: nil
+        ledger.appendEvent(makeEvent(
+            context: context, type: .ruleRunCompleted,
+            durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
         ))
 
         if firstError != nil, AppSettings.shared.notifyOnFailure {
             postNotification(title: "Sync failed",
-                             body: "\(rule.rmNotebookName) → \(binding.configuration.summary)")
+                             body: "\(context.rule.rmNotebookName) → \(context.binding.configuration.summary)")
         } else if firstError == nil, AppSettings.shared.notifyOnSuccess {
             postNotification(title: "Sync complete",
-                             body: "\(rule.rmNotebookName): \(Formatters.syncResultLabel(pageCount: pagesSynced))")
+                             body: "\(context.rule.rmNotebookName): \(Formatters.syncResultLabel(pageCount: pagesSynced))")
         }
+    }
+
+    private func makeEvent(context: BindingRunContext,
+                           type: SyncEventType,
+                           pageId: String? = nil,
+                           url: String? = nil,
+                           durationMs: Int? = nil,
+                           errorMessage: String? = nil) -> SyncEvent {
+        SyncEvent(
+            id: UUID().uuidString, occurredAt: Date(),
+            ruleId: context.rule.id, ruleName: ruleHeader(context.rule, binding: context.binding),
+            eventType: type,
+            rmNotebookName: context.rule.rmNotebookName, rmPageId: pageId,
+            notionPageUrl: url, durationMs: durationMs,
+            ocrProvider: context.ocrName, errorMessage: errorMessage
+        )
     }
 
     private func recordFailure(rule: SyncRule, binding: DestinationBinding?, message: String) {

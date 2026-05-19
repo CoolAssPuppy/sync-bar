@@ -64,12 +64,12 @@ struct RulesEngine {
     }
 
     private func applyTemplate(_ template: String, rule: SyncRule, page: RmPage) -> String {
-        var output = template
-        output = output.replacingOccurrences(of: "{notebook}", with: rule.rmNotebookName)
-        output = output.replacingOccurrences(of: "{page_n}", with: "\(page.positionInNotebook + 1)")
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        output = output.replacingOccurrences(of: "{date}", with: dateFormatter.string(from: page.createdAt))
-        return output
+        let context = TitleTemplateContext(
+            notebook: rule.rmNotebookName,
+            pageNumber: page.positionInNotebook + 1,
+            date: page.createdAt,
+            title: ""
+        )
+        return context.apply(to: template)
     }
 }

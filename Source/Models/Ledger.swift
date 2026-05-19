@@ -40,121 +40,143 @@ final class Ledger: ObservableObject {
     @Published private(set) var notebooks: [RmNotebook] = []
 
     private static let maxEventsRetained = 500
+    private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
+    private var pendingPersistTasks: [String: Task<Void, Never>] = [:]
 
     private init() {
         load()
     }
 
+    deinit {
+        pendingPersistTasks.values.forEach { $0.cancel() }
+    }
+
     // MARK: Public API
 
     func setRemarkableAccount(_ account: RemarkableAccount?) {
+        guard remarkableAccount != account else { return }
         remarkableAccount = account
         persistRemarkable()
         NotificationCenter.default.post(name: .remarkableAccountChanged, object: nil)
     }
 
     func upsertNotionWorkspace(_ workspace: NotionWorkspace) {
-        if let index = notionWorkspaces.firstIndex(where: { $0.id == workspace.id }) {
-            notionWorkspaces[index] = workspace
-        } else {
-            notionWorkspaces.append(workspace)
-        }
-        persistWorkspaces()
-        NotificationCenter.default.post(name: .notionWorkspacesChanged, object: nil)
+        upsert(workspace, in: \.notionWorkspaces, key: Self.notionWorkspacesKey,
+               notification: .notionWorkspacesChanged)
     }
-
     func removeNotionWorkspace(id: String) {
-        notionWorkspaces.removeAll { $0.id == id }
-        for index in rules.indices {
-            rules[index].destinations.removeAll { binding in
-                if case .notion(let cfg) = binding.configuration, cfg.workspaceId == id { return true }
-                return false
-            }
-        }
-        persistWorkspaces()
-        persistRules()
-        NotificationCenter.default.post(name: .notionWorkspacesChanged, object: nil)
-        NotificationCenter.default.post(name: .rulesChanged, object: nil)
+        remove(id: id, from: \.notionWorkspaces, key: Self.notionWorkspacesKey,
+               notification: .notionWorkspacesChanged,
+               bindingMatches: { config, removed in
+                   if case .notion(let cfg) = config { return cfg.workspaceId == removed.id }
+                   return false
+               })
     }
 
     func upsertLinearAccount(_ account: LinearAccount) {
-        if let index = linearAccounts.firstIndex(where: { $0.id == account.id }) {
-            linearAccounts[index] = account
-        } else {
-            linearAccounts.append(account)
-        }
-        persist(value: linearAccounts, key: Self.linearAccountsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+        upsert(account, in: \.linearAccounts, key: Self.linearAccountsKey,
+               notification: .destinationsChanged)
     }
-
     func removeLinearAccount(id: String) {
-        linearAccounts.removeAll { $0.id == id }
-        for index in rules.indices {
-            rules[index].destinations.removeAll { binding in
-                if case .linear(let cfg) = binding.configuration, cfg.workspaceId == id { return true }
-                return false
-            }
-        }
-        persist(value: linearAccounts, key: Self.linearAccountsKey)
-        persistRules()
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
-        NotificationCenter.default.post(name: .rulesChanged, object: nil)
+        remove(id: id, from: \.linearAccounts, key: Self.linearAccountsKey,
+               notification: .destinationsChanged,
+               bindingMatches: { config, removed in
+                   if case .linear(let cfg) = config { return cfg.workspaceId == removed.id }
+                   return false
+               })
     }
 
     func upsertGoogleAccount(_ account: GoogleAccount) {
-        if let index = googleAccounts.firstIndex(where: { $0.id == account.id }) {
-            googleAccounts[index] = account
-        } else {
-            googleAccounts.append(account)
-        }
-        persist(value: googleAccounts, key: Self.googleAccountsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+        upsert(account, in: \.googleAccounts, key: Self.googleAccountsKey,
+               notification: .destinationsChanged)
     }
-
     func removeGoogleAccount(id: String) {
-        googleAccounts.removeAll { $0.id == id }
-        for index in rules.indices {
-            rules[index].destinations.removeAll { binding in
-                if case .googleDocs(let cfg) = binding.configuration, cfg.accountEmail == id { return true }
-                return false
-            }
-        }
-        persist(value: googleAccounts, key: Self.googleAccountsKey)
-        persistRules()
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
-        NotificationCenter.default.post(name: .rulesChanged, object: nil)
+        remove(id: id, from: \.googleAccounts, key: Self.googleAccountsKey,
+               notification: .destinationsChanged,
+               bindingMatches: { config, removed in
+                   if case .googleDocs(let cfg) = config { return cfg.accountEmail == removed.id }
+                   return false
+               })
     }
 
     func upsertMarkdownTarget(_ target: MarkdownTarget) {
-        if let index = markdownTargets.firstIndex(where: { $0.id == target.id }) {
-            markdownTargets[index] = target
-        } else {
-            markdownTargets.append(target)
-        }
-        persist(value: markdownTargets, key: Self.markdownTargetsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+        upsert(target, in: \.markdownTargets, key: Self.markdownTargetsKey,
+               notification: .destinationsChanged)
     }
-
     func removeMarkdownTarget(id: String) {
-        markdownTargets.removeAll { $0.id == id }
-        persist(value: markdownTargets, key: Self.markdownTargetsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+        remove(id: id, from: \.markdownTargets, key: Self.markdownTargetsKey,
+               notification: .destinationsChanged,
+               bindingMatches: { config, removed in
+                   if case .markdownFolder(let cfg) = config { return cfg.folderPath == removed.folderPath }
+                   return false
+               })
     }
 
     func upsertAppleNotesTarget(_ target: AppleNotesTarget) {
-        if let index = appleNotesTargets.firstIndex(where: { $0.id == target.id }) {
-            appleNotesTargets[index] = target
-        } else {
-            appleNotesTargets.append(target)
-        }
-        persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+        upsert(target, in: \.appleNotesTargets, key: Self.appleNotesTargetsKey,
+               notification: .destinationsChanged)
+    }
+    func removeAppleNotesTarget(id: String) {
+        remove(id: id, from: \.appleNotesTargets, key: Self.appleNotesTargetsKey,
+               notification: .destinationsChanged,
+               bindingMatches: { config, removed in
+                   if case .appleNotes(let cfg) = config { return cfg.folderName == removed.folderName }
+                   return false
+               })
     }
 
-    func removeAppleNotesTarget(id: String) {
-        appleNotesTargets.removeAll { $0.id == id }
-        persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
-        NotificationCenter.default.post(name: .destinationsChanged, object: nil)
+    // MARK: Generic collection helpers
+
+    /// Inserts or replaces an element in one of the published collections by id,
+    /// persists it, and posts the matching notification.
+    private func upsert<T: Identifiable & Codable>(
+        _ value: T,
+        in keyPath: ReferenceWritableKeyPath<Ledger, [T]>,
+        key: String,
+        notification: Notification.Name
+    ) where T.ID: Equatable {
+        if let index = self[keyPath: keyPath].firstIndex(where: { $0.id == value.id }) {
+            guard !areEqualEncoded(self[keyPath: keyPath][index], value) else { return }
+            self[keyPath: keyPath][index] = value
+        } else {
+            self[keyPath: keyPath].append(value)
+        }
+        persist(value: self[keyPath: keyPath], key: key)
+        NotificationCenter.default.post(name: notification, object: nil)
+    }
+
+    /// Removes an element by id, cascades to any rule's destination bindings
+    /// whose configuration matches the predicate, persists, and posts notifications.
+    /// The predicate receives the just-removed element so callers can compare
+    /// against its now-detached fields (folderPath, accountEmail, etc.).
+    private func remove<T: Identifiable & Codable>(
+        id: T.ID,
+        from keyPath: ReferenceWritableKeyPath<Ledger, [T]>,
+        key: String,
+        notification: Notification.Name,
+        bindingMatches: (DestinationConfiguration, T) -> Bool
+    ) where T.ID: Equatable {
+        guard let removedIndex = self[keyPath: keyPath].firstIndex(where: { $0.id == id }) else { return }
+        let removed = self[keyPath: keyPath].remove(at: removedIndex)
+        var cascaded = false
+        for ruleIndex in rules.indices {
+            let before = rules[ruleIndex].destinations.count
+            rules[ruleIndex].destinations.removeAll { bindingMatches($0.configuration, removed) }
+            if rules[ruleIndex].destinations.count != before { cascaded = true }
+        }
+        persist(value: self[keyPath: keyPath], key: key)
+        if cascaded { persistRules() }
+        NotificationCenter.default.post(name: notification, object: nil)
+        if cascaded { NotificationCenter.default.post(name: .rulesChanged, object: nil) }
+    }
+
+    /// Best-effort no-op detector by re-encoding both sides. Cheaper than
+    /// requiring Equatable on every type in the ledger.
+    private func areEqualEncoded<T: Encodable>(_ lhs: T, _ rhs: T) -> Bool {
+        let encoder = JSONEncoder()
+        guard let lhsData = try? encoder.encode(lhs),
+              let rhsData = try? encoder.encode(rhs) else { return false }
+        return lhsData == rhsData
     }
 
     func upsertRule(_ rule: SyncRule) {
@@ -189,10 +211,17 @@ final class Ledger: ObservableObject {
                                 error: String? = nil) {
         guard let ruleIndex = rules.firstIndex(where: { $0.id == ruleId }),
               let bindingIndex = rules[ruleIndex].destinations.firstIndex(where: { $0.id == bindingId }) else { return }
-        rules[ruleIndex].destinations[bindingIndex].lastRunStatus = status
-        rules[ruleIndex].destinations[bindingIndex].lastRunPagesSynced = pagesSynced
-        rules[ruleIndex].destinations[bindingIndex].lastRunAt = runAt
-        rules[ruleIndex].destinations[bindingIndex].lastRunError = error
+        var binding = rules[ruleIndex].destinations[bindingIndex]
+        let unchanged = binding.lastRunStatus == status
+            && binding.lastRunPagesSynced == pagesSynced
+            && binding.lastRunAt == runAt
+            && binding.lastRunError == error
+        guard !unchanged else { return }
+        binding.lastRunStatus = status
+        binding.lastRunPagesSynced = pagesSynced
+        binding.lastRunAt = runAt
+        binding.lastRunError = error
+        rules[ruleIndex].destinations[bindingIndex] = binding
         persistRules()
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
@@ -238,6 +267,7 @@ final class Ledger: ObservableObject {
     }
 
     func setNotebooks(_ notebooks: [RmNotebook]) {
+        guard self.notebooks != notebooks else { return }
         self.notebooks = notebooks
         persistNotebooks()
         NotificationCenter.default.post(name: .notebooksChanged, object: nil)
@@ -301,15 +331,34 @@ final class Ledger: ObservableObject {
         return value
     }
 
+    /// Synchronous encode-and-write. Used for one-off writes where we want
+    /// the snapshot on disk before returning (e.g. account changes the user
+    /// just confirmed).
     fileprivate func persist<T: Encodable>(value: T, key: String) {
         let encoder = JSONEncoder()
         guard let data = try? encoder.encode(value) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
 
+    /// Coalesces high-frequency writes (events, rule run-status updates) so
+    /// we don't re-encode the whole array on every mutation inside a sync
+    /// cycle. Always reads the live array at the time the debounce fires so
+    /// callers can mutate in quick succession without losing intermediate
+    /// state.
+    fileprivate func persistDebounced<T: Encodable>(_ snapshot: @escaping () -> T, key: String) {
+        pendingPersistTasks[key]?.cancel()
+        pendingPersistTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.persistDebounceMs)
+            guard !Task.isCancelled, let self else { return }
+            let value = snapshot()
+            self.persist(value: value, key: key)
+            self.pendingPersistTasks[key] = nil
+        }
+    }
+
     private func persistRemarkable() { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
     private func persistWorkspaces() { persist(value: notionWorkspaces,  key: Self.notionWorkspacesKey)  }
-    private func persistRules()      { persist(value: rules,             key: Self.rulesKey)             }
-    private func persistEvents()     { persist(value: events,            key: Self.eventsKey)            }
-    private func persistNotebooks()  { persist(value: notebooks,         key: Self.notebooksKey)         }
+    private func persistRules()      { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
+    private func persistEvents()     { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
+    private func persistNotebooks()  { persist(value: notebooks, key: Self.notebooksKey) }
 }

@@ -102,11 +102,18 @@ final class Ledger: ObservableObject {
                notification: .destinationsChanged)
     }
     func removeMarkdownTarget(id: String) {
+        // Match by folder path against THIS specific target only — counting
+        // how many other targets still claim the same path avoids cascading
+        // bindings that belong to a sibling target.
+        let removedPath = markdownTargets.first(where: { $0.id == id })?.folderPath
         remove(id: id, from: \.markdownTargets, key: Self.markdownTargetsKey,
                notification: .destinationsChanged,
-               bindingMatches: { config, removed in
-                   if case .markdownFolder(let cfg) = config { return cfg.folderPath == removed.folderPath }
-                   return false
+               bindingMatches: { [weak self] config, _ in
+                   guard case .markdownFolder(let cfg) = config,
+                         let removedPath, cfg.folderPath == removedPath else { return false }
+                   // Only cascade if no surviving target claims that path.
+                   let othersAtSamePath = (self?.markdownTargets ?? []).contains { $0.folderPath == removedPath }
+                   return !othersAtSamePath
                })
     }
 
@@ -115,11 +122,14 @@ final class Ledger: ObservableObject {
                notification: .destinationsChanged)
     }
     func removeAppleNotesTarget(id: String) {
+        let removedFolder = appleNotesTargets.first(where: { $0.id == id })?.folderName
         remove(id: id, from: \.appleNotesTargets, key: Self.appleNotesTargetsKey,
                notification: .destinationsChanged,
-               bindingMatches: { config, removed in
-                   if case .appleNotes(let cfg) = config { return cfg.folderName == removed.folderName }
-                   return false
+               bindingMatches: { [weak self] config, _ in
+                   guard case .appleNotes(let cfg) = config,
+                         let removedFolder, cfg.folderName == removedFolder else { return false }
+                   let othersClaimingFolder = (self?.appleNotesTargets ?? []).contains { $0.folderName == removedFolder }
+                   return !othersClaimingFolder
                })
     }
 

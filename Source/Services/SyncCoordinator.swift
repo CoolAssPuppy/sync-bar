@@ -51,20 +51,22 @@ final class SyncCoordinator: ObservableObject {
 
     private func restartTimer() {
         timerTask?.cancel()
-        let interval = AppSettings.shared.syncIntervalSeconds
-        guard interval > 0, !AppSettings.shared.pauseSyncing else {
+        guard AppSettings.shared.syncIntervalSeconds > 0,
+              !AppSettings.shared.pauseSyncing else {
             nextTickAt = nil
             return
         }
-        nextTickAt = Date().addingTimeInterval(TimeInterval(interval))
+        nextTickAt = Date().addingTimeInterval(TimeInterval(AppSettings.shared.syncIntervalSeconds))
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                // Re-read on every loop so a settings change picks up on
+                // the next tick without restarting the task.
+                let seconds = AppSettings.shared.syncIntervalSeconds
+                guard seconds > 0, !AppSettings.shared.pauseSyncing else { return }
+                try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
                 await self?.runCycle(ruleId: nil, bindingId: nil)
-                await MainActor.run { [weak self] in
-                    self?.nextTickAt = Date().addingTimeInterval(TimeInterval(interval))
-                }
+                self?.nextTickAt = Date().addingTimeInterval(TimeInterval(seconds))
             }
         }
     }

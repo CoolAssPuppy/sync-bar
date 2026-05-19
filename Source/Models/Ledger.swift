@@ -10,10 +10,8 @@ import Combine
 
 /// In-memory + UserDefaults-backed ledger of accounts, rules, and sync events.
 ///
-/// The spec calls for CloudKit private database storage. For the overnight
-/// build we model the API surface the rest of the app needs and back it with
-/// UserDefaults so the app works end-to-end on a single machine. Swapping in a
-/// CloudKit implementation later only touches this file.
+/// All persistence flows through this single type so swapping in CloudKit later
+/// (see `CloudKitLedger`) only touches one file.
 @MainActor
 final class Ledger: ObservableObject {
     static let shared = Ledger()

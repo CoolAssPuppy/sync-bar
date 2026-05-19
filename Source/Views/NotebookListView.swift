@@ -9,7 +9,6 @@ import SwiftUI
 
 struct NotebookListView: View {
     @Binding var selectedNotebookId: String?
-    @Binding var selectedRuleId: String?
     @ObservedObject var coordinator: SyncCoordinator
     var onRefresh: () -> Void
 
@@ -31,11 +30,9 @@ struct NotebookListView: View {
         }
         .background(theme.background)
         .onAppear {
-            if let id = selectedNotebookId, ledger.notebooks.contains(where: { $0.id == id }) {
-                return
+            if let id = selectedNotebookId, !ledger.notebooks.contains(where: { $0.id == id }) {
+                selectedNotebookId = nil
             }
-            selectedNotebookId = nil
-            selectedRuleId = nil
         }
     }
 
@@ -175,14 +172,11 @@ struct NotebookListView: View {
 
     private func selectNotebook(_ notebook: RmNotebook) {
         selectedNotebookId = notebook.id
-        selectedRuleId = ledger.rule(forNotebookId: notebook.id)?.id
     }
 
     private func closeSheet() {
         selectedNotebookId = nil
-        selectedRuleId = nil
     }
-
 }
 
 // MARK: - Notebook row

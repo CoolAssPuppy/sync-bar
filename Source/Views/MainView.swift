@@ -27,7 +27,6 @@ struct MainView: View {
     @State private var selection: MainSelection = .notebooks
     @State private var isSettingsOpen = false
     @State private var selectedNotebookId: String?
-    @State private var selectedRuleId: String?
 
     var body: some View {
         let theme = themeStore.palette
@@ -74,7 +73,6 @@ struct MainView: View {
         case .notebooks:
             NotebookListView(
                 selectedNotebookId: $selectedNotebookId,
-                selectedRuleId: $selectedRuleId,
                 coordinator: coordinator,
                 onRefresh: refreshNotebooks
             )

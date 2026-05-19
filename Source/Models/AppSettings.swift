@@ -9,9 +9,7 @@ import Foundation
 import Combine
 import SwiftUI
 
-/// User-facing knobs that aren't account or rule data. Persisted to
-/// UserDefaults for now; will move to CloudKit AppSettings record once the
-/// CloudKit schema is wired up.
+/// User-facing knobs that aren't account or rule data.
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 

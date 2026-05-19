@@ -27,7 +27,6 @@ protocol RemarkableClient: Sendable {
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount
     func listNotebooks() async throws -> [RmNotebook]
     func listPages(notebookId: String) async throws -> [RmPage]
-    func downloadNotebookPdf(notebookId: String) async throws -> Data
 }
 
 /// Deterministic mock client. Returns sample notebooks and pages drawn from
@@ -77,9 +76,4 @@ struct MockRemarkableClient: RemarkableClient {
         }
     }
 
-    func downloadNotebookPdf(notebookId: String) async throws -> Data {
-        // Not used in the overnight build; returns an empty Data for now.
-        try await Task.sleep(nanoseconds: 200_000_000)
-        return Data()
-    }
 }

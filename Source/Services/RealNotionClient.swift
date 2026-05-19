@@ -63,11 +63,14 @@ struct RealNotionClient: NotionClient {
         let parsed = try JSONDecoder().decode(SearchResponse.self, from: data)
         return parsed.results.map { item -> NotionDestination in
             let extractedTitle: String = {
-                if let dbTitle = item.title?.compactMap({ $0.plain_text }).joined(), !dbTitle.isEmpty {
+                if let dbTitle = item.title?.compactMap(\.plain_text).joined(), !dbTitle.isEmpty {
                     return dbTitle
                 }
-                let pageTitle = item.properties?.title?.title?.compactMap(\.plain_text).joined()
-                return pageTitle?.isEmpty == false ? pageTitle! : "Untitled"
+                if let pageTitle = item.properties?.title?.title?.compactMap(\.plain_text).joined(),
+                   !pageTitle.isEmpty {
+                    return pageTitle
+                }
+                return "Untitled"
             }()
             return NotionDestination(
                 id: item.id,
@@ -139,16 +142,3 @@ struct RealNotionClient: NotionClient {
     }
 }
 
-// MARK: - Factory
-
-enum NotionClientFactory {
-    /// Returns a real client if any workspace token is in Keychain, mock otherwise.
-    static func make(workspaceId: String? = nil, keychain: KeychainStore = .shared) -> NotionClient {
-        if let workspaceId,
-           let token = keychain.value(for: .notionWorkspaceToken(workspaceId: workspaceId)),
-           !token.isEmpty {
-            return RealNotionClient(token: token)
-        }
-        return MockNotionClient()
-    }
-}

@@ -24,7 +24,6 @@ struct AddDestinationSheet: View {
     @State private var linearTeamName: String = ""
     @State private var linearOrgName: String = ""
     @State private var googleEmail: String = ""
-    @State private var statusMessage: String?
 
     var body: some View {
         let theme = themeStore.palette
@@ -35,11 +34,6 @@ struct AddDestinationSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     kindPicker(theme: theme)
                     detailsCard(theme: theme)
-                    if let statusMessage {
-                        Text(statusMessage)
-                            .font(.system(size: 11))
-                            .foregroundStyle(theme.muted)
-                    }
                 }
                 .padding(20)
             }
@@ -92,7 +86,6 @@ struct AddDestinationSheet: View {
                 ForEach(DestinationKind.allCases) { kind in
                     KindTile(kind: kind, isSelected: selectedKind == kind) {
                         selectedKind = kind
-                        statusMessage = nil
                     }
                 }
             }

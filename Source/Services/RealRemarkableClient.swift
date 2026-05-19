@@ -77,15 +77,9 @@ struct RealRemarkableClient: RemarkableClient {
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {
-        // Requires walking the index graph and downloading the .content/.metadata
-        // pair per notebook. Stub returns an empty list so calling rules don't
-        // crash; mock client owns the lived-in experience while we wire this
-        // up properly in v0.3.
+        // Walking the sync/v3 index graph (one HEAD per file in the hash tree)
+        // lands when we have a paired device to validate against.
         return []
-    }
-
-    func downloadNotebookPdf(notebookId: String) async throws -> Data {
-        return Data()
     }
 
     // MARK: Token refresh
@@ -122,15 +116,3 @@ struct RealRemarkableClient: RemarkableClient {
     }
 }
 
-// MARK: - Factory
-
-enum RemarkableClientFactory {
-    /// Returns the real client when a device token is in Keychain, the
-    /// mock otherwise. Lets the entire app stay client-agnostic.
-    static func makeDefault(keychain: KeychainStore = .shared) -> RemarkableClient {
-        if let token = keychain.value(for: .remarkableDeviceToken), !token.isEmpty {
-            return RealRemarkableClient(keychain: keychain)
-        }
-        return MockRemarkableClient()
-    }
-}

@@ -1,0 +1,79 @@
+name: SyncNerds
+options:
+  bundleIdPrefix: com.strategicnerds
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  KeychainAccess:
+    url: https://github.com/kishikawakatsumi/KeychainAccess
+    from: "4.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_APP_SANDBOX: NO
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 955GSY56UT
+  configs:
+    Debug:
+      # Hardened runtime breaks XCTest's runtime injection into the host app.
+      ENABLE_HARDENED_RUNTIME: NO
+      # Xcode 15+ mergeable libraries split the host into "SyncNerds" +
+      # "SyncNerds.debug.dylib" in Debug, but the test bundle's rpath
+      # doesn't reach the host's MacOS directory so dlopen fails. Force a
+      # statically merged Debug binary so `xcodebuild test` works.
+      MERGED_BINARY_TYPE: manual
+      MERGEABLE_LIBRARY: NO
+    Release:
+      ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  SyncNerds:
+    type: application
+    platform: macOS
+    scheme:
+      testTargets:
+        - SyncNerdsTests
+      gatherCoverageData: true
+    sources:
+      - path: Source
+      - path: Images.xcassets
+      - path: Resources
+    dependencies:
+      - package: KeychainAccess
+      - package: Sparkle
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncNerdsApp
+        PRODUCT_NAME: "SyncNerds"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: SyncNerds.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LS_MINIMUM_SYSTEM_VERSION: "14.0"
+        COMBINE_HIDPI_IMAGES: YES
+  SyncNerdsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: SyncNerds
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SyncNerds.app/Contents/MacOS/SyncNerds"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncNerdsTests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_STYLE: Automatic

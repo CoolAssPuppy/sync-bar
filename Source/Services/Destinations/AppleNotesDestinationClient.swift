@@ -1,0 +1,89 @@
+//
+//  AppleNotesDestinationClient.swift
+//  SyncNerds
+//
+//  Copyright (c) 2026 Strategic Nerds. All rights reserved.
+//
+
+import Foundation
+import AppKit
+
+/// Creates a note in Apple Notes via AppleScript. Works on any Mac signed
+/// in to iCloud Notes - no OAuth required, no third-party tokens.
+struct AppleNotesDestinationClient: DestinationClient {
+    let kind: DestinationKind = .appleNotes
+
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
+        guard case .appleNotes(let config) = configuration else {
+            throw OcrError.providerRefused("Apple Notes binding has wrong configuration.")
+        }
+        let folderName = config.folderName.isEmpty ? "Notes" : config.folderName
+
+        // Notes uses HTML for body rendering. Convert the OCR output into a
+        // basic HTML structure with the mermaid diagram inlined as <pre>.
+        let bodyHtml = Self.buildHtml(payload: payload)
+
+        let script = """
+        tell application "Notes"
+            tell account "iCloud"
+                if not (exists folder "\(Self.escape(folderName))") then
+                    make new folder with properties {name:"\(Self.escape(folderName))"}
+                end if
+                tell folder "\(Self.escape(folderName))"
+                    set newNote to make new note with properties {name:"\(Self.escape(payload.title))", body:"\(Self.escape(bodyHtml))"}
+                    return id of newNote
+                end tell
+            end tell
+        end tell
+        """
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<DestinationWriteResult, Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var errorInfo: NSDictionary?
+                guard let appleScript = NSAppleScript(source: script) else {
+                    continuation.resume(throwing: OcrError.providerRefused("Couldn't construct Apple Notes script."))
+                    return
+                }
+                let descriptor = appleScript.executeAndReturnError(&errorInfo)
+                if let errorInfo {
+                    let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "Apple Notes script failed."
+                    continuation.resume(throwing: OcrError.providerRefused(message))
+                    return
+                }
+                let noteId = descriptor.stringValue ?? UUID().uuidString
+                continuation.resume(returning: DestinationWriteResult(
+                    externalId: noteId,
+                    externalURL: nil,
+                    notes: "Created in folder \"\(folderName)\""
+                ))
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private static func buildHtml(payload: DestinationPayload) -> String {
+        let escapedTitle = htmlEscape(payload.title)
+        let escapedBody = htmlEscape(payload.body)
+        let mermaidBlock = payload.mermaidSource.map {
+            "<pre>\(htmlEscape($0))</pre>"
+        } ?? ""
+        return """
+        <h1>\(escapedTitle)</h1>
+        <p>\(escapedBody.replacingOccurrences(of: "\n", with: "<br>"))</p>
+        \(mermaidBlock)
+        """
+    }
+
+    private static func htmlEscape(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "&", with: "&amp;")
+           .replacingOccurrences(of: "<", with: "&lt;")
+           .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private static func escape(_ raw: String) -> String {
+        raw.replacingOccurrences(of: "\\", with: "\\\\")
+           .replacingOccurrences(of: "\"", with: "\\\"")
+           .replacingOccurrences(of: "\n", with: "\\n")
+    }
+}

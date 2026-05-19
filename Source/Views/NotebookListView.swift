@@ -1,0 +1,293 @@
+//
+//  NotebookListView.swift
+//  SyncNerds
+//
+//  Copyright (c) 2026 Strategic Nerds. All rights reserved.
+//
+
+import SwiftUI
+
+struct NotebookListView: View {
+    @Binding var selectedNotebookId: String?
+    @Binding var selectedRuleId: String?
+    @ObservedObject var coordinator: SyncCoordinator
+    var onRefresh: () -> Void
+
+    @ObservedObject private var ledger = Ledger.shared
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().background(theme.divider)
+
+            if ledger.remarkableAccount == nil {
+                pairPrompt
+            } else if ledger.notebooks.isEmpty {
+                emptyState
+            } else {
+                listAndSheet
+            }
+        }
+        .background(theme.background)
+        .onAppear {
+            if let id = selectedNotebookId, ledger.notebooks.contains(where: { $0.id == id }) {
+                return
+            }
+            selectedNotebookId = nil
+            selectedRuleId = nil
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Notebooks")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text(headerSubtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+
+            AppSecondaryButton(title: "Refresh", systemImage: "arrow.clockwise") {
+                onRefresh()
+            }
+            AppPrimaryButton(title: "Sync all", systemImage: "arrow.triangle.2.circlepath", isDisabled: ledger.rules.isEmpty) {
+                coordinator.syncNow(ruleId: nil)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+    }
+
+    private var headerSubtitle: String {
+        if ledger.remarkableAccount == nil {
+            return "Pair your reMarkable to see notebooks"
+        }
+        let total = ledger.notebooks.count
+        let synced = ledger.rules.count
+        return "\(total) notebook\(total == 1 ? "" : "s") · \(synced) rule\(synced == 1 ? "" : "s")"
+    }
+
+    // MARK: Pair / empty states
+
+    private var pairPrompt: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(theme.card)
+                Image(systemName: "pencil.tip.crop.circle.badge.plus")
+                    .font(.system(size: 36, weight: .light))
+                    .foregroundStyle(theme.primary)
+            }
+            .frame(width: 96, height: 96)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(theme.border, lineWidth: 1)
+            )
+
+            VStack(spacing: 6) {
+                Text("Connect your reMarkable")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("Sign in at my.remarkable.com, generate an 8-character one-time code, and paste it here to start syncing notes to Notion.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+
+            HStack(spacing: 10) {
+                AppPrimaryButton(title: "Pair reMarkable", systemImage: "qrcode.viewfinder") {
+                    NotificationCenter.default.post(name: .openPairRemarkable, object: nil)
+                }
+                AppSecondaryButton(title: "I'll do this later") {
+                    NotificationCenter.default.post(name: .openAddNotionWorkspace, object: nil)
+                }
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "books.vertical")
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(theme.muted)
+            Text("No notebooks found")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(theme.foreground)
+            Text("Pull down to refresh, or create a notebook on your reMarkable.")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.muted)
+            AppSecondaryButton(title: "Refresh", systemImage: "arrow.clockwise", action: onRefresh)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: List + sheet split
+
+    private var listAndSheet: some View {
+        GeometryReader { proxy in
+            let sheetHeight = selectedNotebookId != nil ? proxy.size.height * 0.55 : 0
+            VStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(ledger.notebooks) { notebook in
+                            NotebookRow(
+                                notebook: notebook,
+                                rule: ledger.rule(forNotebookId: notebook.id),
+                                isSelected: selectedNotebookId == notebook.id
+                            )
+                            .onTapGesture { selectNotebook(notebook) }
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                }
+                .frame(maxHeight: .infinity)
+
+                if let notebookId = selectedNotebookId,
+                   let notebook = ledger.notebooks.first(where: { $0.id == notebookId }) {
+                    Divider().background(theme.divider)
+                    RuleSheetView(
+                        notebook: notebook,
+                        onClose: { closeSheet() },
+                        onSyncNow: { ruleId, bindingId in
+                            coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
+                        }
+                    )
+                    .frame(height: sheetHeight)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.22), value: selectedNotebookId)
+        }
+    }
+
+    private func selectNotebook(_ notebook: RmNotebook) {
+        selectedNotebookId = notebook.id
+        selectedRuleId = ledger.rule(forNotebookId: notebook.id)?.id
+    }
+
+    private func closeSheet() {
+        selectedNotebookId = nil
+        selectedRuleId = nil
+    }
+
+}
+
+// MARK: - Notebook row
+
+private struct NotebookRow: View {
+    let notebook: RmNotebook
+    let rule: SyncRule?
+    let isSelected: Bool
+
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(theme.card)
+                Image(systemName: "book.closed.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(theme.primary)
+            }
+            .frame(width: 38, height: 38)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(theme.borderStrong, lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(notebook.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                HStack(spacing: 6) {
+                    if let folder = notebook.parentFolder {
+                        Text(folder)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(theme.tertiary)
+                        Text("·")
+                            .font(.system(size: 10))
+                            .foregroundStyle(theme.tertiary)
+                    }
+                    Text("\(notebook.pageCount) page\(notebook.pageCount == 1 ? "" : "s")")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.muted)
+                    Text("·")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.tertiary)
+                    Text("Modified \(Formatters.relativeLabel(for: notebook.lastModified))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.muted)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            statusPill
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(rowBackgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .strokeBorder(rowBorder, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+
+    private var rowBackgroundColor: Color {
+        if isSelected { return theme.primary.opacity(0.08) }
+        if isHovered  { return theme.cardElevated.opacity(0.6) }
+        return theme.card
+    }
+
+    private var rowBorder: Color {
+        if isSelected { return theme.primary.opacity(0.35) }
+        return theme.border
+    }
+
+    @ViewBuilder
+    private var statusPill: some View {
+        if let rule {
+            if !rule.enabled {
+                StatusPill(label: "Disabled", kind: .neutral)
+            } else if rule.destinations.isEmpty {
+                StatusPill(label: "Draft", kind: .neutral)
+            } else if let lastRun = rule.aggregateLastRunAt {
+                StatusPill(label: "\(rule.destinations.count) dest · \(Formatters.relativeLabel(for: lastRun))", kind: pillKind(rule))
+            } else {
+                StatusPill(label: "\(rule.destinations.count) destination\(rule.destinations.count == 1 ? "" : "s")", kind: .info)
+            }
+        } else {
+            StatusPill(label: "No rule", kind: .neutral)
+        }
+    }
+
+    private func pillKind(_ rule: SyncRule) -> StatusPill.Kind {
+        switch rule.aggregateLastRunStatus {
+        case .success:  return .success
+        case .partial:  return .warning
+        case .error:    return .destructive
+        case .running:  return .info
+        case .neverRun: return .neutral
+        }
+    }
+}

@@ -1,0 +1,75 @@
+//
+//  RulesEngine.swift
+//  SyncNerds
+//
+//  Copyright (c) 2026 Strategic Nerds. All rights reserved.
+//
+
+import Foundation
+
+/// Pure logic. Decides what to do with a given page for a given rule.
+struct RulesEngine {
+    enum Directive: Equatable {
+        case create(title: String)
+        case skip(reason: SkipReason)
+    }
+
+    enum SkipReason: String, Equatable {
+        case unchanged
+        case ocrEmpty
+        case ruleDisabled
+        case ocrSkippedAndPageEmpty
+    }
+
+    func evaluate(rule: SyncRule, page: RmPage, ocrText: String?, previouslySyncedHash: String?) -> Directive {
+        guard rule.enabled else { return .skip(reason: .ruleDisabled) }
+
+        if let lastHash = previouslySyncedHash, lastHash == page.versionHash {
+            return .skip(reason: .unchanged)
+        }
+
+        if rule.ocrMode == .none && !page.hasTypedText {
+            return .skip(reason: .ocrSkippedAndPageEmpty)
+        }
+
+        let title = resolveTitle(rule: rule, page: page, ocrText: ocrText)
+        return .create(title: title)
+    }
+
+    func resolveTitle(rule: SyncRule, page: RmPage, ocrText: String?) -> String {
+        switch rule.titleStrategy {
+        case .firstLineOfOcr:
+            if let firstLine = ocrText?
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .first
+                .map(String.init)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !firstLine.isEmpty {
+                return firstLine
+            }
+            return fallbackTitle(rule: rule, page: page)
+        case .template:
+            return applyTemplate(rule.titleTemplate ?? "{notebook} – page {page_n}", rule: rule, page: page)
+        case .pageNumber:
+            return "Page \(page.positionInNotebook + 1)"
+        case .rmCreatedDate:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: page.createdAt)
+        }
+    }
+
+    private func fallbackTitle(rule: SyncRule, page: RmPage) -> String {
+        "\(rule.rmNotebookName) · page \(page.positionInNotebook + 1)"
+    }
+
+    private func applyTemplate(_ template: String, rule: SyncRule, page: RmPage) -> String {
+        var output = template
+        output = output.replacingOccurrences(of: "{notebook}", with: rule.rmNotebookName)
+        output = output.replacingOccurrences(of: "{page_n}", with: "\(page.positionInNotebook + 1)")
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        output = output.replacingOccurrences(of: "{date}", with: dateFormatter.string(from: page.createdAt))
+        return output
+    }
+}

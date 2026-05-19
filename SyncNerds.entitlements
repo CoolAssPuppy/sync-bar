@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	iCloud Key-Value Storage. Used for cross-device preference sync via
+	NSUbiquitousKeyValueStore. Matching capability must be enabled in
+	App Store Connect for the com.strategicnerds.SyncNerdsApp bundle id.
+	-->
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
+	<!--
+	CloudKit container holds the rules + ledger + accounts so settings sync
+	across the user's Macs. Schema lives in CloudKitLedger.swift and is
+	provisioned per-environment in App Store Connect.
+	-->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.strategicnerds.syncnerds</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+</dict>
+</plist>

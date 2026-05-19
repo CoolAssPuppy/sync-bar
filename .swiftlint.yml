@@ -1,0 +1,73 @@
+# SwiftLint configuration for SyncNerds.
+#
+# Policy: enforce correctness and safety rules strictly; relax cosmetic
+# length/naming limits to match the codebase's prevailing style.
+
+included:
+  - Source
+  - Tests
+
+excluded:
+  - build
+  - dist
+  - .build
+
+# --- Opt-in rules (correctness / safety bias) ---
+opt_in_rules:
+  - force_unwrapping
+  - empty_count
+  - weak_delegate
+  - overridden_super_call
+  - notification_center_detachment
+
+# --- Disabled rules: cosmetic limits that contradict the codebase style ---
+disabled_rules:
+  - todo
+  - multiple_closures_with_trailing_closure
+  - colon  # Codebase intentionally aligns colons for readability in palettes.
+  - vertical_whitespace  # Preserve existing blank-line groupings.
+  - opening_brace
+  - comma
+  - trailing_newline
+  - implicit_optional_initialization
+  - non_optional_string_data_conversion
+
+# --- Relaxed thresholds ---
+line_length:
+  warning: 180
+  error: 220
+  ignores_urls: true
+  ignores_comments: true
+
+identifier_name:
+  min_length: 1
+  max_length:
+    warning: 60
+    error: 80
+  allowed_symbols: ["_"]
+
+nesting:
+  type_level:
+    warning: 3
+    error: 5
+  function_level:
+    warning: 5
+    error: 8
+
+function_body_length:
+  warning: 220
+  error: 300
+
+type_body_length:
+  warning: 800
+  error: 1200
+
+file_length:
+  warning: 1000
+  error: 1500
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+reporter: "xcode"

@@ -45,7 +45,15 @@ struct NotionDestinationClient: DestinationClient {
             properties = ["title": ["title": [["text": ["content": payload.title]]]]]
         case .database:
             parent = ["database_id": config.destinationId]
+            // Database rows need a title property. Notion's API requires it to
+            // be named "Name" unless the user has renamed it; we honor that
+            // convention here and surface the rename via the mapping below.
             properties = ["Name": ["title": [["text": ["content": payload.title]]]]]
+            for (columnName, mapping) in config.propertyMappings {
+                if let value = Self.propertyValue(for: mapping, payload: payload) {
+                    properties[columnName] = value
+                }
+            }
         }
 
         var children: [[String: Any]] = []
@@ -87,6 +95,53 @@ struct NotionDestinationClient: DestinationClient {
         struct Page: Decodable { let id: String; let url: String }
         let parsed = try JSONDecoder().decode(Page.self, from: data)
         return DestinationWriteResult(externalId: parsed.id, externalURL: URL(string: parsed.url), notes: nil)
+    }
+
+    // MARK: Property mapping → Notion JSON
+
+    /// Translates one `NotionPropertyMapping` into the Notion v2022-06-28
+    /// `properties[name] = …` payload shape. Returns nil for `.leaveBlank`
+    /// so callers can skip writing that column.
+    private static func propertyValue(for mapping: NotionPropertyMapping,
+                                      payload: DestinationPayload) -> [String: Any]? {
+        switch mapping {
+        case .leaveBlank:
+            return nil
+        case .text(let template):
+            let context = TitleTemplateContext(
+                notebook: payload.ruleNotebookName,
+                pageNumber: payload.pageNumber,
+                date: payload.sourceDate,
+                title: payload.title
+            )
+            let resolved = context.apply(to: template)
+            return ["rich_text": [["type": "text", "text": ["content": resolved]]]]
+        case .selectOption(let name):
+            // Notion accepts the same shape for both `select` and `status`;
+            // the column's declared type tells the server which to use.
+            return ["select": ["name": name], "status": ["name": name]]
+        case .multiSelectOptions(let names):
+            return ["multi_select": names.map { ["name": $0] }]
+        case .dateSource(let source):
+            let iso = ISO8601DateFormatter()
+            let date: Date
+            switch source {
+            case .pageCreated:  date = payload.sourceDate
+            case .pageModified: date = payload.sourceDate
+            case .syncedAt:     date = Date()
+            }
+            return ["date": ["start": iso.string(from: date)]]
+        case .checkbox(let value):
+            return ["checkbox": value]
+        case .number(let value):
+            return ["number": value]
+        case .literal(let value):
+            // Notion validates these per column type on the server; we send
+            // the value under every plausible key and let Notion pick the
+            // matching one.
+            return ["url": value, "email": value, "phone_number": value,
+                    "rich_text": [["type": "text", "text": ["content": value]]]]
+        }
     }
 
     // MARK: Mock fallback

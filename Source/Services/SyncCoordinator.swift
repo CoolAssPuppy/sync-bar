@@ -200,9 +200,18 @@ final class SyncCoordinator: ObservableObject {
         var firstError: String?
         let runStart = Date()
 
+        // Apply optional per-binding overrides on top of the rule defaults.
+        var effectiveRule = context.rule
+        if let titleOverride = context.binding.titleStrategyOverride {
+            effectiveRule.titleStrategy = titleOverride
+        }
+        if let ocrModeOverride = context.binding.ocrModeOverride {
+            effectiveRule.ocrMode = ocrModeOverride
+        }
+
         for (page, ocrResult) in context.ocrResults {
             let directive = engine.evaluate(
-                rule: context.rule, page: page,
+                rule: effectiveRule, page: page,
                 ocrText: ocrResult.text, previouslySyncedHash: nil
             )
             switch directive {

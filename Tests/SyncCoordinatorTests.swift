@@ -17,6 +17,9 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func test_successful_cycle_records_synced_pages_and_marks_binding_success() async {
         let ledger = Ledger.shared
+        // Force on-device OCR so the test doesn't depend on a Keychain-stored API key
+        // (the user's settings can persist a different provider across runs).
+        AppSettings.shared.ocrProvider = .vision
         await prepare(ledger: ledger)
         let folder = makeTempFolder()
         defer { try? FileManager.default.removeItem(at: folder) }

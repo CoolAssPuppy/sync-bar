@@ -199,6 +199,81 @@ final class Ledger: ObservableObject {
         rules.first { $0.rmNotebookId == notebookId }
     }
 
+    // MARK: Rename helpers (header drawer entry points)
+
+    func renameNotionWorkspace(id: String, newName: String) {
+        guard var workspace = notionWorkspaces.first(where: { $0.id == id }) else { return }
+        workspace.workspaceName = newName
+        upsertNotionWorkspace(workspace)
+    }
+
+    func renameLinearAccount(id: String, newName: String) {
+        guard var account = linearAccounts.first(where: { $0.id == id }) else { return }
+        account.name = newName
+        upsertLinearAccount(account)
+        // Keep binding-level workspaceName cached labels in sync.
+        for ruleIndex in rules.indices {
+            for bindingIndex in rules[ruleIndex].destinations.indices {
+                if case .linear(var cfg) = rules[ruleIndex].destinations[bindingIndex].configuration,
+                   cfg.workspaceId == id {
+                    cfg.workspaceName = newName
+                    rules[ruleIndex].destinations[bindingIndex].configuration = .linear(cfg)
+                }
+            }
+        }
+        persistRules()
+        NotificationCenter.default.post(name: .rulesChanged, object: nil)
+    }
+
+    func renameGoogleAccount(id: String, newName: String) {
+        guard var account = googleAccounts.first(where: { $0.id == id }) else { return }
+        account.displayName = newName
+        upsertGoogleAccount(account)
+    }
+
+    func renameMarkdownTarget(id: String, newName: String) {
+        guard var target = markdownTargets.first(where: { $0.id == id }) else { return }
+        target.displayName = newName
+        upsertMarkdownTarget(target)
+    }
+
+    /// Apple Notes rename is special: the "name" is the literal Notes folder
+    /// SyncNerds writes into. Renaming rewrites every binding pointing at
+    /// the old folder so the next sync lands in the new folder.
+    func renameAppleNotesTarget(id: String, newFolderName: String) {
+        guard let existing = appleNotesTargets.first(where: { $0.id == id }) else { return }
+        let oldName = existing.folderName
+        guard oldName != newFolderName else { return }
+        var updated = existing
+        updated.folderName = newFolderName
+        upsertAppleNotesTarget(updated)
+
+        for ruleIndex in rules.indices {
+            for bindingIndex in rules[ruleIndex].destinations.indices {
+                if case .appleNotes(var cfg) = rules[ruleIndex].destinations[bindingIndex].configuration,
+                   cfg.folderName == oldName {
+                    cfg.folderName = newFolderName
+                    rules[ruleIndex].destinations[bindingIndex].configuration = .appleNotes(cfg)
+                }
+            }
+        }
+        persistRules()
+        NotificationCenter.default.post(name: .rulesChanged, object: nil)
+    }
+
+    /// Pairs of (rule, binding) where the binding points at the given
+    /// destination predicate. Used by the per-destination "Active syncs"
+    /// list to enumerate which notebooks fan out to this destination.
+    func bindings(matching predicate: (DestinationConfiguration) -> Bool) -> [(SyncRule, DestinationBinding)] {
+        var output: [(SyncRule, DestinationBinding)] = []
+        for rule in rules {
+            for binding in rule.destinations where predicate(binding.configuration) {
+                output.append((rule, binding))
+            }
+        }
+        return output
+    }
+
     /// Mutates a single destination binding's run state. The rule-level
     /// aggregates are derived properties so they need no separate update.
     func updateBindingRunResult(ruleId: String,

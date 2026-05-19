@@ -8,10 +8,10 @@
 import SwiftUI
 import AppKit
 
-/// Slide-up panel shown under the notebook list when a notebook is
-/// selected. Lets the user attach zero or more destinations to that
-/// notebook and tweak shared (rule-level) sync behaviour.
-struct RuleSheetView: View {
+/// Right-edge slider shown when a notebook is selected. Lets the user
+/// attach zero or more destinations to that notebook and tweak the
+/// rule-level sync defaults.
+struct RuleSliderView: View {
     let notebook: RmNotebook
     var onClose: () -> Void
     var onSyncNow: (String, String?) -> Void   // (ruleId, optional bindingId)
@@ -21,6 +21,8 @@ struct RuleSheetView: View {
 
     @State private var addBindingKind: DestinationKind?
     @State private var existingBindingIdToEdit: String?
+    @State private var selectedBindingId: String?
+    @State private var showAddKindPicker: Bool = false
 
     /// Either an existing rule for this notebook, or nil. When nil we
     /// create a fresh rule the first time the user attaches a destination.
@@ -44,6 +46,11 @@ struct RuleSheetView: View {
             footer
         }
         .background(theme.surface)
+        .overlay(
+            Rectangle().fill(theme.divider).frame(width: 1),
+            alignment: .leading
+        )
+        .shadow(color: .black.opacity(0.35), radius: 18, x: -6, y: 0)
         .sheet(item: $addBindingKind) { kind in
             BindingEditorSheet(
                 kind: kind,
@@ -155,68 +162,137 @@ struct RuleSheetView: View {
 
     private var destinationsCard: some View {
         AppCard("Destinations") {
-            VStack(spacing: 10) {
-                if let rule, !rule.destinations.isEmpty {
-                    ForEach(rule.destinations) { binding in
-                        DestinationBindingRow(
-                            binding: binding,
-                            onEdit: { existingBindingIdToEdit = binding.id },
-                            onSyncNow: { onSyncNow(rule.id, binding.id) },
-                            onToggle: { newValue in
-                                var copy = binding
-                                copy.enabled = newValue
-                                ledger.updateBinding(ruleId: rule.id, binding: copy)
-                            },
-                            onRemove: { ledger.removeBinding(ruleId: rule.id, bindingId: binding.id) }
-                        )
-                    }
-                } else {
-                    VStack(spacing: 6) {
-                        Image(systemName: "tray")
-                            .font(.system(size: 22, weight: .light))
-                            .foregroundStyle(theme.tertiary)
-                        Text("No destinations yet")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(theme.foregroundSoft)
-                        Text("Add one or more places to send transcribed notes from this notebook.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(theme.muted)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                }
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(DestinationKind.allCases) { kind in
-                        addBindingButton(kind: kind)
-                    }
-                }
+            if let rule, !rule.destinations.isEmpty {
+                populatedDestinations(rule: rule)
+            } else {
+                emptyDestinations
             }
         }
     }
 
-    private func addBindingButton(kind: DestinationKind) -> some View {
-        Button(action: { addBindingKind = kind }) {
-            HStack(spacing: 8) {
-                DestinationIcon(kind: kind, size: 18)
-                Text("Add \(kind.label)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(theme.foreground)
-                Spacer()
-                Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(theme.tertiary)
+    @ViewBuilder
+    private var emptyDestinations: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "tray")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(theme.tertiary)
+            Text("No destinations yet")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.foregroundSoft)
+            Text("Pick one of the places you've connected to start syncing this notebook.")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Menu {
+                ForEach(DestinationKind.allCases) { kind in
+                    Button(action: { addBindingKind = kind }) {
+                        Label(kind.label, systemImage: kind.systemImage)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Add destination")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(theme.primaryForeground)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
+                )
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardElevated)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
-            )
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .padding(.top, 4)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private func populatedDestinations(rule: SyncRule) -> some View {
+        let bindings = rule.destinations
+        let activeBindingId = selectedBindingId ?? bindings.first?.id
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(bindings) { binding in
+                        Button(action: { selectedBindingId = binding.id }) {
+                            Label(binding.configuration.summary, systemImage: binding.kind.systemImage)
+                        }
+                    }
+                    Divider()
+                    ForEach(DestinationKind.allCases) { kind in
+                        Button(action: { addBindingKind = kind }) {
+                            Label("Add \(kind.label)…", systemImage: "plus")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if let binding = bindings.first(where: { $0.id == activeBindingId }) {
+                            DestinationIcon(kind: binding.kind, size: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(binding.configuration.summary)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(theme.foreground)
+                                    .lineLimit(1)
+                                Text(binding.kind.label)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(theme.muted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(theme.tertiary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .frame(maxWidth: .infinity)
+
+                Button(action: { addBindingKind = .notion }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(theme.primaryForeground)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                                .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Add a destination of any kind")
+            }
+
+            if let activeBindingId, let binding = bindings.first(where: { $0.id == activeBindingId }) {
+                BindingInlinePanel(
+                    binding: binding,
+                    onEdit: { existingBindingIdToEdit = binding.id },
+                    onSyncNow: { onSyncNow(rule.id, binding.id) },
+                    onToggle: { newValue in
+                        var copy = binding
+                        copy.enabled = newValue
+                        ledger.updateBinding(ruleId: rule.id, binding: copy)
+                    },
+                    onRemove: {
+                        ledger.removeBinding(ruleId: rule.id, bindingId: binding.id)
+                        selectedBindingId = nil
+                    }
+                )
+            }
+        }
     }
 
     // MARK: Footer
@@ -304,9 +380,9 @@ struct RuleSheetView: View {
     }
 }
 
-// MARK: - Row showing one configured binding
+// MARK: - Inline panel for the selected destination binding
 
-private struct DestinationBindingRow: View {
+private struct BindingInlinePanel: View {
     let binding: DestinationBinding
     let onEdit: () -> Void
     let onSyncNow: () -> Void
@@ -316,52 +392,52 @@ private struct DestinationBindingRow: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            DestinationIcon(kind: binding.kind, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(binding.configuration.summary)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(binding.kind.label)
-                        .font(.system(size: 10, weight: .medium))
+        VStack(alignment: .leading, spacing: 10) {
+            Divider().background(theme.divider)
+
+            HStack(spacing: 10) {
+                statusPill
+                if let error = binding.lastRunError, !error.isEmpty {
+                    Text(error)
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.destructive)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else if let lastRun = binding.lastRunAt {
+                    Text("\(Formatters.syncResultLabel(pageCount: binding.lastRunPagesSynced)) · \(Formatters.relativeLabel(for: lastRun))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.muted)
+                } else {
+                    Text("Never run")
+                        .font(.system(size: 10))
                         .foregroundStyle(theme.tertiary)
-                    if let lastRun = binding.lastRunAt {
-                        Text("·")
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.tertiary)
-                        Text("Last run \(Formatters.relativeLabel(for: lastRun))")
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.muted)
-                    }
-                    if let error = binding.lastRunError {
-                        Text("·")
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.tertiary)
-                        Text(error)
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.destructive)
-                            .lineLimit(1)
-                    }
                 }
+                Spacer(minLength: 8)
+                Toggle("", isOn: Binding(get: { binding.enabled }, set: onToggle))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
             }
-            Spacer(minLength: 8)
 
-            Toggle("", isOn: Binding(get: { binding.enabled }, set: onToggle))
-                .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
-
-            AppIconButton(systemName: "arrow.triangle.2.circlepath", help: "Sync this destination now", spinOnTap: true) { onSyncNow() }
-            AppIconButton(systemName: "pencil", help: "Edit destination") { onEdit() }
-            AppIconButton(systemName: "trash", help: "Remove destination", tint: .destructive) { onRemove() }
+            HStack(spacing: 8) {
+                AppSecondaryButton(title: "Edit", systemImage: "pencil") { onEdit() }
+                AppSecondaryButton(title: "Sync now", systemImage: "arrow.triangle.2.circlepath") { onSyncNow() }
+                Spacer()
+                AppSecondaryButton(title: "Remove", systemImage: "trash", tint: .destructive) { onRemove() }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private var statusPill: some View {
+        if !binding.enabled {
+            StatusPill(label: "Off", kind: .neutral)
+        } else {
+            switch binding.lastRunStatus {
+            case .success:  StatusPill(label: "Synced", kind: .success)
+            case .partial:  StatusPill(label: "Partial", kind: .warning)
+            case .error:    StatusPill(label: "Failed", kind: .destructive)
+            case .running:  StatusPill(label: "Running", kind: .info)
+            case .neverRun: StatusPill(label: "New", kind: .neutral)
+            }
+        }
     }
 }

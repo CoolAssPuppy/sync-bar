@@ -122,9 +122,24 @@ struct SettingsView: View {
                 SecureField("sk-…", text: binding)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
-                AppSecondaryButton(title: "Save", systemImage: "checkmark") {
+                Button(action: {
                     KeychainStore.shared.set(value: binding.wrappedValue, for: keychainKey)
+                }) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(theme.primary)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(theme.cardInset)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(theme.borderStrong, lineWidth: 1)
+                        )
                 }
+                .buttonStyle(.plain)
+                .help("Save key")
             }
         }
     }

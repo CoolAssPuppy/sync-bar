@@ -83,6 +83,46 @@ struct NotionDestinationConfig: Codable, Equatable, Hashable {
     var destinationId: String
     var destinationType: NotionDestinationType  // page or database
     var destinationTitle: String
+    /// Per-property mappings for database destinations. Keyed by Notion
+    /// property name. Empty when the destination is a page or the user
+    /// hasn't customized any column yet.
+    var propertyMappings: [String: NotionPropertyMapping] = [:]
+}
+
+/// What to write into a single Notion database column when a page syncs.
+/// One case per Notion property type we know how to populate.
+enum NotionPropertyMapping: Codable, Equatable, Hashable {
+    /// Skip the column. Notion stores it as empty.
+    case leaveBlank
+    /// Plain text or rich text with token substitution.
+    case text(template: String)
+    /// A single Notion option name (select / status).
+    case selectOption(String)
+    /// Zero or more option names (multi_select).
+    case multiSelectOptions([String])
+    /// A literal date source instead of a free-form date.
+    case dateSource(DateSource)
+    /// A boolean checkbox value.
+    case checkbox(Bool)
+    /// A literal numeric value.
+    case number(Double)
+    /// A free-form URL, email, or phone-number string.
+    case literal(String)
+
+    enum DateSource: String, Codable, CaseIterable, Identifiable {
+        case pageCreated
+        case pageModified
+        case syncedAt
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .pageCreated:  return "Page created date"
+            case .pageModified: return "Page modified date"
+            case .syncedAt:     return "Sync date"
+            }
+        }
+    }
 }
 
 struct LinearDestinationConfig: Codable, Equatable, Hashable {

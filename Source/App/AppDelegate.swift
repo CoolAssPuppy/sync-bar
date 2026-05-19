@@ -57,14 +57,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rightClickMenu = buildRightClickMenu()
     }
 
-    private func applyStatusItemIcon() {
+    private func applyStatusItemIcon(syncing: Bool = false) {
         guard let button = statusItem?.button else { return }
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-        let image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "SyncNerds")?
-            .withSymbolConfiguration(config)
-        image?.isTemplate = true
-        button.image = image
-        button.toolTip = "SyncNerds"
+        let assetName = syncing ? "MenuBarIconSyncing" : "MenuBarIcon"
+        if let image = NSImage(named: assetName) {
+            // Template-rendered name stays muted (system-tinted) while idle;
+            // the syncing variant ships its own yellow and opts out of
+            // template tinting.
+            image.isTemplate = !syncing
+            button.image = image
+        } else {
+            // Fallback if assets are missing for any reason.
+            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+            let fallback = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "SyncNerds")?
+                .withSymbolConfiguration(config)
+            fallback?.isTemplate = true
+            button.image = fallback
+        }
+        button.toolTip = syncing ? "SyncNerds — syncing…" : "SyncNerds"
     }
 
     private func buildRightClickMenu() -> NSMenu {
@@ -232,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Status spin
 
     private func startStatusItemSpin() {
+        applyStatusItemIcon(syncing: true)
         guard let button = statusItem?.button else { return }
         button.wantsLayer = true
         guard let layer = button.layer else { return }
@@ -249,6 +260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopStatusItemSpin() {
         statusItem?.button?.layer?.removeAnimation(forKey: Self.spinAnimationKey)
+        applyStatusItemIcon(syncing: false)
     }
 }
 

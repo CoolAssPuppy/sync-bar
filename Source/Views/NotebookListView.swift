@@ -50,11 +50,14 @@ struct NotebookListView: View {
             }
             Spacer()
 
-            AppSecondaryButton(title: "Refresh", systemImage: "arrow.clockwise") {
+            AppIconButton(systemName: "arrow.clockwise", help: "Refresh notebooks", spinOnTap: true) {
                 onRefresh()
             }
-            AppPrimaryButton(title: "Sync all", systemImage: "arrow.triangle.2.circlepath", isDisabled: ledger.rules.isEmpty) {
-                coordinator.syncNow(ruleId: nil)
+            AppIconButton(systemName: "arrow.triangle.2.circlepath",
+                          help: "Sync all rules now",
+                          tint: ledger.rules.isEmpty ? .foreground : .primary,
+                          spinOnTap: true) {
+                if !ledger.rules.isEmpty { coordinator.syncNow(ruleId: nil) }
             }
         }
         .padding(.horizontal, 24)
@@ -130,44 +133,44 @@ struct NotebookListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: List + sheet split
+    // MARK: List + right-edge slider
 
     private var listAndSheet: some View {
-        GeometryReader { proxy in
-            let sheetHeight = selectedNotebookId != nil ? proxy.size.height * 0.55 : 0
-            VStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(ledger.notebooks) { notebook in
-                            NotebookRow(
-                                notebook: notebook,
-                                rule: ledger.rule(forNotebookId: notebook.id),
-                                isSelected: selectedNotebookId == notebook.id
-                            )
-                            .onTapGesture { selectNotebook(notebook) }
-                        }
+        ZStack(alignment: .trailing) {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(ledger.notebooks) { notebook in
+                        NotebookRow(
+                            notebook: notebook,
+                            rule: ledger.rule(forNotebookId: notebook.id),
+                            isSelected: selectedNotebookId == notebook.id
+                        )
+                        .onTapGesture { selectNotebook(notebook) }
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
                 }
-                .frame(maxHeight: .infinity)
-
-                if let notebookId = selectedNotebookId,
-                   let notebook = ledger.notebooks.first(where: { $0.id == notebookId }) {
-                    Divider().background(theme.divider)
-                    RuleSheetView(
-                        notebook: notebook,
-                        onClose: { closeSheet() },
-                        onSyncNow: { ruleId, bindingId in
-                            coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
-                        }
-                    )
-                    .frame(height: sheetHeight)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
             }
-            .animation(.easeOut(duration: 0.22), value: selectedNotebookId)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let notebookId = selectedNotebookId,
+               let notebook = ledger.notebooks.first(where: { $0.id == notebookId }) {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture { closeSheet() }
+                    .transition(.opacity)
+                RuleSliderView(
+                    notebook: notebook,
+                    onClose: { closeSheet() },
+                    onSyncNow: { ruleId, bindingId in
+                        coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
+                    }
+                )
+                .frame(width: 480)
+                .transition(.move(edge: .trailing))
+            }
         }
+        .animation(.easeOut(duration: 0.22), value: selectedNotebookId)
     }
 
     private func selectNotebook(_ notebook: RmNotebook) {

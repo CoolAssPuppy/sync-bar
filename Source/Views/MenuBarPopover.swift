@@ -111,9 +111,7 @@ struct MenuBarPopover: View {
                     SyncRuleCard(
                         rule: rule,
                         isActive: coordinator.activeRuleId == rule.id,
-                        activeBindingId: coordinator.activeBindingId,
                         onSyncRule: { actions.syncNow(rule.id, nil) },
-                        onSyncBinding: { bindingId in actions.syncNow(rule.id, bindingId) },
                         onOpenWindow: actions.openMainWindow
                     )
                 }
@@ -182,65 +180,34 @@ struct MenuBarPopover: View {
 private struct SyncRuleCard: View {
     let rule: SyncRule
     let isActive: Bool
-    let activeBindingId: String?
     let onSyncRule: () -> Void
-    let onSyncBinding: (String) -> Void
     let onOpenWindow: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
-    @State private var isExpanded = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(theme.cardElevated)
-                    Image(systemName: "book.closed.fill")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.primary)
-                }
-                .frame(width: 28, height: 28)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(theme.borderStrong, lineWidth: 1)
-                )
+        HStack(spacing: 10) {
+            // Stacked destination icons that hint at the binding count at a
+            // glance without the noise of full mini-rows.
+            DestinationIconStack(kinds: rule.destinations.map(\.kind))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(rule.rmNotebookName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.foreground)
-                        .lineLimit(1)
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(theme.tertiary)
-                        Text("\(rule.destinations.count) destination\(rule.destinations.count == 1 ? "" : "s")")
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.muted)
-                    }
-                }
-                Spacer(minLength: 8)
-                statusPill
-
-                AppIconButton(systemName: "arrow.triangle.2.circlepath", help: "Sync all destinations now", spinOnTap: true) {
-                    onSyncRule()
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(rule.rmNotebookName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                    .lineLimit(1)
+                Text(secondaryLine)
+                    .font(.system(size: 10))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
             }
 
-            lastRunLine
+            Spacer(minLength: 8)
 
-            if isExpanded {
-                VStack(spacing: 4) {
-                    ForEach(rule.destinations) { binding in
-                        BindingMiniRow(binding: binding, isActive: activeBindingId == binding.id) {
-                            onSyncBinding(binding.id)
-                        }
-                    }
-                }
-                .padding(.top, 2)
-            }
+            AppIconButton(systemName: "arrow.triangle.2.circlepath",
+                          help: "Sync this rule now",
+                          spinOnTap: true) { onSyncRule() }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -254,99 +221,52 @@ private struct SyncRuleCard: View {
         )
         .onHover { isHovered = $0 }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { onOpenWindow() }
+        .onTapGesture { onOpenWindow() }
     }
 
-    @ViewBuilder
-    private var statusPill: some View {
-        if !rule.enabled {
-            StatusPill(label: "Off", kind: .neutral)
-        } else if isActive {
-            StatusPill(label: "Running", kind: .info)
-        } else {
-            switch rule.aggregateLastRunStatus {
-            case .success:  StatusPill(label: "Synced", kind: .success)
-            case .partial:  StatusPill(label: "Partial", kind: .warning)
-            case .error:    StatusPill(label: "Failed", kind: .destructive)
-            case .running:  StatusPill(label: "Running", kind: .info)
-            case .neverRun: StatusPill(label: "New", kind: .neutral)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var lastRunLine: some View {
+    private var secondaryLine: String {
+        let count = rule.destinations.count
+        let destinationsLabel = "\(count) destination\(count == 1 ? "" : "s")"
+        if isActive { return "Syncing…" }
+        if !rule.enabled { return "Off · \(destinationsLabel)" }
         if let lastRun = rule.aggregateLastRunAt {
-            HStack(spacing: 4) {
-                Image(systemName: "clock")
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
-                Text("Last run \(Formatters.relativeLabel(for: lastRun))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.muted)
-                Text("·")
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.tertiary)
-                Text(Formatters.syncResultLabel(pageCount: rule.aggregateLastRunPagesSynced))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(theme.foregroundSoft)
-            }
-        } else {
-            Text("Never run")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.tertiary)
+            let resultLabel = Formatters.syncResultLabel(pageCount: rule.aggregateLastRunPagesSynced)
+            return "\(resultLabel) · \(Formatters.relativeLabel(for: lastRun))"
         }
+        return destinationsLabel + " · never synced"
     }
 }
 
-private struct BindingMiniRow: View {
-    let binding: DestinationBinding
-    let isActive: Bool
-    let onSync: () -> Void
-
-    @Environment(\.theme) private var theme
+/// Up to four destination icons overlapping in a horizontal stack so the
+/// popover row shows where a notebook fans out to without listing each
+/// binding.
+private struct DestinationIconStack: View {
+    let kinds: [DestinationKind]
 
     var body: some View {
-        HStack(spacing: 8) {
-            DestinationIcon(kind: binding.kind, size: 14)
-            Text(binding.configuration.summary)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(theme.foregroundSoft)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 6)
-            if let lastRun = binding.lastRunAt {
-                Text(Formatters.syncResultLabel(pageCount: binding.lastRunPagesSynced))
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
-                Text("·")
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
-                Text(Formatters.relativeLabel(for: lastRun))
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
-            } else {
-                Text("Never")
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
+        let unique = Array(NSOrderedSet(array: kinds)) as? [DestinationKind] ?? []
+        let shown = Array(unique.prefix(4))
+        HStack(spacing: -6) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, kind in
+                DestinationIcon(kind: kind, size: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.black.opacity(0.001))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
-            Button(action: onSync) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(theme.muted)
+            if kinds.isEmpty {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.gray.opacity(0.15))
+                    Image(systemName: "questionmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 22, height: 22)
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? theme.primary.opacity(0.08) : theme.cardInset)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(isActive ? theme.primary.opacity(0.3) : theme.border, lineWidth: 1)
-        )
+        .frame(minWidth: 22)
     }
 }
 

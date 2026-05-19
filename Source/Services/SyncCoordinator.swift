@@ -125,7 +125,19 @@ final class SyncCoordinator: ObservableObject {
                 let result = try await ocr.transcribe(imageData: Data())
                 ocrResults.append((page, result))
             } catch {
-                Log.ocr.error("OCR failed for rule \(rule.id, privacy: .public): \(String(describing: error), privacy: .public)")
+                let message = Formatters.userMessage(for: error)
+                Log.ocr.error("OCR failed for rule \(rule.id, privacy: .public): \(message, privacy: .public)")
+                // Record the OCR failure on the rule (no binding yet —
+                // OCR sits above the per-binding fan-out) so the sync log
+                // explains why a page never reached its destination.
+                ledger.appendEvent(SyncEvent(
+                    id: UUID().uuidString, occurredAt: Date(),
+                    ruleId: rule.id, ruleName: rule.rmNotebookName,
+                    eventType: .pageFailed,
+                    rmNotebookName: rule.rmNotebookName, rmPageId: page.pageId,
+                    notionPageUrl: nil, durationMs: nil,
+                    ocrProvider: ocr.name, errorMessage: "OCR: \(message)"
+                ))
             }
         }
 
@@ -220,7 +232,10 @@ final class SyncCoordinator: ObservableObject {
         if firstError != nil, AppSettings.shared.notifyOnFailure {
             postNotification(title: "Sync failed",
                              body: "\(context.rule.rmNotebookName) → \(context.binding.configuration.summary)")
-        } else if firstError == nil, AppSettings.shared.notifyOnSuccess {
+        } else if firstError == nil, pagesSynced > 0, AppSettings.shared.notifyOnSuccess {
+            // Quiet cycles (all pages skipped because unchanged) don't earn
+            // a notification; otherwise opting in to success notifications
+            // means a banner every interval.
             postNotification(title: "Sync complete",
                              body: "\(context.rule.rmNotebookName): \(Formatters.syncResultLabel(pageCount: pagesSynced))")
         }

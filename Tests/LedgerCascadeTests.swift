@@ -46,6 +46,39 @@ final class LedgerCascadeTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    func test_removing_one_of_two_markdown_targets_with_same_folder_path_does_not_strip_siblings() {
+        let ledger = Ledger.shared
+        let tempPath = NSTemporaryDirectory()
+
+        let firstTarget = MarkdownTarget(id: "md-first", displayName: "Inbox",
+                                         folderPath: tempPath, connectedAt: Date())
+        let secondTarget = MarkdownTarget(id: "md-second", displayName: "Inbox copy",
+                                          folderPath: tempPath, connectedAt: Date())
+        ledger.upsertMarkdownTarget(firstTarget)
+        ledger.upsertMarkdownTarget(secondTarget)
+
+        var rule = SyncRule.new(notebookId: "nb-collision", notebookName: "Quarterly")
+        rule.destinations = [
+            DestinationBinding(configuration: .markdownFolder(
+                MarkdownFolderDestinationConfig(folderPath: tempPath, fileNameTemplate: "{notebook}", includeFrontmatter: false)
+            ))
+        ]
+        ledger.upsertRule(rule)
+
+        // Removing one of two siblings that share the same folder must NOT
+        // cascade — the surviving target still claims that path.
+        ledger.removeMarkdownTarget(id: firstTarget.id)
+        let afterDestinations = ledger.rules.first(where: { $0.id == rule.id })?.destinations ?? []
+        XCTAssertEqual(afterDestinations.count, 1, "Binding should survive when a sibling target keeps the path alive")
+
+        // Removing the last sibling DOES cascade.
+        ledger.removeMarkdownTarget(id: secondTarget.id)
+        let finalDestinations = ledger.rules.first(where: { $0.id == rule.id })?.destinations ?? []
+        XCTAssertEqual(finalDestinations.count, 0, "Last sibling removal should clear the binding")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     func test_updateBindingRunResult_skips_unchanged_writes() {
         let ledger = Ledger.shared
         var rule = SyncRule.new(notebookId: "nb-update", notebookName: "Update test")

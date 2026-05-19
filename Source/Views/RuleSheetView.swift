@@ -22,7 +22,6 @@ struct RuleSliderView: View {
     @State private var addBindingKind: DestinationKind?
     @State private var existingBindingIdToEdit: String?
     @State private var selectedBindingId: String?
-    @State private var showAddKindPicker: Bool = false
 
     /// Either an existing rule for this notebook, or nil. When nil we
     /// create a fresh rule the first time the user attaches a destination.
@@ -319,8 +318,6 @@ struct RuleSliderView: View {
         ledger.upsertRule(new)
         return new
     }
-
-    private var currentRule: SyncRule { rule ?? SyncRule.new(notebookId: notebook.id, notebookName: notebook.name) }
 
     private var currentTitleStrategy: TitleStrategy { rule?.titleStrategy ?? .firstLineOfOcr }
 

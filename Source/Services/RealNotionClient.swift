@@ -38,12 +38,6 @@ struct RealNotionClient: NotionClient {
         self.session = session
     }
 
-    func connectMockWorkspace(label: String) async throws -> NotionWorkspace {
-        // Real OAuth is brokered in NotionOAuth.swift; this entry point is
-        // unused on the real path.
-        throw NotionError.authorizationFailed
-    }
-
     func listDestinations(workspaceId: String) async throws -> [NotionDestination] {
         var request = URLRequest(url: URL(string: "https://api.notion.com/v1/search")!)
         request.httpMethod = "POST"

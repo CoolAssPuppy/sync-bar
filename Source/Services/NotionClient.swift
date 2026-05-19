@@ -29,7 +29,6 @@ struct NotionPageWriteResult: Sendable {
 }
 
 protocol NotionClient: Sendable {
-    func connectMockWorkspace(label: String) async throws -> NotionWorkspace
     func listDestinations(workspaceId: String) async throws -> [NotionDestination]
     func databaseSchema(destinationId: String, workspaceId: String) async throws -> [NotionDatabaseProperty]
     func createPage(workspaceId: String, destinationId: String, title: String) async throws -> NotionPageWriteResult

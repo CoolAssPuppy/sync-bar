@@ -440,7 +440,6 @@ final class Ledger: ObservableObject {
     }
 
     private func persistRemarkable() { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
-    private func persistWorkspaces() { persist(value: notionWorkspaces,  key: Self.notionWorkspacesKey)  }
     private func persistRules()      { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
     private func persistEvents()     { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
     private func persistNotebooks()  { persist(value: notebooks, key: Self.notebooksKey) }

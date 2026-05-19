@@ -137,14 +137,14 @@ final class Ledger: ObservableObject {
 
     /// Inserts or replaces an element in one of the published collections by id,
     /// persists it, and posts the matching notification.
-    private func upsert<T: Identifiable & Codable>(
+    private func upsert<T: Identifiable & Codable & Equatable>(
         _ value: T,
         in keyPath: ReferenceWritableKeyPath<Ledger, [T]>,
         key: String,
         notification: Notification.Name
     ) where T.ID: Equatable {
         if let index = self[keyPath: keyPath].firstIndex(where: { $0.id == value.id }) {
-            guard !areEqualEncoded(self[keyPath: keyPath][index], value) else { return }
+            guard self[keyPath: keyPath][index] != value else { return }
             self[keyPath: keyPath][index] = value
         } else {
             self[keyPath: keyPath].append(value)
@@ -157,7 +157,7 @@ final class Ledger: ObservableObject {
     /// whose configuration matches the predicate, persists, and posts notifications.
     /// The predicate receives the just-removed element so callers can compare
     /// against its now-detached fields (folderPath, accountEmail, etc.).
-    private func remove<T: Identifiable & Codable>(
+    private func remove<T: Identifiable & Codable & Equatable>(
         id: T.ID,
         from keyPath: ReferenceWritableKeyPath<Ledger, [T]>,
         key: String,
@@ -178,14 +178,6 @@ final class Ledger: ObservableObject {
         if cascaded { NotificationCenter.default.post(name: .rulesChanged, object: nil) }
     }
 
-    /// Best-effort no-op detector by re-encoding both sides. Cheaper than
-    /// requiring Equatable on every type in the ledger.
-    private func areEqualEncoded<T: Encodable>(_ lhs: T, _ rhs: T) -> Bool {
-        let encoder = JSONEncoder()
-        guard let lhsData = try? encoder.encode(lhs),
-              let rhsData = try? encoder.encode(rhs) else { return false }
-        return lhsData == rhsData
-    }
 
     func upsertRule(_ rule: SyncRule) {
         var copy = rule

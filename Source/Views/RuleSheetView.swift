@@ -19,7 +19,6 @@ struct RuleSliderView: View {
     @ObservedObject private var ledger = Ledger.shared
     @Environment(\.theme) private var theme
 
-    @State private var addBindingKind: DestinationKind?
     @State private var existingBindingIdToEdit: String?
     @State private var selectedBindingId: String?
 
@@ -50,19 +49,6 @@ struct RuleSliderView: View {
             alignment: .leading
         )
         .shadow(color: .black.opacity(0.35), radius: 18, x: -6, y: 0)
-        .sheet(item: $addBindingKind) { kind in
-            BindingEditorSheet(
-                kind: kind,
-                notebook: notebook,
-                existingBinding: nil,
-                onSave: { binding in
-                    let ruleId = ensureRule().id
-                    ledger.addBinding(ruleId: ruleId, binding: binding)
-                    addBindingKind = nil
-                },
-                onCancel: { addBindingKind = nil }
-            )
-        }
         .sheet(isPresented: Binding(
             get: { existingBindingIdToEdit != nil },
             set: { if !$0 { existingBindingIdToEdit = nil } }
@@ -128,7 +114,7 @@ struct RuleSliderView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 200)
+                    .fixedSize()
                 }
                 if currentTitleStrategy == .template {
                     AppRowDivider().padding(.vertical, 10)
@@ -146,7 +132,7 @@ struct RuleSliderView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 200)
+                    .fixedSize()
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Attach PDF", description: "Save the source PDF alongside transcribed text where the destination supports it.") {
@@ -160,7 +146,7 @@ struct RuleSliderView: View {
     // MARK: Destinations card
 
     private var destinationsCard: some View {
-        AppCard("Destinations") {
+        AppCard("Destinations", trailing: { addDestinationMenu }) {
             if let rule, !rule.destinations.isEmpty {
                 populatedDestinations(rule: rule)
             } else {
@@ -169,47 +155,102 @@ struct RuleSliderView: View {
         }
     }
 
+    /// "+" in the card header: a menu of the destinations the user has already
+    /// connected. Picking one attaches it to this notebook's rule immediately.
+    private var addDestinationMenu: some View {
+        Menu {
+            let items = configuredDestinations()
+            if items.isEmpty {
+                Text("No destinations connected. Add one from the sidebar first.")
+            } else {
+                ForEach(items) { item in
+                    Button(action: { addConfigured(item) }) {
+                        Label(item.label, systemImage: item.kind.systemImage)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(theme.primaryForeground)
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
+                )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add a connected destination")
+    }
+
     @ViewBuilder
     private var emptyDestinations: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "tray")
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(theme.tertiary)
             Text("No destinations yet")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.foregroundSoft)
-            Text("Pick one of the places you've connected to start syncing this notebook.")
+            Text("Use the + above to attach a place you've already connected.")
                 .font(.system(size: 11))
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            Menu {
-                ForEach(DestinationKind.allCases) { kind in
-                    Button(action: { addBindingKind = kind }) {
-                        Label(kind.label, systemImage: kind.systemImage)
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Add destination")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(theme.primaryForeground)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                        .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
-                )
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
+    }
+
+    // MARK: Configured destinations
+
+    private struct ConfiguredDestination: Identifiable {
+        let id: String
+        let kind: DestinationKind
+        let label: String
+        let makeConfiguration: () -> DestinationConfiguration
+    }
+
+    private func configuredDestinations() -> [ConfiguredDestination] {
+        var items: [ConfiguredDestination] = []
+        for workspace in ledger.notionWorkspaces {
+            items.append(ConfiguredDestination(id: "notion-\(workspace.id)", kind: .notion, label: "Notion · \(workspace.workspaceName)") {
+                .notion(NotionDestinationConfig(workspaceId: workspace.id, destinationId: "",
+                    destinationType: .page, destinationTitle: workspace.workspaceName, propertyMappings: [:]))
+            })
+        }
+        for account in ledger.linearAccounts {
+            items.append(ConfiguredDestination(id: "linear-\(account.id)", kind: .linear, label: "Linear · \(account.name)") {
+                .linear(LinearDestinationConfig(workspaceId: account.id, workspaceName: account.name,
+                    projectId: nil, projectName: nil, defaultLabel: nil))
+            })
+        }
+        for account in ledger.googleAccounts {
+            items.append(ConfiguredDestination(id: "google-\(account.id)", kind: .googleDocs, label: "Google Docs · \(account.displayName)") {
+                .googleDocs(GoogleDocsDestinationConfig(accountEmail: account.id, folderId: nil, folderName: nil, appendMode: .onePerPage))
+            })
+        }
+        for target in ledger.appleNotesTargets {
+            items.append(ConfiguredDestination(id: "an-\(target.id)", kind: .appleNotes, label: "Apple Notes · \(target.folderName)") {
+                .appleNotes(AppleNotesDestinationConfig(folderName: target.folderName))
+            })
+        }
+        for target in ledger.markdownTargets {
+            items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown · \(target.displayName)") {
+                .markdownFolder(MarkdownFolderDestinationConfig(folderPath: target.folderPath,
+                    fileNameTemplate: "{notebook}-page-{page_n}", includeFrontmatter: true))
+            })
+        }
+        return items
+    }
+
+    private func addConfigured(_ item: ConfiguredDestination) {
+        let ruleId = ensureRule().id
+        let binding = DestinationBinding(configuration: item.makeConfiguration())
+        ledger.addBinding(ruleId: ruleId, binding: binding)
+        selectedBindingId = binding.id
     }
 
     @ViewBuilder
@@ -222,12 +263,6 @@ struct RuleSliderView: View {
                     ForEach(bindings) { binding in
                         Button(action: { selectedBindingId = binding.id }) {
                             Label(binding.configuration.summary, systemImage: binding.kind.systemImage)
-                        }
-                    }
-                    Divider()
-                    ForEach(DestinationKind.allCases) { kind in
-                        Button(action: { addBindingKind = kind }) {
-                            Label("Add \(kind.label)…", systemImage: "plus")
                         }
                     }
                 } label: {
@@ -260,27 +295,6 @@ struct RuleSliderView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(maxWidth: .infinity)
-
-                Menu {
-                    ForEach(DestinationKind.allCases) { kind in
-                        Button(action: { addBindingKind = kind }) {
-                            Label("Add \(kind.label)", systemImage: kind.systemImage)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(theme.primaryForeground)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                                .fill(LinearGradient(colors: [theme.primary, theme.primaryDeep], startPoint: .top, endPoint: .bottom))
-                        )
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Add a destination of any kind")
             }
 
             if let activeBindingId, let binding = bindings.first(where: { $0.id == activeBindingId }) {

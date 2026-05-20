@@ -105,10 +105,7 @@ struct WelcomeView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(theme.muted)
 
-                TextField("8-character one-time code", text: $oneTimeCode)
-                    .textFieldStyle(.roundedBorder)
-                    .disableAutocorrection(true)
-                    .frame(maxWidth: 280)
+                CodeBoxField(value: $oneTimeCode, length: 8)
 
                 if let errorMessage {
                     HStack(spacing: 6) {
@@ -121,7 +118,7 @@ struct WelcomeView: View {
                 }
 
                 HStack(spacing: 10) {
-                    AppPrimaryButton(title: isPairing ? "Pairing…" : "Pair device", systemImage: "qrcode.viewfinder", isDisabled: oneTimeCode.count < 4 || isPairing) {
+                    AppPrimaryButton(title: isPairing ? "Pairing…" : "Pair device", systemImage: "qrcode.viewfinder", isDisabled: oneTimeCode.count != 8 || isPairing) {
                         Task { await pairDevice() }
                     }
                     AppSecondaryButton(title: "I'll do this later") {

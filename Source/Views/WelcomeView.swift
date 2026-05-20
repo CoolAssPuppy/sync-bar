@@ -99,7 +99,7 @@ struct WelcomeView: View {
     }
 
     private var pairStep: some View {
-        AppCard("Step 2 · Pair your reMarkable") {
+        AppCard("Step 2 · Pair Your reMarkable") {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Sign in at my.remarkable.com, open the *Connect* section, and generate an 8-character one-time code. Paste it below.")
                     .font(.system(size: 12))
@@ -130,7 +130,7 @@ struct WelcomeView: View {
     }
 
     private var notionStep: some View {
-        AppCard("Step 3 · Connect a Notion workspace") {
+        AppCard("Step 3 · Connect a Notion Workspace") {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Authorize Sync Bar to read the pages and databases you want to sync into. You can connect more workspaces any time.")
                     .font(.system(size: 12))
@@ -192,7 +192,7 @@ struct WelcomeView: View {
             }
             .frame(width: 70, height: 70)
 
-            Text("You're set up")
+            Text("You're Set Up")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(theme.foreground)
             Text(doneSubtitle)

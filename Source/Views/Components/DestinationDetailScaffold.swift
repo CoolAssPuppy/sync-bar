@@ -193,7 +193,7 @@ struct DestinationDetailScaffold: View {
     // MARK: Active syncs card
 
     private var activeSyncsCard: some View {
-        AppCard("Active syncs") {
+        AppCard("Active Syncs") {
             if activeBindings.isEmpty {
                 emptyActiveSyncs
             } else {

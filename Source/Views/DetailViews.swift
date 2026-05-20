@@ -45,7 +45,7 @@ struct LinearAccountDetailView: View {
     var body: some View {
         DestinationDetailScaffold(
             kind: .linear,
-            title: account?.name ?? "Linear team",
+            title: account?.name ?? "Linear Team",
             subtitle: account?.organizationName,
             connectedAt: account?.connectedAt,
             activeBindings: ledger.bindings(matching: { config in
@@ -71,7 +71,7 @@ struct GoogleAccountDetailView: View {
     var body: some View {
         DestinationDetailScaffold(
             kind: .googleDocs,
-            title: account?.displayName ?? "Google account",
+            title: account?.displayName ?? "Google Account",
             subtitle: account?.id,
             connectedAt: account?.connectedAt,
             activeBindings: ledger.bindings(matching: { config in
@@ -97,7 +97,7 @@ struct MarkdownTargetDetailView: View {
     var body: some View {
         DestinationDetailScaffold(
             kind: .markdownFolder,
-            title: target?.displayName ?? "Markdown folder",
+            title: target?.displayName ?? "Markdown Folder",
             subtitle: target?.folderPath,
             connectedAt: target?.connectedAt,
             activeBindings: ledger.bindings(matching: { config in
@@ -175,7 +175,7 @@ struct RemarkableDetailView: View {
                 Image(systemName: "qrcode.viewfinder")
                     .font(.system(size: 44, weight: .light))
                     .foregroundStyle(theme.primary)
-                Text("Pair your reMarkable")
+                Text("Pair Your reMarkable")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("Sign in at my.remarkable.com, open the Connect section, and generate an 8-character one-time code.")

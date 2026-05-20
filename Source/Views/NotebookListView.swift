@@ -92,7 +92,7 @@ struct NotebookListView: View {
             )
 
             VStack(spacing: 6) {
-                Text("Connect your reMarkable")
+                Text("Connect Your reMarkable")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("Sign in at my.remarkable.com, generate an 8-character one-time code, and paste it here to start syncing notes to Notion.")
@@ -121,7 +121,7 @@ struct NotebookListView: View {
             Image(systemName: "books.vertical")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(theme.muted)
-            Text("No notebooks found")
+            Text("No Notebooks Found")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
             Text("Pull down to refresh, or create a notebook on your reMarkable.")

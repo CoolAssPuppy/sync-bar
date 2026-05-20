@@ -56,7 +56,7 @@ struct BindingEditorSheet: View {
     private func header(theme: ThemePalette) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(existingBinding == nil ? "Add \(kind.label) destination" : "Edit \(kind.label) destination")
+                Text(existingBinding == nil ? "Add \(kind.label) Destination" : "Edit \(kind.label) Destination")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("For \(notebook.name)")

@@ -38,7 +38,7 @@ struct SyncLogView: View {
             Image(systemName: "tray")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(theme.muted)
-            Text("No events yet")
+            Text("No Events Yet")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
             Text("Once Sync Bar starts syncing, every rule run, page write, and failure shows up here.")

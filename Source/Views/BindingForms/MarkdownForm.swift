@@ -13,7 +13,7 @@ struct MarkdownForm: View {
     let targets: [MarkdownTarget]
 
     var body: some View {
-        AppCard("Markdown files") {
+        AppCard("Markdown Files") {
             VStack(spacing: 0) {
                 AppSettingRow("Folder", description: "Where the .md files land.") {
                     HStack(spacing: 6) {

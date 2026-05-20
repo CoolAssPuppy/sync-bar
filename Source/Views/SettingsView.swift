@@ -85,7 +85,7 @@ struct SettingsView: View {
     // MARK: OCR
 
     private var ocrCard: some View {
-        AppCard("OCR provider") {
+        AppCard("OCR Provider") {
             VStack(spacing: 0) {
                 AppSettingRow("Default provider", description: "Vision runs on-device. OpenAI and Anthropic use your own API key.") {
                     Picker("", selection: $settings.ocrProvider) {

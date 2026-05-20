@@ -62,7 +62,7 @@ struct SyncLogDrawer: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Sync log")
+                Text("Sync Log")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("\(ledger.events.count) event\(ledger.events.count == 1 ? "" : "s") recorded · esc to close")

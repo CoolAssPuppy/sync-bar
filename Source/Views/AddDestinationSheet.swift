@@ -49,7 +49,7 @@ struct AddDestinationSheet: View {
     private func header(theme: ThemePalette) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Add a destination")
+                Text("Add a Destination")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("Pick a place to send your transcribed notes.")
@@ -75,7 +75,7 @@ struct AddDestinationSheet: View {
 
     private func kindPicker(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Destination type")
+            Text("Destination Type")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(theme.tertiary)

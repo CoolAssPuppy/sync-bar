@@ -69,7 +69,7 @@ struct NotionForm: View {
                 }
             }
             if binding.destinationType == .database {
-                AppCard("Column mapping") {
+                AppCard("Column Mapping") {
                     schemaSection
                 }
             }

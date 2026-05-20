@@ -73,7 +73,7 @@ struct RuleSliderView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(rule == nil ? "Set up sync for this notebook" : "Edit sync rule")
+                Text(rule == nil ? "Set Up Sync for This Notebook" : "Edit Sync Rule")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("\(notebook.name) · \(notebook.pageCount) page\(notebook.pageCount == 1 ? "" : "s")")
@@ -104,7 +104,7 @@ struct RuleSliderView: View {
     // MARK: Rule-level settings card
 
     private var ruleSettingsCard: some View {
-        AppCard("Defaults for this notebook") {
+        AppCard("Defaults for This Notebook") {
             VStack(spacing: 0) {
                 AppSettingRow("Title strategy", description: "How each page is titled at every destination.") {
                     Picker("", selection: titleStrategyBinding) {

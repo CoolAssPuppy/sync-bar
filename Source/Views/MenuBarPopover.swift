@@ -312,7 +312,7 @@ private struct EmptyRulesState: View {
             )
 
             VStack(spacing: 4) {
-                Text("No rules yet")
+                Text("No Rules Yet")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text("Pair your reMarkable, connect Notion, then pick a notebook to sync.")

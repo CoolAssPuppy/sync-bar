@@ -35,14 +35,12 @@ final class SyncCoordinatorTests: XCTestCase {
             ))
         ]
         ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
 
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
-        coordinator.syncNow(ruleId: rule.id)
-
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        let updated = ledger.rules.first(where: { $0.id == rule.id })
-        XCTAssertEqual(updated?.destinations.first?.lastRunStatus, .success)
-        XCTAssertEqual(updated?.destinations.first?.lastRunPagesSynced, 3)
+        let updated = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(updated?.lastRunStatus, .success)
+        XCTAssertEqual(updated?.lastRunPagesSynced, 3)
 
         ledger.deleteRule(id: rule.id)
     }
@@ -63,12 +61,10 @@ final class SyncCoordinatorTests: XCTestCase {
         var rule = SyncRule.new(notebookId: "nb-fail", notebookName: "Test")
         rule.destinations = [markdownBinding(folderPath: unwritable)]
         ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
 
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-
-        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
         XCTAssertEqual(binding?.lastRunStatus, .error)
         XCTAssertEqual(binding?.lastRunPagesSynced, 0)
 
@@ -96,12 +92,10 @@ final class SyncCoordinatorTests: XCTestCase {
         var rule = SyncRule.new(notebookId: "nb-partial", notebookName: "Test")
         rule.destinations = [markdownBinding(folderPath: folder.path)]
         ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
 
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-
-        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
         XCTAssertEqual(binding?.lastRunStatus, .partial)
         XCTAssertEqual(binding?.lastRunPagesSynced, 2)
 
@@ -127,15 +121,13 @@ final class SyncCoordinatorTests: XCTestCase {
         var rule = SyncRule.new(notebookId: "nb-idem", notebookName: "Test")
         rule.destinations = [markdownBinding(folderPath: folder.path)]
         ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
 
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+        let first = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(first?.lastRunPagesSynced, 3)
 
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
         XCTAssertEqual(binding?.lastRunPagesSynced, 0)
         XCTAssertEqual(binding?.lastRunStatus, .success)
 
@@ -162,9 +154,8 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.upsertRule(rule)
 
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+        let first = await runAndWait(coordinator, ruleId: rule.id, bindingId: binding.id)
+        XCTAssertEqual(first?.lastRunPagesSynced, 3)
 
         // Re-point the same binding at a new folder. Its synced history must be
         // dropped so the pages land in the new target rather than being skipped.
@@ -178,14 +169,36 @@ final class SyncCoordinatorTests: XCTestCase {
         )
         ledger.updateBinding(ruleId: rule.id, binding: moved)
 
-        coordinator.syncNow(ruleId: rule.id)
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+        let resynced = await runAndWait(coordinator, ruleId: rule.id, bindingId: binding.id)
+        XCTAssertEqual(resynced?.lastRunPagesSynced, 3)
 
         ledger.deleteRule(id: rule.id)
     }
 
     // MARK: helpers
+
+    /// Triggers a sync and waits until the binding records a *new* run result and
+    /// the cycle has fully settled, then returns the updated binding. Polling
+    /// replaces fixed `Task.sleep` waits, which flaked whenever a test's
+    /// cold-start Vision OCR warmup outlasted the sleep budget.
+    private func runAndWait(_ coordinator: SyncCoordinator,
+                            ruleId: String,
+                            bindingId: String,
+                            timeout: TimeInterval = 20) async -> DestinationBinding? {
+        func binding() -> DestinationBinding? {
+            Ledger.shared.rules.first { $0.id == ruleId }?.destinations.first { $0.id == bindingId }
+        }
+        let previousRunAt = binding()?.lastRunAt
+        coordinator.syncNow(ruleId: ruleId)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !coordinator.isSyncing, let current = binding(), current.lastRunAt != previousRunAt {
+                return current
+            }
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        return binding()
+    }
 
     private func markdownBinding(folderPath: String) -> DestinationBinding {
         DestinationBinding(configuration: .markdownFolder(

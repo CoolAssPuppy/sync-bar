@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct SyncLogView: View {
     @Binding var search: String
@@ -70,8 +71,32 @@ struct SyncLogView: View {
 private struct EventRow: View {
     let event: SyncEvent
     @Environment(\.theme) private var theme
+    @State private var isExpanded = false
+    @State private var didCopy = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }
+            if isExpanded {
+                Divider().background(theme.border).padding(.top, 10).padding(.bottom, 8)
+                expandedDetails
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .fill(theme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+                .strokeBorder(theme.border, lineWidth: 1)
+        )
+    }
+
+    private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             kindBadge
             VStack(alignment: .leading, spacing: 3) {
@@ -92,12 +117,16 @@ private struct EventRow: View {
                         .font(.system(size: 10))
                         .foregroundStyle(theme.tertiary)
                         .monospacedDigit()
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(theme.tertiary)
                 }
 
                 Text(detailLine)
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
-                    .lineLimit(2)
+                    .lineLimit(isExpanded ? nil : 2)
+                    .textSelection(.enabled)
 
                 if let url = event.notionPageUrl.flatMap(URL.init(string:)) {
                     Button(action: { NSWorkspace.shared.open(url) }) {
@@ -115,16 +144,60 @@ private struct EventRow: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .fill(theme.card)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
-                .strokeBorder(theme.border, lineWidth: 1)
-        )
+    }
+
+    private var expandedDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(detailFields, id: \.label) { field in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(field.label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(theme.tertiary)
+                        .frame(width: 76, alignment: .leading)
+                    Text(field.value)
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.foreground)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            HStack {
+                Spacer()
+                Button(action: copyAll) {
+                    HStack(spacing: 4) {
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                        Text(didCopy ? "Copied" : "Copy")
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(theme.primary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy event details")
+            }
+        }
+    }
+
+    private struct DetailField { let label: String; let value: String }
+
+    private var detailFields: [DetailField] {
+        var out: [DetailField] = [DetailField(label: "Type", value: event.eventType.label)]
+        if let value = event.ruleName, !value.isEmpty { out.append(DetailField(label: "Rule", value: value)) }
+        if let value = event.rmNotebookName, !value.isEmpty { out.append(DetailField(label: "Notebook", value: value)) }
+        if let value = event.rmPageId, !value.isEmpty { out.append(DetailField(label: "Page", value: value)) }
+        if let value = event.ocrProvider, !value.isEmpty { out.append(DetailField(label: "Provider", value: value)) }
+        if let value = event.durationMs { out.append(DetailField(label: "Duration", value: "\(value) ms")) }
+        out.append(DetailField(label: "When", value: event.occurredAt.formatted(date: .abbreviated, time: .standard)))
+        if let value = event.notionPageUrl, !value.isEmpty { out.append(DetailField(label: "URL", value: value)) }
+        if let value = event.errorMessage, !value.isEmpty { out.append(DetailField(label: "Error", value: value)) }
+        return out
+    }
+
+    private func copyAll() {
+        let text = detailFields.map { "\($0.label): \($0.value)" }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        didCopy = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
     }
 
     private var detailLine: String {

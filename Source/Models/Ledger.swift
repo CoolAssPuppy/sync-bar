@@ -48,6 +48,15 @@ final class Ledger: ObservableObject {
     private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
     private var pendingPersistTasks: [String: Task<Void, Never>] = [:]
 
+    /// Backing store for all persistence. Under XCTest we use a throwaway suite
+    /// so test runs never leak rules/events/accounts into the real app.
+    static let defaults: UserDefaults = {
+        if NSClassFromString("XCTestCase") != nil {
+            return UserDefaults(suiteName: "com.strategicnerds.SyncNerds.tests") ?? .standard
+        }
+        return .standard
+    }()
+
     private init() {
         load()
     }
@@ -435,7 +444,7 @@ final class Ledger: ObservableObject {
     // MARK: Persistence
 
     private func load() {
-        let defaults = UserDefaults.standard
+        let defaults = Self.defaults
         let decoder = JSONDecoder()
 
         if let data = defaults.data(forKey: Self.remarkableAccountKey) {
@@ -454,6 +463,29 @@ final class Ledger: ObservableObject {
            let value = try? decoder.decode([String: String].self, from: data) {
             syncedPageHashes = value
         }
+
+        stripLeakedTestData(defaults: defaults)
+    }
+
+    /// One-time cleanup of placeholder "Test" rules and events that earlier
+    /// XCTest runs leaked into the real UserDefaults before test persistence
+    /// was isolated (the debounced delete at each test's end was cut short by
+    /// process exit, so the upserted rule survived). Runs once.
+    private func stripLeakedTestData(defaults: UserDefaults) {
+        let flag = "ledger.didStripTestPollution.v1"
+        guard !defaults.bool(forKey: flag) else { return }
+        defaults.set(true, forKey: flag)
+
+        let cleanedRules = rules.filter { $0.rmNotebookName != "Test" }
+        if cleanedRules.count != rules.count {
+            rules = cleanedRules
+            persistRules()
+        }
+        let cleanedEvents = events.filter { $0.rmNotebookName != "Test" }
+        if cleanedEvents.count != events.count {
+            events = cleanedEvents
+            persistEvents()
+        }
     }
 
     private func decodeArray<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults, decoder: JSONDecoder) -> T where T: ExpressibleByArrayLiteral {
@@ -470,7 +502,7 @@ final class Ledger: ObservableObject {
     fileprivate func persist<T: Encodable>(value: T, key: String) {
         let encoder = JSONEncoder()
         guard let data = try? encoder.encode(value) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        Self.defaults.set(data, forKey: key)
     }
 
     /// Coalesces high-frequency writes (events, rule run-status updates) so

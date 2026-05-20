@@ -24,41 +24,50 @@ final class AppSettings: ObservableObject {
     static let openWindowOnLaunchKey    = "settings.openWindowOnLaunch"
     static let pauseSyncingKey          = "settings.pauseSyncing"
 
+    /// Backing store. Under XCTest we use a throwaway suite so test runs never
+    /// overwrite the real app's settings (tests flip ocrProvider, etc.).
+    static let defaults: UserDefaults = {
+        if NSClassFromString("XCTestCase") != nil {
+            return UserDefaults(suiteName: "com.strategicnerds.SyncBar.tests") ?? .standard
+        }
+        return .standard
+    }()
+
     // MARK: Defaults
     @Published var launchAtStartup: Bool {
-        didSet { UserDefaults.standard.set(launchAtStartup, forKey: Self.launchAtStartupKey) }
+        didSet { Self.defaults.set(launchAtStartup, forKey: Self.launchAtStartupKey) }
     }
 
     @Published var syncIntervalSeconds: Int {
         didSet {
-            UserDefaults.standard.set(syncIntervalSeconds, forKey: Self.syncIntervalSecondsKey)
+            Self.defaults.set(syncIntervalSeconds, forKey: Self.syncIntervalSecondsKey)
             NotificationCenter.default.post(name: .syncIntervalChanged, object: nil)
         }
     }
 
     @Published var ocrProvider: OcrProviderChoice {
-        didSet { UserDefaults.standard.set(ocrProvider.rawValue, forKey: Self.ocrProviderKey) }
+        didSet { Self.defaults.set(ocrProvider.rawValue, forKey: Self.ocrProviderKey) }
     }
 
     @Published var ocrModel: String {
-        didSet { UserDefaults.standard.set(ocrModel, forKey: Self.ocrModelKey) }
+        didSet { Self.defaults.set(ocrModel, forKey: Self.ocrModelKey) }
     }
 
     @Published var notifyOnFailure: Bool {
-        didSet { UserDefaults.standard.set(notifyOnFailure, forKey: Self.notifyOnFailureKey) }
+        didSet { Self.defaults.set(notifyOnFailure, forKey: Self.notifyOnFailureKey) }
     }
 
     @Published var notifyOnSuccess: Bool {
-        didSet { UserDefaults.standard.set(notifyOnSuccess, forKey: Self.notifyOnSuccessKey) }
+        didSet { Self.defaults.set(notifyOnSuccess, forKey: Self.notifyOnSuccessKey) }
     }
 
     @Published var openWindowOnLaunch: Bool {
-        didSet { UserDefaults.standard.set(openWindowOnLaunch, forKey: Self.openWindowOnLaunchKey) }
+        didSet { Self.defaults.set(openWindowOnLaunch, forKey: Self.openWindowOnLaunchKey) }
     }
 
     @Published var pauseSyncing: Bool {
         didSet {
-            UserDefaults.standard.set(pauseSyncing, forKey: Self.pauseSyncingKey)
+            Self.defaults.set(pauseSyncing, forKey: Self.pauseSyncingKey)
             NotificationCenter.default.post(name: .pauseSyncingChanged, object: nil)
         }
     }
@@ -74,7 +83,7 @@ final class AppSettings: ObservableObject {
     ]
 
     private init() {
-        let defaults = UserDefaults.standard
+        let defaults = Self.defaults
 
         // Use the registered default before reading, so first-launch matches the spec.
         defaults.register(defaults: [

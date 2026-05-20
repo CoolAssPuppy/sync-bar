@@ -236,7 +236,7 @@ enum OcrProviderFactory {
         case .vision:
             return VisionOcrProvider()
         case .openai:
-            let resolvedModel = model.isEmpty ? "gpt-4o-mini" : model
+            let resolvedModel = model.isEmpty ? "gpt-4o" : model
             return OpenAIOcrProvider(apiKey: keychain.value(for: .openaiApiKey) ?? "", model: resolvedModel)
         case .anthropic:
             let resolvedModel = model.isEmpty ? "claude-sonnet-4-6" : model

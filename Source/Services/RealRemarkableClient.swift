@@ -42,16 +42,25 @@ struct RealRemarkableClient: RemarkableClient {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            let snippet = String(data: data, encoding: .utf8)?.prefix(300) ?? ""
-            Log.remarkable.error("Pairing failed: HTTP \(http.statusCode, privacy: .public) — \(snippet, privacy: .public)")
-            // 4xx from the device endpoint means the code is wrong/expired;
-            // anything else is an endpoint/network problem, surfaced verbatim.
-            if (400..<500).contains(http.statusCode) {
-                throw RemarkableError.invalidOneTimeCode
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            Log.remarkable.error("Pairing network error: \(String(describing: error), privacy: .public)")
+            throw RemarkableError.network("Couldn't reach reMarkable: \(error.localizedDescription)")
+        }
+
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        let snippet = String(data: data, encoding: .utf8)?.prefix(300) ?? ""
+        Log.remarkable.info("Pairing response: HTTP \(status, privacy: .public) — \(snippet, privacy: .public)")
+        if status != 200 {
+            // Surface the real status on screen so it's diagnosable without logs.
+            // 4xx means the code is wrong/expired; generate a fresh one.
+            if (400..<500).contains(status) {
+                throw RemarkableError.network("reMarkable rejected the code (HTTP \(status)). Generate a fresh one-time code and try again.")
             }
-            throw RemarkableError.network("reMarkable pairing returned HTTP \(http.statusCode).")
+            throw RemarkableError.network("reMarkable pairing failed (HTTP \(status)).")
         }
         guard let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !token.isEmpty else {

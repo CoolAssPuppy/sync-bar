@@ -48,7 +48,10 @@ struct GoogleDocsDestinationClient: DestinationClient {
         }
         requests.append(["insertText": ["text": bodyText(payload), "location": ["index": 1]]])
 
-        var request = URLRequest(url: URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate")!)
+        guard let url = URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate") else {
+            throw DestinationError.network("Could not build the Google Docs update URL.")
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -61,9 +64,14 @@ struct GoogleDocsDestinationClient: DestinationClient {
     }
 
     private func documentEndIndex(token: String, docId: String) async throws -> Int {
-        var components = URLComponents(string: "https://docs.googleapis.com/v1/documents/\(docId)")!
+        guard var components = URLComponents(string: "https://docs.googleapis.com/v1/documents/\(docId)") else {
+            throw DestinationError.network("Could not build the Google Docs query URL.")
+        }
         components.queryItems = [URLQueryItem(name: "fields", value: "body(content(endIndex))")]
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw DestinationError.network("Could not build the Google Docs query URL.")
+        }
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         try Self.validate(response: response, data: data)
@@ -76,7 +84,10 @@ struct GoogleDocsDestinationClient: DestinationClient {
     }
 
     private func renameDocument(token: String, docId: String, name: String) async throws {
-        var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files/\(docId)")!)
+        guard let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(docId)") else {
+            throw DestinationError.network("Could not build the Drive rename URL.")
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -111,7 +122,7 @@ struct GoogleDocsDestinationClient: DestinationClient {
     // MARK: Drive + Docs primitives
 
     private func createDocument(token: String, name: String, folderId: String?) async throws -> String {
-        var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files")!)
+        var request = URLRequest(url: URL(staticString: "https://www.googleapis.com/drive/v3/files"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -128,13 +139,18 @@ struct GoogleDocsDestinationClient: DestinationClient {
     private func findDocument(token: String, name: String) async throws -> String? {
         let escapedName = name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
         let query = "name = '\(escapedName)' and mimeType = 'application/vnd.google-apps.document' and trashed = false"
-        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        guard var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files") else {
+            throw DestinationError.network("Could not build the Drive search URL.")
+        }
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "fields", value: "files(id)"),
             URLQueryItem(name: "pageSize", value: "1")
         ]
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw DestinationError.network("Could not build the Drive search URL.")
+        }
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         try Self.validate(response: response, data: data)
@@ -147,7 +163,10 @@ struct GoogleDocsDestinationClient: DestinationClient {
         var insert: [String: Any] = ["text": text]
         for (key, value) in location { insert[key] = value }
 
-        var request = URLRequest(url: URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate")!)
+        guard let url = URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate") else {
+            throw DestinationError.network("Could not build the Google Docs update URL.")
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -93,8 +93,11 @@ struct VisionOcrProvider: OcrProvider {
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             DispatchQueue.global(qos: .userInitiated).async {
-                do { try handler.perform([request]) }
-                catch { continuation.resume(throwing: OcrError.visionFailed(error.localizedDescription)) }
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(throwing: OcrError.visionFailed(error.localizedDescription))
+                }
             }
         }
     }
@@ -126,7 +129,7 @@ struct OpenAIOcrProvider: OcrProvider {
             "max_tokens": 2_000
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        var request = URLRequest(url: URL(staticString: "https://api.openai.com/v1/chat/completions"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -190,7 +193,7 @@ struct AnthropicOcrProvider: OcrProvider {
             ]
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+        var request = URLRequest(url: URL(staticString: "https://api.anthropic.com/v1/messages"))
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")

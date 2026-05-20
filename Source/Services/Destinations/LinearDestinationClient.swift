@@ -55,7 +55,7 @@ struct LinearDestinationClient: DestinationClient {
             if let projectId = config.projectId, !projectId.isEmpty { variables["projectId"] = projectId }
         }
 
-        var request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
+        var request = URLRequest(url: URL(staticString: "https://api.linear.app/graphql"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

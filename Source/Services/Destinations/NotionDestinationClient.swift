@@ -91,7 +91,7 @@ struct NotionDestinationClient: DestinationClient {
         let parent: [String: Any] = config.destinationType == .database
             ? ["database_id": config.destinationId]
             : ["page_id": config.destinationId]
-        var request = Self.notionRequest(url: "https://api.notion.com/v1/pages", method: "POST", token: token)
+        var request = try Self.notionRequest(url: "https://api.notion.com/v1/pages", method: "POST", token: token)
         request.httpBody = try JSONSerialization.data(withJSONObject: ["parent": parent, "properties": properties, "children": children])
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -106,7 +106,7 @@ struct NotionDestinationClient: DestinationClient {
     /// Updates an existing page's properties, then replaces its body blocks so
     /// the content reflects the edited note.
     private func updatePage(token: String, pageId: String, properties: [String: Any], children: [[String: Any]]) async throws -> DestinationWriteResult {
-        var request = Self.notionRequest(url: "https://api.notion.com/v1/pages/\(pageId)", method: "PATCH", token: token)
+        var request = try Self.notionRequest(url: "https://api.notion.com/v1/pages/\(pageId)", method: "PATCH", token: token)
         request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": properties])
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -122,7 +122,7 @@ struct NotionDestinationClient: DestinationClient {
     /// Archives the page's current top-level blocks and appends the fresh ones.
     private func replaceChildren(token: String, pageId: String, children: [[String: Any]]) async throws {
         // List existing children (notes are small; one page of 100 is plenty).
-        var listRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children?page_size=100", method: "GET", token: token)
+        var listRequest = try Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children?page_size=100", method: "GET", token: token)
         listRequest.httpBody = nil
         let (listData, listResponse) = try await URLSession.shared.data(for: listRequest)
         if let http = listResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -132,7 +132,7 @@ struct NotionDestinationClient: DestinationClient {
         let existing = (try? JSONDecoder().decode(BlockList.self, from: listData))?.results ?? []
 
         for block in existing {
-            let deleteRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(block.id)", method: "DELETE", token: token)
+            let deleteRequest = try Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(block.id)", method: "DELETE", token: token)
             let (delData, delResponse) = try await URLSession.shared.data(for: deleteRequest)
             if let http = delResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 throw NotionError.from(status: http.statusCode, data: delData, context: "delete page block")
@@ -140,7 +140,7 @@ struct NotionDestinationClient: DestinationClient {
         }
 
         guard !children.isEmpty else { return }
-        var appendRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children", method: "PATCH", token: token)
+        var appendRequest = try Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children", method: "PATCH", token: token)
         appendRequest.httpBody = try JSONSerialization.data(withJSONObject: ["children": children])
         let (appendData, appendResponse) = try await URLSession.shared.data(for: appendRequest)
         if let http = appendResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -148,8 +148,11 @@ struct NotionDestinationClient: DestinationClient {
         }
     }
 
-    private static func notionRequest(url: String, method: String, token: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: url)!)
+    private static func notionRequest(url: String, method: String, token: String) throws -> URLRequest {
+        guard let parsed = URL(string: url) else {
+            throw NotionError.from(status: 0, data: Data(), context: "invalid Notion URL")
+        }
+        var request = URLRequest(url: parsed)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")

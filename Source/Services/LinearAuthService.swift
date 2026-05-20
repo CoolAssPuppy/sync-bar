@@ -28,15 +28,15 @@ final class LinearAuthService {
     static let provider = "linear"
     static var redirectURI: String { OAuth.redirectURI(provider: provider) }
 
-    private static let authorizeBase = "https://linear.app/oauth/authorize"
-    private static let tokenURL = URL(string: "https://api.linear.app/oauth/token")!
-    private static let graphqlURL = URL(string: "https://api.linear.app/graphql")!
+    private static let authorizeBase = URL(staticString: "https://linear.app/oauth/authorize")
+    private static let tokenURL = URL(staticString: "https://api.linear.app/oauth/token")
+    private static let graphqlURL = URL(staticString: "https://api.linear.app/graphql")
     private static let scopes = "read,write"
 
     // MARK: Pure helpers (unit-tested)
 
     static func authorizeURL(clientId: String, state: String) -> URL {
-        var components = URLComponents(string: authorizeBase)!
+        var components = URLComponents(url: authorizeBase, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
@@ -45,7 +45,7 @@ final class LinearAuthService {
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "actor", value: "user")
         ]
-        return components.url!
+        return components.url ?? authorizeBase
     }
 
     private struct TokenResponse: Decodable {

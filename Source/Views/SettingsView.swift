@@ -202,7 +202,10 @@ struct SettingsView: View {
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Demo mode",
-                              description: "Show sample data for screenshots. Your real notebooks, rules, and history stay untouched — turn this off (or just relaunch) to bring them back.") {
+                              description: """
+                              Show sample data for screenshots. Your real notebooks, rules, and \
+                              history stay untouched — turn this off (or just relaunch) to bring them back.
+                              """) {
                     Toggle("", isOn: Binding(
                         get: { ledger.isDemoMode },
                         set: { ledger.setDemoMode($0) }
@@ -235,7 +238,7 @@ struct SettingsView: View {
     }
 
     private func contactRow(systemName: String, title: String, url: String) -> some View {
-        Link(destination: URL(string: url) ?? URL(string: "https://strategicnerds.com")!) {
+        Link(destination: URL(string: url) ?? URL(staticString: "https://strategicnerds.com")) {
             HStack(spacing: 8) {
                 Image(systemName: systemName)
                     .font(.system(size: 12))

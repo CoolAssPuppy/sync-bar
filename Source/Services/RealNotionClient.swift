@@ -39,7 +39,7 @@ struct RealNotionClient: NotionClient {
     }
 
     func listDestinations(workspaceId: String) async throws -> [NotionDestination] {
-        var request = URLRequest(url: URL(string: "https://api.notion.com/v1/search")!)
+        var request = URLRequest(url: URL(staticString: "https://api.notion.com/v1/search"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
@@ -91,7 +91,10 @@ struct RealNotionClient: NotionClient {
     }
 
     func databaseSchema(destinationId: String, workspaceId: String) async throws -> [NotionDatabaseProperty] {
-        var request = URLRequest(url: URL(string: "https://api.notion.com/v1/databases/\(destinationId)")!)
+        guard let url = URL(string: "https://api.notion.com/v1/databases/\(destinationId)") else {
+            throw NotionError.from(status: 0, data: Data(), context: "invalid database id")
+        }
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
         let (data, response) = try await session.data(for: request)
@@ -120,7 +123,7 @@ struct RealNotionClient: NotionClient {
         // The real write path lives in NotionDestinationClient. This entry
         // exists to satisfy the NotionClient protocol (used for previews and
         // legacy tests). It writes a minimal page.
-        var request = URLRequest(url: URL(string: "https://api.notion.com/v1/pages")!)
+        var request = URLRequest(url: URL(staticString: "https://api.notion.com/v1/pages"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")

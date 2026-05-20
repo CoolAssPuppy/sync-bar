@@ -17,7 +17,7 @@ final class OAuthHelpersTests: XCTestCase {
 
     func test_formURLEncoding_escapes_reserved_characters() {
         let body = OAuth.formURLEncoded(["grant_type": "authorization_code", "code": "a+b/c=d&e"])
-        let text = String(data: body, encoding: .utf8)!
+        let text = String(decoding: body, as: UTF8.self)
         // The two fields are joined by a literal & ...
         let pairs = text.split(separator: "&").map(String.init)
         XCTAssertEqual(pairs.count, 2)
@@ -36,7 +36,7 @@ final class OAuthHelpersTests: XCTestCase {
     }
 
     func test_queryValue_extracts_code_and_state_from_callback() {
-        let url = URL(string: "syncbar://oauth/linear?code=abc123&state=xyz")!
+        let url = URL(staticString: "syncbar://oauth/linear?code=abc123&state=xyz")
         XCTAssertEqual(OAuth.queryValue("code", from: url), "abc123")
         XCTAssertEqual(OAuth.queryValue("state", from: url), "xyz")
         XCTAssertNil(OAuth.queryValue("missing", from: url))

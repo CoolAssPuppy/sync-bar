@@ -25,8 +25,8 @@ struct RealRemarkableClient: RemarkableClient {
         self.keychain = keychain
     }
 
-    private static let pairBase  = URL(string: "https://webapp.cloud.remarkable.com")!
-    private static let cloudBase = URL(string: "https://internal.cloud.remarkable.com")!
+    private static let pairBase  = URL(staticString: "https://webapp.cloud.remarkable.com")
+    private static let cloudBase = URL(staticString: "https://internal.cloud.remarkable.com")
 
     // MARK: Pairing
 

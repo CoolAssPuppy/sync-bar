@@ -31,8 +31,8 @@ struct GoogleTokenResponse: Decodable {
 
 /// Non-isolated token exchange, storage, and refresh.
 enum GoogleTokens {
-    static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
-    static let userInfoURL = URL(string: "https://openidconnect.googleapis.com/v1/userinfo")!
+    static let tokenURL = URL(staticString: "https://oauth2.googleapis.com/token")
+    static let userInfoURL = URL(staticString: "https://openidconnect.googleapis.com/v1/userinfo")
 
     static func parseTokenResponse(_ data: Data) throws -> GoogleTokenResponse {
         let parsed = try JSONDecoder().decode(GoogleTokenResponse.self, from: data)
@@ -60,14 +60,18 @@ enum GoogleTokens {
     /// drive.metadata.readonly scope.
     static func listFolders(email: String, parentId: String = "root", session: URLSession = .shared) async throws -> [GoogleDriveFolder] {
         let token = try await validAccessToken(email: email, session: session)
-        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        var components = URLComponents(url: URL(staticString: "https://www.googleapis.com/drive/v3/files"),
+                                       resolvingAgainstBaseURL: false) ?? URLComponents()
         components.queryItems = [
             URLQueryItem(name: "q", value: "mimeType = 'application/vnd.google-apps.folder' and trashed = false and '\(parentId)' in parents"),
             URLQueryItem(name: "fields", value: "files(id,name)"),
             URLQueryItem(name: "pageSize", value: "200"),
             URLQueryItem(name: "orderBy", value: "name")
         ]
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw OAuthError.invalidResponse("Could not build the Drive folder-list URL.")
+        }
+        var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -157,11 +161,11 @@ final class GoogleAuthService {
     static let loopbackPort: UInt16 = 53118
     static var redirectURI: String { "http://localhost:\(loopbackPort)/oauth/google" }
 
-    private static let authorizeBase = "https://accounts.google.com/o/oauth2/v2/auth"
+    private static let authorizeBase = URL(staticString: "https://accounts.google.com/o/oauth2/v2/auth")
     static let scopes = "openid email https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly"
 
     static func authorizeURL(clientId: String, state: String, challenge: String) -> URL {
-        var components = URLComponents(string: authorizeBase)!
+        var components = URLComponents(url: authorizeBase, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
@@ -173,7 +177,7 @@ final class GoogleAuthService {
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "prompt", value: "consent")
         ]
-        return components.url!
+        return components.url ?? authorizeBase
     }
 
     @discardableResult

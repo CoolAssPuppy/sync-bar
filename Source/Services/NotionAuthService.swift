@@ -29,14 +29,14 @@ final class NotionAuthService {
     static let loopbackPort: UInt16 = 53117
     static var redirectURI: String { "http://localhost:\(loopbackPort)/oauth/notion" }
 
-    private static let authorizeBase = "https://api.notion.com/v1/oauth/authorize"
-    private static let tokenURL = URL(string: "https://api.notion.com/v1/oauth/token")!
+    private static let authorizeBase = URL(staticString: "https://api.notion.com/v1/oauth/authorize")
+    private static let tokenURL = URL(staticString: "https://api.notion.com/v1/oauth/token")
     private static let notionVersion = "2022-06-28"
 
     // MARK: Pure helpers (unit-tested)
 
     static func authorizeURL(clientId: String, state: String) -> URL {
-        var components = URLComponents(string: authorizeBase)!
+        var components = URLComponents(url: authorizeBase, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "response_type", value: "code"),
@@ -44,7 +44,7 @@ final class NotionAuthService {
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "state", value: state)
         ]
-        return components.url!
+        return components.url ?? authorizeBase
     }
 
     private struct TokenResponse: Decodable {

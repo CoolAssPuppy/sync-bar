@@ -3,26 +3,6 @@
 <plist version="1.0">
 <dict>
 	<!--
-	iCloud Key-Value Storage. Used for cross-device preference sync via
-	NSUbiquitousKeyValueStore. Matching capability must be enabled in
-	App Store Connect for the com.strategicnerds.SyncBar bundle id.
-	-->
-	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
-	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
-	<!--
-	CloudKit container holds the rules + ledger + accounts so settings sync
-	across the user's Macs. Schema lives in CloudKitLedger.swift and is
-	provisioned per-environment in App Store Connect.
-	-->
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.com.strategicnerds.syncbar</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudKit</string>
-	</array>
-	<!--
 	Lets the hardened-runtime app send Apple Events to Notes.app so the
 	Apple Notes destination can create folders and notes. macOS still gates
 	this behind a one-time TCC consent prompt (NSAppleEventsUsageDescription).

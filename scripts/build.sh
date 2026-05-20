@@ -25,24 +25,24 @@ echo "==> Regenerating Xcode project"
 xcodegen generate >/dev/null
 
 echo "==> Building SyncBar ($CONFIG)"
+# Plain automatic signing (CODE_SIGN_STYLE/DEVELOPMENT_TEAM come from
+# project.yml), mirroring the sibling apps. Xcode signs with Apple Development
+# and a managed profile, which gives the app an application-identifier (so
+# keychain writes succeed) and get-task-allow (so the Debug build launches).
+# Do NOT pass CODE_SIGNING_ALLOWED=NO — an unsigned build has no keychain
+# entitlement and silently loses every OAuth + reMarkable token.
 xcodebuild \
   -project SyncBar.xcodeproj \
   -scheme SyncBar \
   -configuration "$CONFIG" \
   -derivedDataPath build \
   -destination 'platform=macOS' \
-  CODE_SIGN_IDENTITY="-" \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO \
   build | xcbeautify --quiet 2>/dev/null || xcodebuild \
     -project SyncBar.xcodeproj \
     -scheme SyncBar \
     -configuration "$CONFIG" \
     -derivedDataPath build \
     -destination 'platform=macOS' \
-    CODE_SIGN_IDENTITY="-" \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGNING_ALLOWED=NO \
     build
 
 APP_PATH="$REPO_ROOT/build/Build/Products/$CONFIG/SyncBar.app"

@@ -45,9 +45,12 @@ final class KeychainStore: @unchecked Sendable {
     private let keychain: Keychain
 
     private init() {
+        // Device-local keychain item (not synchronizable). iCloud Keychain sync
+        // needs an entitlement the Developer ID distribution can't carry; a
+        // local item persists tokens reliably across launches. Matches the
+        // sibling apps' configuration.
         keychain = Keychain(service: "com.strategicnerds.SyncBar")
-            .synchronizable(true)
-            .accessibility(.afterFirstUnlock)
+            .accessibility(.whenUnlockedThisDeviceOnly)
     }
 
     func value(for key: Key) -> String? {

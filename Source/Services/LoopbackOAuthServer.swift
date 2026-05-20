@@ -107,8 +107,8 @@ final class LoopbackOAuthServer: @unchecked Sendable {
           display: flex; align-items: center; justify-content: center;
         }
         .card { text-align: center; padding: 56px 48px; max-width: 420px; }
-        .check {
-          width: 64px; height: 64px; border-radius: 50%; background: #FDB817;
+        .badge {
+          width: 64px; height: 64px; border-radius: 16px; background: #FDB817;
           display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;
         }
         h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
@@ -118,8 +118,13 @@ final class LoopbackOAuthServer: @unchecked Sendable {
     </head>
     <body>
       <div class="card">
-        <div class="check">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+        <div class="badge">
+          <svg width="38" height="38" viewBox="0 0 54 54" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(4,4) scale(2.3)" fill="#121212" stroke="#121212" stroke-width="0.5" stroke-linejoin="round" stroke-linecap="round">
+              <path d="m2.5 6c0-.6.4-1 1-1h10.6l-1.4 1.4c-.4.4-.4 1.1 0 1.4.6.6 1.2.2 1.4 0l3.1-3.1c.4-.4.4-1 0-1.4l-3.1-3.1c-.4-.4-1-.4-1.4 0s-.4 1 0 1.4l1.4 1.4h-10.6c-1.7 0-3 1.3-3 3v4.5c0 .6.4 1 1 1s1-.4 1-1z"/>
+              <path d="m18.5 8.5c-.6 0-1 .4-1 1v4.5c0 .6-.4 1-1 1h-10.6l1.4-1.4c.4-.4.4-1 0-1.4s-1-.4-1.4 0l-3.1 3.1c-.4.4-.4 1 0 1.4l3.1 3.1c.6.6 1.2.2 1.4 0 .4-.4.4-1 0-1.4l-1.4-1.4h10.6c1.7 0 3-1.3 3-3v-4.5c0-.6-.4-1-1-1z"/>
+            </g>
+          </svg>
         </div>
         <h1>Connected</h1>
         <p>Sync Bar is connected. You can close this window and return to the app.</p>

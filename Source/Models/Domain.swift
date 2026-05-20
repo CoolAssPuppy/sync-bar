@@ -46,6 +46,9 @@ struct RmFile: Codable, Equatable, Hashable, Identifiable, Sendable {
     var lastModified: Date
     var pageCount: Int
     var versionHash: String
+    /// Document-level reMarkable tags on this note, used for per-destination
+    /// tag filtering. Empty when untagged.
+    var tags: [String] = []
 }
 
 /// Sentinel folder id for files that live at the cloud root (no folder).

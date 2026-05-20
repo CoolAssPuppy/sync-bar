@@ -53,6 +53,28 @@ final class DestinationBindingTests: XCTestCase {
         XCTAssertEqual(rule.aggregateLastRunPagesSynced, 5)
     }
 
+    func test_linear_tag_filter_accepts_only_matching_notes() {
+        let filtered = DestinationConfiguration.linear(LinearDestinationConfig(
+            workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,
+            defaultLabel: nil, requiredTags: ["Linear", "Action"]))
+        XCTAssertTrue(filtered.accepts(fileTags: ["Action"]))
+        XCTAssertTrue(filtered.accepts(fileTags: ["Idea", "Linear"]))
+        XCTAssertFalse(filtered.accepts(fileTags: ["Idea"]))
+        XCTAssertFalse(filtered.accepts(fileTags: []))
+    }
+
+    func test_unfiltered_destinations_accept_every_note() {
+        let noFilter = DestinationConfiguration.linear(LinearDestinationConfig(
+            workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,
+            defaultLabel: nil, requiredTags: nil))
+        XCTAssertTrue(noFilter.accepts(fileTags: []))
+        XCTAssertTrue(noFilter.accepts(fileTags: ["anything"]))
+
+        let markdown = DestinationConfiguration.markdownFolder(
+            MarkdownFolderDestinationConfig(folderPath: "/tmp", fileNameTemplate: "{notebook}", includeFrontmatter: false))
+        XCTAssertTrue(markdown.accepts(fileTags: []))
+    }
+
     private func binding(status: RuleRunStatus, pages: Int = 0) -> DestinationBinding {
         DestinationBinding(
             id: UUID().uuidString,

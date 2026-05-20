@@ -136,4 +136,18 @@ enum RemarkableSyncIndex {
         }
         return raw.pages ?? []
     }
+
+    /// Document-level tag names from a `.content` blob. reMarkable stores tags
+    /// as `tags: [{name, timestamp}]` (whole-note tags); page tags live in a
+    /// separate `pageTags` array we don't need for note-level filtering. Blank
+    /// names are dropped. Returns [] when the blob has no tags.
+    static func parseContentTags(_ data: Data) throws -> [String] {
+        struct Tag: Decodable { let name: String? }
+        struct Raw: Decodable { let tags: [Tag]? }
+        let raw = try JSONDecoder().decode(Raw.self, from: data)
+        return (raw.tags ?? []).compactMap { tag in
+            let name = tag.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? nil : name
+        }
+    }
 }

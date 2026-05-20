@@ -29,7 +29,11 @@ protocol RemarkableClient: Sendable {
     /// included only when files exist at the cloud root.
     func listNotebooks() async throws -> [RmNotebook]
     /// The files (notes) inside a folder. Each becomes one destination note.
+    /// Each file carries its document-level reMarkable tags.
     func listFiles(inFolderId folderId: String) async throws -> [RmFile]
+    /// The unique set of document tags configured across the whole account,
+    /// sorted for display. Used to populate per-destination tag filters.
+    func listTags() async throws -> [String]
     /// Pages of a single file (`notebookId` is a file id). Their transcriptions
     /// are combined into one note.
     func listPages(notebookId: String) async throws -> [RmPage]
@@ -64,13 +68,13 @@ struct MockRemarkableClient: RemarkableClient {
     ]
 
     private static let files: [RmFile] = [
-        RmFile(id: "file-standup",   name: "Standup notes",        folderId: "f-work",     createdAt: ago(26),  lastModified: ago(5),   pageCount: 3, versionHash: "h-standup"),
-        RmFile(id: "file-1on1",      name: "Weekly 1:1s",          folderId: "f-work",     createdAt: ago(9),   lastModified: ago(9),   pageCount: 2, versionHash: "h-1on1"),
-        RmFile(id: "file-quarterly", name: "Q3 planning",          folderId: "f-work",     createdAt: ago(48),  lastModified: ago(48),  pageCount: 1, versionHash: "h-quarterly"),
+        RmFile(id: "file-standup",   name: "Standup notes",        folderId: "f-work",     createdAt: ago(26),  lastModified: ago(5),   pageCount: 3, versionHash: "h-standup",   tags: ["Action", "Work"]),
+        RmFile(id: "file-1on1",      name: "Weekly 1:1s",          folderId: "f-work",     createdAt: ago(9),   lastModified: ago(9),   pageCount: 2, versionHash: "h-1on1",      tags: ["Work"]),
+        RmFile(id: "file-quarterly", name: "Q3 planning",          folderId: "f-work",     createdAt: ago(48),  lastModified: ago(48),  pageCount: 1, versionHash: "h-quarterly",  tags: ["Action", "Planning"]),
         RmFile(id: "file-journal",   name: "Daily journal",        folderId: "f-personal", createdAt: ago(5),   lastModified: ago(5),   pageCount: 2, versionHash: "h-journal"),
-        RmFile(id: "file-travel",    name: "Japan trip planning",  folderId: "f-personal", createdAt: ago(168), lastModified: ago(168), pageCount: 2, versionHash: "h-travel"),
-        RmFile(id: "file-arch",      name: "Architecture sketches",folderId: "f-projects", createdAt: ago(96),  lastModified: ago(96),  pageCount: 2, versionHash: "h-arch"),
-        RmFile(id: "file-book",      name: "Book outline",         folderId: "f-projects", createdAt: ago(120), lastModified: ago(120), pageCount: 1, versionHash: "h-book")
+        RmFile(id: "file-travel",    name: "Japan trip planning",  folderId: "f-personal", createdAt: ago(168), lastModified: ago(168), pageCount: 2, versionHash: "h-travel",     tags: ["Planning"]),
+        RmFile(id: "file-arch",      name: "Architecture sketches",folderId: "f-projects", createdAt: ago(96),  lastModified: ago(96),  pageCount: 2, versionHash: "h-arch",       tags: ["Idea"]),
+        RmFile(id: "file-book",      name: "Book outline",         folderId: "f-projects", createdAt: ago(120), lastModified: ago(120), pageCount: 1, versionHash: "h-book",       tags: ["Idea"])
     ]
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {
@@ -88,6 +92,10 @@ struct MockRemarkableClient: RemarkableClient {
     func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
         try await Task.sleep(nanoseconds: 100_000_000)
         return Self.files.filter { $0.folderId == folderId }
+    }
+
+    func listTags() async throws -> [String] {
+        Array(Set(Self.files.flatMap(\.tags))).sorted()
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {

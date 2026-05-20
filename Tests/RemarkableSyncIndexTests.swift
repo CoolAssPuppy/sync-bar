@@ -66,6 +66,17 @@ final class RemarkableSyncIndexTests: XCTestCase {
         XCTAssertEqual(try RemarkableSyncIndex.parseContentPageOrder(Data(json.utf8)), ["a", "b", "c"])
     }
 
+    func test_parseContentTags_reads_document_tag_names() throws {
+        let json = #"{"tags":[{"name":"Linear","timestamp":1},{"name":"Idea","timestamp":2}]}"#
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(json.utf8)), ["Linear", "Idea"])
+    }
+
+    func test_parseContentTags_returns_empty_when_absent_or_blank() throws {
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(#"{"pages":["a"]}"#.utf8)), [])
+        let blank = #"{"tags":[{"name":"","timestamp":1},{"name":"Keep","timestamp":2}]}"#
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(blank.utf8)), ["Keep"])
+    }
+
     func test_parseRootHash_handles_json_and_plain() {
         let json = #"{"hash":"roothash","generation":5}"#
         XCTAssertEqual(RealRemarkableClient.parseRootHash(Data(json.utf8)), "roothash")

@@ -87,10 +87,14 @@ struct RealRemarkableClient: RemarkableClient {
         let hash: String
         let metadata: RemarkableMetadata
         let pageCount: Int
+        let tags: [String]
     }
 
-    /// Walks the root index and reads every document's metadata once.
-    private func entries() async throws -> [DocumentEntry] {
+    /// Walks the root index and reads every document's metadata once. When
+    /// `includeTags` is set, each document's `.content` blob is also read so
+    /// document-level tags are available (skipped otherwise to avoid an extra
+    /// fetch per document on the cheap listing paths).
+    private func entries(includeTags: Bool = false) async throws -> [DocumentEntry] {
         let documents = try await rootIndexEntries()
         var result: [DocumentEntry] = []
         for document in documents {
@@ -100,11 +104,18 @@ struct RealRemarkableClient: RemarkableClient {
                       let metadataData = try? await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier),
                       let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
                       !metadata.deleted else { continue }
+                var tags: [String] = []
+                if includeTags,
+                   let contentEntry = RemarkableSyncIndex.contentEntry(in: components),
+                   let contentData = try? await blob(hash: contentEntry.hash, filename: contentEntry.identifier) {
+                    tags = (try? RemarkableSyncIndex.parseContentTags(contentData)) ?? []
+                }
                 result.append(DocumentEntry(
                     id: document.identifier,
                     hash: document.hash,
                     metadata: metadata,
-                    pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count
+                    pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count,
+                    tags: tags
                 ))
             } catch {
                 Log.remarkable.error("doc \(document.identifier, privacy: .public) walk failed: \(String(describing: error), privacy: .public)")
@@ -138,7 +149,7 @@ struct RealRemarkableClient: RemarkableClient {
 
     func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
         let targetParent = (folderId == unfiledFolderId) ? "" : folderId
-        return try await entries()
+        return try await entries(includeTags: true)
             .filter { $0.metadata.isNotebook && $0.metadata.parent == targetParent }
             .map { file in
                 RmFile(
@@ -148,10 +159,18 @@ struct RealRemarkableClient: RemarkableClient {
                     createdAt: file.metadata.createdTime,
                     lastModified: file.metadata.lastModified,
                     pageCount: file.pageCount,
-                    versionHash: file.hash
+                    versionHash: file.hash,
+                    tags: file.tags
                 )
             }
             .sorted { $0.lastModified > $1.lastModified }
+    }
+
+    func listTags() async throws -> [String] {
+        let all = try await entries(includeTags: true)
+            .filter { $0.metadata.isNotebook }
+            .flatMap(\.tags)
+        return Array(Set(all)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {

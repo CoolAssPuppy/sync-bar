@@ -152,6 +152,12 @@ final class SyncCoordinator: ObservableObject {
         }
         guard !bindings.isEmpty, !files.isEmpty else { return }
 
+        // Skip OCR for files that no enabled binding will accept (e.g. a
+        // tag-filtered Linear destination that excludes untagged notes) so we
+        // never pay the OCR provider for output nothing will consume.
+        let neededFiles = files.filter { file in bindings.contains { $0.configuration.accepts(fileTags: file.tags) } }
+        guard !neededFiles.isEmpty else { return }
+
         // OCR each file once (combining all its pages into one transcript),
         // reused across every binding — provider cost shouldn't scale with
         // destination count.
@@ -160,7 +166,7 @@ final class SyncCoordinator: ObservableObject {
             model: self.settings.ocrModel
         )
         var transcripts: [(file: RmFile, result: OcrResult)] = []
-        for file in files {
+        for file in neededFiles {
             transcripts.append((file, await transcribeFile(file, using: ocr)))
         }
 
@@ -209,7 +215,7 @@ final class SyncCoordinator: ObservableObject {
         var firstError: String?
         let runStart = Date()
 
-        for (file, ocrResult) in transcripts {
+        for (file, ocrResult) in transcripts where binding.configuration.accepts(fileTags: file.tags) {
             let directive = engine.evaluate(
                 rule: effectiveRule, file: file, folderName: folderName,
                 ocrText: ocrResult.text,

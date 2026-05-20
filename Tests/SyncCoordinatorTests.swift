@@ -244,6 +244,8 @@ private struct ScriptedRemarkableClient: RemarkableClient {
         }
     }
 
+    func listTags() async throws -> [String] { [] }
+
     func listPages(notebookId: String) async throws -> [RmPage] {
         [RmPage(
             notebookId: notebookId,

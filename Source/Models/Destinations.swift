@@ -143,6 +143,9 @@ struct LinearDestinationConfig: Codable, Equatable, Hashable {
     var projectId: String?
     var projectName: String?
     var defaultLabel: String?
+    /// When non-empty, only reMarkable notes carrying at least one of these
+    /// document tags are synced to this destination. Empty/nil means sync all.
+    var requiredTags: [String]?
 }
 
 struct GoogleDocsDestinationConfig: Codable, Equatable, Hashable {
@@ -204,6 +207,16 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
         case .appleNotes(let config):     return config.folderName
         case .markdownFolder(let config): return (config.folderPath as NSString).lastPathComponent
         }
+    }
+
+    /// Whether a note carrying these document tags should sync to this
+    /// destination. Only Linear honors a tag filter today: a note is accepted
+    /// when it has at least one of the configured `requiredTags` (OR semantics).
+    /// Every other destination, and Linear with no filter, accepts all notes.
+    func accepts(fileTags: [String]) -> Bool {
+        guard case .linear(let config) = self,
+              let required = config.requiredTags, !required.isEmpty else { return true }
+        return !Set(required).isDisjoint(with: Set(fileTags))
     }
 }
 

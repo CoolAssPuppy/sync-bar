@@ -116,7 +116,7 @@ struct BindingEditorSheet: View {
                     mappingRows: NotionFormState.mappingRows(from: cfg.propertyMappings)
                 ))
             case .linear(let cfg):
-                _localLinear = State(initialValue: LinearFormState(workspaceId: cfg.workspaceId, projectId: cfg.projectId ?? "", projectName: cfg.projectName ?? "", defaultLabel: cfg.defaultLabel ?? ""))
+                _localLinear = State(initialValue: LinearFormState(workspaceId: cfg.workspaceId, projectId: cfg.projectId ?? "", projectName: cfg.projectName ?? "", defaultLabel: cfg.defaultLabel ?? "", requiredTags: cfg.requiredTags ?? []))
             case .googleDocs(let cfg):
                 _localGoogle = State(initialValue: GoogleFormState(email: cfg.accountEmail, folderId: cfg.folderId ?? "", folderName: cfg.folderName ?? "", appendMode: cfg.appendMode))
             case .appleNotes(let cfg):
@@ -160,7 +160,8 @@ struct BindingEditorSheet: View {
                 workspaceName: team?.name ?? "",
                 projectId: project,
                 projectName: projectName,
-                defaultLabel: localLinear.defaultLabel.isEmpty ? nil : localLinear.defaultLabel
+                defaultLabel: localLinear.defaultLabel.isEmpty ? nil : localLinear.defaultLabel,
+                requiredTags: localLinear.requiredTags.isEmpty ? nil : localLinear.requiredTags
             ))
         case .googleDocs:
             configuration = .googleDocs(GoogleDocsDestinationConfig(

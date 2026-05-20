@@ -426,6 +426,7 @@ private struct RuleDestinationRow: View {
             Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
                 .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 .padding(.leading, 4)
+                .help(binding.enabled ? "Disable this destination" : "Enable this destination")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

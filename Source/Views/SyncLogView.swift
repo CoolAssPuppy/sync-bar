@@ -102,6 +102,7 @@ private struct EventRow: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(badgeColor(for: statusKind))
                 .frame(width: 16)
+                .help(statusHelp)
 
             // Sync from → to (folder → destination).
             Text(event.ruleName ?? event.eventType.label)
@@ -133,6 +134,7 @@ private struct EventRow: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(theme.tertiary)
                 .frame(width: 10)
+                .help(isExpanded ? "Hide details" : "Show details")
         }
     }
 
@@ -231,6 +233,18 @@ private struct EventRow: View {
         case .ruleRunCompleted: return .info
         case .tokenRefreshed:   return .neutral
         case .orphanDetected:   return .warning
+        }
+    }
+
+    /// Plain-language tooltip for the leading status glyph.
+    private var statusHelp: String {
+        switch event.eventType {
+        case .pageSynced:       return "Note synced successfully"
+        case .pageFailed:       return "Sync failed"
+        case .ruleRunStarted:   return "Sync run started"
+        case .ruleRunCompleted: return "Sync run completed"
+        case .tokenRefreshed:   return "Auth token refreshed"
+        case .orphanDetected:   return "Orphaned item detected"
         }
     }
 

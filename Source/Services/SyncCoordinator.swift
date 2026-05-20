@@ -47,8 +47,27 @@ final class SyncCoordinator: ObservableObject {
             .store(in: &subscriptions)
     }
 
-    func start() { restartTimer() }
+    func start() {
+        restartTimer()
+        Task { await refreshFolders() }
+    }
     func stop()  { timerTask?.cancel(); timerTask = nil }
+
+    /// Refreshes the folder list and prunes rules whose folder no longer exists.
+    /// Gated on a real device token so it never prunes against the mock client's
+    /// sample folders. Runs at launch so the menu bar dropdown is clean even
+    /// without opening the main window.
+    func refreshFolders() async {
+        guard keychain.value(for: .remarkableDeviceToken)?.isEmpty == false else { return }
+        do {
+            let folders = try await remarkable.listNotebooks()
+            guard !folders.isEmpty else { return }
+            ledger.setNotebooks(folders)
+            ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id)))
+        } catch {
+            Log.sync.error("Folder refresh failed: \(Formatters.userMessage(for: error), privacy: .public)")
+        }
+    }
 
     /// What kicked off a cycle, attached to the `sync.run` analytics event.
     private enum SyncTrigger: String {

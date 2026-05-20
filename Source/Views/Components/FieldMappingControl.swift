@@ -243,7 +243,6 @@ struct FieldMappingControl: View {
             Text(selected.isEmpty
                  ? (column.allowsMultiple ? "Choose options" : "Choose an option")
                  : selected.joined(separator: ", "))
-                .font(.system(size: 11))
                 .lineLimit(1)
         }
         .fixedSize()

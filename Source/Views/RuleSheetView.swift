@@ -418,7 +418,7 @@ private struct BindingInlinePanel: View {
                         .foregroundStyle(theme.tertiary)
                 }
                 Spacer(minLength: 8)
-                Toggle("", isOn: Binding(get: { binding.enabled }, set: onToggle))
+                Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
                     .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
             }
 

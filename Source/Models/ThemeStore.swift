@@ -86,9 +86,9 @@ enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    var isDark: Bool { palette.isDark }
+    @MainActor var isDark: Bool { palette.isDark }
 
-    var palette: ThemePalette {
+    @MainActor var palette: ThemePalette {
         switch self {
         case .system:
             let isDark = (NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) ?? .aqua) == .darkAqua
@@ -393,6 +393,7 @@ extension ThemePalette {
 
 // MARK: - Store
 
+@MainActor
 final class ThemeStore: ObservableObject {
     static let shared = ThemeStore()
 
@@ -411,10 +412,12 @@ final class ThemeStore: ObservableObject {
         self.current = AppTheme(rawValue: raw) ?? .nerds
 
         // When the user flips macOS between light and dark mode and the
-        // System theme is active, the palette flips too — re-publish.
+        // System theme is active, the palette flips too — re-publish. The KVO
+        // change handler is @Sendable, so do nothing actor-isolated inside it
+        // beyond hopping to the main actor where `current` lives.
         appearanceObserver = NSApp?.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
-            guard let self, self.current == .system else { return }
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                guard let self, self.current == .system else { return }
                 self.objectWillChange.send()
             }
         }

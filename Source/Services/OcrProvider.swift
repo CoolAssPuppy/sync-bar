@@ -7,7 +7,10 @@
 
 import Foundation
 import AppKit
-import Vision
+// Vision predates Sendable. VNImageRequestHandler / VNRecognizeTextRequest are
+// created locally and only touched on the background queue below, so the
+// capture is race-free; @preconcurrency silences the Sendable warnings.
+@preconcurrency import Vision
 
 /// Outcome of an OCR transcription, including any detected diagram.
 struct OcrResult: Sendable, Equatable {

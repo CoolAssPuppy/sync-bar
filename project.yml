@@ -17,6 +17,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    SWIFT_STRICT_CONCURRENCY: complete
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_APP_SANDBOX: NO
     CODE_SIGN_STYLE: Automatic

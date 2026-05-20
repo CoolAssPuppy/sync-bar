@@ -18,9 +18,9 @@ This is the v0.2 build. The visual shell, sidebar navigation, menu bar popover w
 - Settings drawer (gear icon at the bottom of the sidebar or ⌘,) with six cards: General, OCR, Accounts, Notifications, Updates, Data, Advanced.
 
 ### Destinations (one reMarkable notebook → 0..N destinations)
-- **Notion** — page or database. Real API writes when a workspace token is in Keychain; mock otherwise.
-- **Linear** — issues per page. Real GraphQL writes when a personal access token is in Keychain.
-- **Google Docs** — one doc per page or append to a single doc; needs an OAuth access token in Keychain for real writes.
+- **Notion** — page or database. Connect with OAuth; real API writes once connected, mock otherwise.
+- **Linear** — issues per page. Connect with OAuth; real GraphQL writes once connected, mock otherwise.
+- **Google Docs** — one doc per page or append to a single doc. OAuth setup is documented; the client is still mock.
 - **Apple Notes** — creates the named folder if it doesn't exist and writes one note per page via AppleScript. No accounts or tokens required.
 - **Markdown files** — one .md file per page with optional YAML frontmatter and a code-fenced mermaid block when the OCR pass detects a diagram. No accounts required.
 
@@ -45,10 +45,11 @@ Tweak the prompt in one place: `OCRPrompts.systemPrompt`.
 - Launch-at-login via SMAppService (macOS 13+).
 - KeychainAccess stores all secrets in iCloud Keychain (synchronizable across the user's Macs).
 
-## In progress this release (v0.2)
+## New in this release (v0.2)
 
-- A real reMarkable cloud client that walks the sync/v3 index graph and rasterizes pages for OCR (the protocol is reverse-engineered, not officially documented; there are no webhooks, only polling).
 - Notion and Linear OAuth connect flows, replacing manually pasted tokens. See [OAuth and developer app setup](#oauth-and-developer-app-setup).
+- A real reMarkable cloud client that walks the sync index graph and rasterizes pages for OCR. The protocol is reverse-engineered (no webhooks, polling only) and the v6 stroke rendering needs validation against a physical device.
+- Real destination brand logos and the Apple Notes automation entitlement.
 
 ## Deferred to a later release
 
@@ -136,15 +137,78 @@ See `ARCHITECTURE.md` for the full diagram and the data flow per sync cycle.
 
 ## OAuth and developer app setup
 
-Notion, Linear, and Google connect through OAuth. Each needs a developer app you
-register once, plus client credentials stored in the Doppler `sync-bar` project
-and pulled into the build. reMarkable uses an eight-character device code and
-needs no developer app. Apple Notes and Markdown are local and need nothing.
+Notion and Linear connect through OAuth (Google's setup is documented here too,
+but its client is still mock). Each needs a developer app you register once,
+plus client credentials stored in the Doppler `sync-bar` project and baked into
+the build. reMarkable uses an eight-character device code and needs no developer
+app. Apple Notes and Markdown are local and need nothing.
 
-Full per-provider instructions (where to register the app, the redirect URI and
-scopes to use, and the exact Doppler keys to add) are filled in as each OAuth
-integration lands. See `scripts/pull-secrets.sh` and `Secrets.xcconfig.example`
-for how credentials flow from Doppler into the build.
+### How credentials flow
+
+1. Create the developer apps below and copy each client id and secret.
+2. Create a Doppler project named `sync-bar` (config `dev`) and add the keys
+   listed under "Doppler keys" below.
+3. Run `./scripts/pull-secrets.sh` to write them into `Secrets.xcconfig`
+   (gitignored). The build bakes them into the app's Info.plist; `AuthSecrets`
+   reads them at runtime and also honors a `doppler run` environment override.
+4. Rebuild. A provider whose credentials are missing shows a disabled connect
+   button rather than starting a flow that can't finish.
+
+The redirect URIs below are exact. Register them verbatim.
+
+### Notion
+
+1. Go to https://www.notion.so/my-integrations and create a new integration of
+   type **Public**.
+2. Under **OAuth Domain & URIs**, add the redirect URI:
+   `http://localhost:53117/oauth/notion`
+   (Notion rejects custom URL schemes, so SyncNerds captures the redirect on a
+   loopback HTTP listener at this fixed port.)
+3. Set the capabilities you want to grant (reading content is enough to
+   transcribe; add insert/update content to let SyncNerds create pages).
+4. Copy the **OAuth client ID** and **OAuth client secret**.
+
+### Linear
+
+1. Go to https://linear.app/settings/api/applications/new and create an OAuth
+   application.
+2. Set the redirect/callback URL to: `syncnerds://oauth/linear`
+   (Linear allows custom URL schemes, so this uses the in-app web session.)
+3. Requested scopes are `read,write` (write is needed to create issues).
+4. Copy the **Client ID** and **Client secret**.
+
+### Google (documented; client still mock)
+
+1. In the Google Cloud console, create an OAuth client of type **Desktop app**
+   (desktop clients use a loopback redirect; no custom scheme).
+2. Enable the **Google Docs API** and **Google Drive API**.
+3. Scopes when the client lands: `https://www.googleapis.com/auth/documents` and
+   `https://www.googleapis.com/auth/drive.file`.
+4. Copy the **Client ID** and **Client secret**.
+
+### reMarkable
+
+No developer app. Sign in at https://my.remarkable.com, open **Connect**, and
+generate an eight-character one-time code. Paste it into SyncNerds (sidebar
+reMarkable row, or onboarding). SyncNerds exchanges it for a device token and
+walks your cloud library. The cloud walk and handwriting rasterization are
+reverse-engineered, so expect to iterate against your device.
+
+### Doppler keys
+
+Add these to the Doppler `sync-bar` project (config `dev`). Leave Google's empty
+until that client is implemented.
+
+| Key | From |
+|-----|------|
+| `NOTION_CLIENT_ID` | Notion integration |
+| `NOTION_CLIENT_SECRET` | Notion integration |
+| `LINEAR_CLIENT_ID` | Linear OAuth application |
+| `LINEAR_CLIENT_SECRET` | Linear OAuth application |
+| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client (optional for now) |
+| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth client (optional for now) |
+
+Then run `./scripts/pull-secrets.sh` and rebuild.
 
 ## License
 

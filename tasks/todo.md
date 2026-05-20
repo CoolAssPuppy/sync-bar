@@ -9,18 +9,25 @@ Decisions (confirmed with user 2026-05-20):
 
 ## Commit sequence
 
-- [ ] 1. Brand logos: add notion/linear/apple-notes/google SVGs to Images.xcassets/Destinations/*.imageset (Preserve Vector Data).
-- [ ] 2. README.md first pass (overview, architecture, build/test/run, status, integration matrix).
-- [ ] 3. OAuth foundation:
-      - gitignored Secrets.xcconfig (+ Secrets.xcconfig.example), scripts/pull-secrets.sh (doppler download, project sync-bar)
-      - project.yml wiring + Info.plist build-var mapping + AuthSecrets accessor
-      - reusable OAuthService over ASWebAuthenticationSession (scheme syncnerds://oauth/<provider>), state/PKCE
-      - AppDelegate URL handling if needed; graceful "not configured" fallback so build/tests pass without keys
-- [ ] 4. Apple Notes: entitlements (NSAppleEventsUsageDescription + automation.apple-events), harden AppleScript escaping, AddDestinationSheet creates real target+folder, tests.
-- [ ] 5. Linear OAuth: LinearAuthService (authorize + token exchange + refresh), keychain (access/refresh/expiry), replace PAT UI, Bearer header in client, tests.
-- [ ] 6. Notion OAuth: NotionAuthService (authorize + Basic-auth token exchange -> bot token + workspace), replace connectMockWorkspace, store bot token, connect UI, tests.
-- [ ] 7. reMarkable: RealRemarkableClient sync/v3 index walk (listNotebooks/listPages), blob download, .rm v6 parser + CoreGraphics renderer -> PNG, wire imageData(for:), swap real client in, tests with fixtures.
-- [ ] 8. README OAuth/dev-app setup: how to register apps in Notion, Linear, Google; redirect URIs; scopes; exact Doppler keys for project sync-bar.
+- [x] 1. Brand logos: SVGs into Images.xcassets/Destinations/*.imageset (Preserve Vector Data).
+- [x] 2. README refresh (the repo already had a detailed one; updated stale parts + added OAuth section).
+- [x] 3. OAuth foundation: Secrets.xcconfig (+example) + pull-secrets.sh, Info.plist build-var mapping, AuthSecrets, OAuthWebSession + OAuth helpers, graceful not-configured fallback.
+- [x] 4. Apple Notes: automation entitlement + NSAppleEventsUsageDescription, CR-safe escaping, testable script builder.
+- [x] 5. Linear OAuth: LinearAuthService (custom-scheme ASWebAuthenticationSession), PAT field removed, Bearer header.
+- [x] 6. Notion OAuth: NotionAuthService over a loopback HTTP listener (Notion rejects custom schemes), bot-token storage.
+- [x] 7. reMarkable: sync index walk + .rm v6 parser + CoreGraphics renderer, RemarkableClientFactory, imageData wired.
+- [x] 8. README OAuth/dev-app setup: Notion/Linear/Google registration, redirect URIs, scopes, Doppler keys.
+
+## Review (2026-05-20)
+
+All eight steps committed one-per-integration; 65 tests green; app launches.
+Notes for the next session:
+- reMarkable cloud endpoints and v6 stroke field layout are reverse-engineered
+  and unvalidated; parsers are unit-tested in isolation but the live walk and
+  rendering need device iteration.
+- OAuth flows are code-complete but only authenticate once the user creates the
+  developer apps and adds the keys to the Doppler `sync-bar` project.
+- Google Docs OAuth is documented only; its client is still mock.
 
 ## Doppler keys (project sync-bar) — finalize in step 8
 - NOTION_CLIENT_ID, NOTION_CLIENT_SECRET

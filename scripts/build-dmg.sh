@@ -9,6 +9,7 @@
 #   3. A `notarytool` keychain profile stored via:
 #        xcrun notarytool store-credentials <profile-name> --apple-id ... --team-id ... --password ...
 #   4. Sparkle `sign_update` tool at ~/bin/sparkle/sign_update (see scripts/SPARKLE.md).
+#   5. Doppler access to SPARKLE_PRIVATE_KEY in the sync-bar project (signing key).
 #
 # Optional: drop a 1320x800 background.tiff and a VolumeIcon.icns into
 # dmg-assets/ to brand the DMG window. Without them a plain DMG is built.
@@ -29,9 +30,10 @@ NOTARY_PROFILE="${3:?Usage: $0 <path-to-SyncBar.app> <version> <notarytool-profi
 
 APP_NAME="SyncBar"
 SIGN_UPDATE="${SPARKLE_SIGN_UPDATE:-$HOME/bin/sparkle/sign_update}"
-# The shared Strategic Nerds Sparkle key is imported into the keychain under a
-# per-app account name. SyncBar uses its bundle id so the lookup is explicit.
-SPARKLE_KEY_ACCOUNT="${SPARKLE_KEY_ACCOUNT:-com.strategicnerds.SyncBar}"
+# The shared Strategic Nerds Sparkle private key (base64 EdDSA) is stored in
+# Doppler, not the keychain, so any machine with Doppler access can release.
+DOPPLER_PROJECT="${DOPPLER_PROJECT:-sync-bar}"
+DOPPLER_CONFIG="${DOPPLER_CONFIG:-prd}"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Developer ID Application: Prashant Sridharan (955GSY56UT)}"
 
 BACKGROUND="$REPO_ROOT/dmg-assets/background.tiff"
@@ -51,6 +53,11 @@ fi
 if [[ ! -x "$SIGN_UPDATE" ]]; then
   echo "Error: Sparkle sign_update not found at $SIGN_UPDATE"
   echo "Install it (see scripts/SPARKLE.md) or set SPARKLE_SIGN_UPDATE to its path."
+  exit 1
+fi
+
+if ! command -v doppler >/dev/null 2>&1; then
+  echo "Error: doppler CLI not found. Install: brew install dopplerhq/cli/doppler"
   exit 1
 fi
 
@@ -105,9 +112,20 @@ xcrun stapler validate "$DMG_OUT"
 spctl -a -t open --context context:primary-signature -v "$DMG_OUT"
 
 echo ""
-echo "Signing DMG with Sparkle (account: $SPARKLE_KEY_ACCOUNT)..."
+echo "Signing DMG with Sparkle (key from Doppler $DOPPLER_PROJECT/$DOPPLER_CONFIG)..."
 SPARKLE_OUT="${DMG_OUT%.dmg}.sparkle.txt"
-"$SIGN_UPDATE" --account "$SPARKLE_KEY_ACCOUNT" "$DMG_OUT" | tee "$SPARKLE_OUT"
+SPARKLE_PRIVATE_KEY="$(doppler secrets get SPARKLE_PRIVATE_KEY --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" --plain)"
+if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+  echo "Error: SPARKLE_PRIVATE_KEY not found in Doppler $DOPPLER_PROJECT/$DOPPLER_CONFIG"
+  exit 1
+fi
+SPARKLE_KEY_FILE="$(mktemp)"
+chmod 600 "$SPARKLE_KEY_FILE"
+trap 'rm -f "$SPARKLE_KEY_FILE"' EXIT
+printf '%s' "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_KEY_FILE"
+"$SIGN_UPDATE" --ed-key-file "$SPARKLE_KEY_FILE" "$DMG_OUT" | tee "$SPARKLE_OUT"
+rm -f "$SPARKLE_KEY_FILE"
+trap - EXIT
 
 echo ""
 echo "============================================================"

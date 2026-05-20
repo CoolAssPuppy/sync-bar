@@ -14,11 +14,10 @@
 # Prerequisites:
 #   - notarytool keychain profile "agent-server" (see scripts/SPARKLE.md)
 #   - Sparkle sign_update at ~/bin/sparkle/sign_update
-#   - The shared Strategic Nerds Sparkle private key imported into the keychain
-#     under account com.strategicnerds.SyncBar (see scripts/SPARKLE.md)
 #   - create-dmg installed (brew install create-dmg)
-#   - doppler CLI logged in with access to the agent-server/prd config
-#     (provides CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, R2_BUCKET_NAME, R2_PUBLIC_BASE_URL)
+#   - doppler CLI logged in with access to the sync-bar/prd config (provides
+#     CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, R2_BUCKET_NAME,
+#     R2_PUBLIC_BASE_URL, and the Sparkle SPARKLE_PRIVATE_KEY signing key)
 #   - wrangler available (npm i -g wrangler) or npx on PATH
 #   - python3 + xcodegen on PATH
 #
@@ -45,8 +44,9 @@ APP_NAME="SyncBar"
 APP_FOLDER="syncbar"
 DUB_SHORTLINK="https://coolasspuppy.com/syncbar-updates"
 
-DOPPLER_PROJECT="${DOPPLER_PROJECT:-agent-server}"
+DOPPLER_PROJECT="${DOPPLER_PROJECT:-sync-bar}"
 DOPPLER_CONFIG="${DOPPLER_CONFIG:-prd}"
+export DOPPLER_PROJECT DOPPLER_CONFIG
 
 if command -v wrangler >/dev/null 2>&1; then
   WRANGLER=(wrangler)

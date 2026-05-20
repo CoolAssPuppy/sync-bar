@@ -16,43 +16,30 @@ pySvjKDODAzK9Eiao1Cxni5AW6+rlLGUFOWAnaoAlfw=
 (meeting-notifier uses a different key; SyncBar intentionally rides on the
 mail-notifier / linear-bar key.)
 
-**Do not run `generate_keys` without `-f`.** Generating a fresh key would mint a
-new public key and strand every copy that ships with the value above. Instead,
-**import the existing shared private key** under SyncBar' own keychain account
-so `sign_update --account com.strategicnerds.SyncBar` can find it.
+**Do not run `generate_keys` without a key file.** Generating a fresh key would
+mint a new public key and strand every copy that ships with the value above.
 
-The same private key is already backed up in Doppler (it is what mail-notifier
-and linear-bar sign with). Restore it under the SyncBar account once:
+The private key lives in Doppler, not the keychain. `build-dmg.sh` reads
+`SPARKLE_PRIVATE_KEY` from `sync-bar/prd`, writes it to a short-lived temp file,
+and signs with `sign_update --ed-key-file`. No keychain import is required — any
+machine with Doppler access to the `sync-bar` project can cut a release.
 
-```bash
-# Pull the shared private key PEM (same bytes used by the sibling apps):
-doppler secrets get SPARKLE_PRIVATE_KEY_LINEARBAR \
-  --project agent-server --config prd --plain > /tmp/sparkle_private.pem
-
-# Import it under the SyncBar account (run after at least one build so the
-# Sparkle SPM artifact exists):
-build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys \
-  --account com.strategicnerds.SyncBar -f /tmp/sparkle_private.pem
-
-rm -P /tmp/sparkle_private.pem
-```
-
-Verify the import resolves to the expected public key (run with no flags; for
-an account that already has a key, `generate_keys` just prints its public key):
+Confirm the key is present and resolves to the shipped public key:
 
 ```bash
-build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys \
-  --account com.strategicnerds.SyncBar
-# Should report public key:  pySvjKDODAzK9Eiao1Cxni5AW6+rlLGUFOWAnaoAlfw=
+doppler secrets get SPARKLE_PRIVATE_KEY --project sync-bar --config prd --plain \
+  | python3 -c 'import sys, base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; \
+seed = base64.b64decode(sys.stdin.read().strip()); \
+print(base64.b64encode(Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes_raw()).decode())'
+# Should print:  pySvjKDODAzK9Eiao1Cxni5AW6+rlLGUFOWAnaoAlfw=
 ```
 
-(If you would rather give SyncBar its **own** keypair, generate one with
-`generate_keys --account com.strategicnerds.SyncBar`, paste the printed
-public key into `Info.plist`'s `SUPublicEDKey`, and back the private key up to a
-new Doppler secret. That isolates SyncBar' update trust from the other apps.)
+`SPARKLE_PRIVATE_KEY` is the 44-char base64 Ed25519 private key (the same bytes
+mail-notifier and linear-bar sign with). It is also mirrored in `sync-bar/dev`
+and `sync-bar/stg`.
 
 **Losing the private key permanently strands every installed copy.** Sparkle has
-no key rotation.
+no key rotation. Keep the Doppler secret backed up.
 
 ## `sign_update` tool
 
@@ -83,9 +70,10 @@ App-specific passwords are created at https://appleid.apple.com.
 ## Feed URL
 
 The app points at the Dub shortlink `https://coolasspuppy.com/syncbar-updates`,
-which must redirect to the live R2 appcast
-(`https://downloads.strategicnerds.com/apps/syncbar/appcast.xml`). The shortlink
-lets us repoint the feed later without shipping a new build.
+which must redirect to the live R2 appcast at
+`$R2_PUBLIC_BASE_URL/apps/syncbar/appcast.xml`
+(currently `https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/appcast.xml`).
+The shortlink lets us repoint the feed later without shipping a new build.
 
 Configure it once at https://dub.co: create a link with slug `syncbar-updates`
 pointing at the R2 appcast URL above.
@@ -106,12 +94,11 @@ live URLs respond.
 
 ## What you still need to do before the first real release
 
-1. Import the shared Sparkle private key under `com.strategicnerds.SyncBar`
-   (see "Keys" above), or decide to mint a SyncBar-specific key.
-2. Stage `sign_update` at `~/bin/sparkle/sign_update`.
-3. Confirm the `agent-server` notarytool profile exists.
-4. Create the `syncbar-updates` Dub shortlink.
-5. Confirm Doppler `agent-server/prd` has `CLOUDFLARE_API_TOKEN`,
-   `CLOUDFLARE_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL`.
-6. (Optional) Add `dmg-assets/background.tiff` + `dmg-assets/VolumeIcon.icns`
+1. Stage `sign_update` at `~/bin/sparkle/sign_update`.
+2. Confirm the `agent-server` notarytool profile exists.
+3. Create the `syncbar-updates` Dub shortlink (see "Feed URL" above).
+4. Confirm Doppler `sync-bar/prd` has `CLOUDFLARE_API_TOKEN`,
+   `CLOUDFLARE_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL`, and
+   `SPARKLE_PRIVATE_KEY`.
+5. (Optional) Add `dmg-assets/background.tiff` + `dmg-assets/VolumeIcon.icns`
    to brand the DMG window; without them an unbranded DMG is built.

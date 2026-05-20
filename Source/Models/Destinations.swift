@@ -74,6 +74,18 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .appleNotes, .markdownFolder:  return false
         }
     }
+
+    /// Whether the bundled brand mark is a single-color silhouette that must be
+    /// tinted to the foreground to stay visible across light and dark themes.
+    /// The Linear mark ships as solid white and would vanish on light themes;
+    /// full-color marks (Google, Apple Notes) and the two-tone Notion mark read
+    /// correctly on both, so they render in their own colors.
+    var brandMarkIsMonochrome: Bool {
+        switch self {
+        case .linear:                                    return true
+        case .notion, .googleDocs, .appleNotes, .markdownFolder: return false
+        }
+    }
 }
 
 // MARK: - Per-destination configuration payloads

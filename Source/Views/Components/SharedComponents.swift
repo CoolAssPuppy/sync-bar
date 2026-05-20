@@ -265,17 +265,25 @@ struct DestinationIcon: View {
     let kind: DestinationKind
     var size: CGFloat = 18
 
+    @Environment(\.theme) private var theme
+
     var body: some View {
         let bundleImage = NSImage(named: kind.assetName)
         Group {
             if let bundleImage, bundleImage.isValid {
+                // Monochrome marks (Linear) render as a template tinted to the
+                // foreground so they adapt to the theme; full-color and two-tone
+                // marks render in their own colors (tint is ignored there).
                 Image(nsImage: bundleImage)
+                    .renderingMode(kind.brandMarkIsMonochrome ? .template : .original)
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
+                    .foregroundStyle(theme.foreground)
             } else {
                 Image(systemName: kind.systemImage)
                     .font(.system(size: size * 0.7, weight: .medium))
+                    .foregroundStyle(theme.foreground)
             }
         }
         .frame(width: size, height: size)

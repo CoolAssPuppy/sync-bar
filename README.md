@@ -45,13 +45,18 @@ Tweak the prompt in one place: `OCRPrompts.systemPrompt`.
 - Launch-at-login via SMAppService (macOS 13+).
 - KeychainAccess stores all secrets in iCloud Keychain (synchronizable across the user's Macs).
 
-## What's deferred to v0.3
+## In progress this release (v0.2)
 
-- A real reMarkable cloud client that walks the sync/v3 index graph (the protocol is reverse-engineered, not officially documented; there are no webhooks, only polling).
-- Notion / Linear / Google OAuth flows (today you paste tokens manually in Settings).
+- A real reMarkable cloud client that walks the sync/v3 index graph and rasterizes pages for OCR (the protocol is reverse-engineered, not officially documented; there are no webhooks, only polling).
+- Notion and Linear OAuth connect flows, replacing manually pasted tokens. See [OAuth and developer app setup](#oauth-and-developer-app-setup).
+
+## Deferred to a later release
+
+- Google Docs OAuth (the developer-app setup is documented; the client stays mock for now).
 - Real CloudKit reads/writes from `Ledger` (scaffolding is in `CloudKitLedger.swift` with the right entitlement; the active store is still UserDefaults until we can sign + entitle a build for real CloudKit testing).
-- Signed and notarized DMG release pipeline (scripts/release.sh is a stub).
 - Snapshot and UI tests.
+
+The signed, notarized DMG release pipeline is wired (`scripts/release.sh`); see `scripts/SPARKLE.md` for the one-time prerequisites.
 
 ## Prerequisites
 
@@ -81,7 +86,7 @@ make bootstrap   # one-time: generates SyncNerds.xcodeproj and resolves deps
 make build       # debug build → build/Build/Products/Debug/SyncNerds.app
 make run         # build + launch
 make release     # release build (no signing pipeline yet)
-make test        # unit tests (24 passing today)
+make test        # unit tests (31 passing today)
 make lint        # SwiftLint with the config under .swiftlint.yml
 make clean       # nuke build/ and the generated xcodeproj
 ```
@@ -128,6 +133,18 @@ sync-bar/
 Everything routes through one `@MainActor SyncCoordinator` that owns the timer and orchestrates each cycle. Views observe a single `Ledger` for all persistent state. Service protocols (`RemarkableClient`, `NotionClient`, `DestinationClient`, `OcrProvider`) let the rest of the app stay client-agnostic; mock implementations ship by default. Theme tokens come from `ThemeStore.shared` and route into views via the `\.theme` environment key.
 
 See `ARCHITECTURE.md` for the full diagram and the data flow per sync cycle.
+
+## OAuth and developer app setup
+
+Notion, Linear, and Google connect through OAuth. Each needs a developer app you
+register once, plus client credentials stored in the Doppler `sync-bar` project
+and pulled into the build. reMarkable uses an eight-character device code and
+needs no developer app. Apple Notes and Markdown are local and need nothing.
+
+Full per-provider instructions (where to register the app, the redirect URI and
+scopes to use, and the exact Doppler keys to add) are filled in as each OAuth
+integration lands. See `scripts/pull-secrets.sh` and `Secrets.xcconfig.example`
+for how credentials flow from Doppler into the build.
 
 ## License
 

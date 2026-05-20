@@ -1,6 +1,6 @@
 //
 //  NotionForm.swift
-//  SyncBar
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -38,7 +38,7 @@ struct NotionForm: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 240)
+                        .fixedSize()
                         .onChange(of: binding.workspaceId) { _, newValue in
                             Task { await loadDestinations(workspaceId: newValue) }
                         }
@@ -52,7 +52,7 @@ struct NotionForm: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 260)
+                        .fixedSize()
                         .disabled(!isDestinationsReady)
                         .onChange(of: binding.destinationId) { _, newValue in
                             if let dest = destinationsList.first(where: { $0.id == newValue }) {
@@ -101,6 +101,12 @@ struct NotionForm: View {
         }
     }
 
+    /// Database columns the user can map (the title column is set automatically
+    /// from the rule's title strategy, so it's excluded here).
+    private func mappableColumns(_ properties: [NotionDatabaseProperty]) -> [String] {
+        properties.filter { $0.type != "title" }.map(\.name)
+    }
+
     @ViewBuilder
     private var schemaSection: some View {
         switch schema {
@@ -121,21 +127,13 @@ struct NotionForm: View {
                     .foregroundStyle(theme.destructive)
             }
         case .loaded(let properties):
-            VStack(spacing: 0) {
-                ForEach(Array(properties.enumerated()), id: \.offset) { index, property in
-                    if index > 0 { AppRowDivider().padding(.vertical, 10) }
-                    NotionColumnMappingRow(property: property,
-                                           mapping: bindingForProperty(property))
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Fill database columns with fields from each note.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+                FieldMappingControl(rows: $binding.mappingRows, availableKeys: mappableColumns(properties))
             }
         }
-    }
-
-    private func bindingForProperty(_ property: NotionDatabaseProperty) -> Binding<NotionPropertyMapping> {
-        Binding(
-            get: { binding.propertyMappings[property.name] ?? .leaveBlank },
-            set: { binding.propertyMappings[property.name] = $0 }
-        )
     }
 
     private func loadDestinations(workspaceId: String) async {

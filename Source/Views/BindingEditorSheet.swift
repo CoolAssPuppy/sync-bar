@@ -113,7 +113,7 @@ struct BindingEditorSheet: View {
                     destinationId: cfg.destinationId,
                     destinationType: cfg.destinationType,
                     destinationTitle: cfg.destinationTitle,
-                    propertyMappings: cfg.propertyMappings
+                    mappingRows: NotionFormState.mappingRows(from: cfg.propertyMappings)
                 ))
             case .linear(let cfg):
                 _localLinear = State(initialValue: LinearFormState(workspaceId: cfg.workspaceId, projectId: cfg.projectId ?? "", projectName: cfg.projectName ?? "", defaultLabel: cfg.defaultLabel ?? ""))
@@ -148,7 +148,8 @@ struct BindingEditorSheet: View {
                 destinationId: localNotion.destinationId,
                 destinationType: localNotion.destinationType,
                 destinationTitle: localNotion.destinationTitle,
-                propertyMappings: localNotion.destinationType == .database ? localNotion.propertyMappings : [:]
+                propertyMappings: localNotion.destinationType == .database
+                    ? NotionFormState.propertyMappings(from: localNotion.mappingRows) : [:]
             ))
         case .linear:
             let project = localLinear.projectId.isEmpty ? nil : localLinear.projectId

@@ -82,8 +82,8 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
     /// correctly on both, so they render in their own colors.
     var brandMarkIsMonochrome: Bool {
         switch self {
-        case .linear:                                    return true
-        case .notion, .googleDocs, .appleNotes, .markdownFolder: return false
+        case .linear, .markdownFolder:        return true
+        case .notion, .googleDocs, .appleNotes: return false
         }
     }
 }

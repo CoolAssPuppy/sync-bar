@@ -5,5 +5,23 @@
     <link>https://downloads.strategicnerds.com/apps/syncbar/appcast.xml</link>
     <description>SyncBar updates</description>
     <language>en</language>
+    <item>
+      <title>Version 0.1.0</title>
+      <pubDate>Wed, 20 May 2026 21:02:14 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>First public release of Sync Bar.</li><li>Sync handwritten reMarkable notes to Notion, Google Docs, Linear, Apple Notes, and Markdown files.</li><li>Transcribe on-device with Apple Vision, or add your own OpenAI or Anthropic key for higher accuracy and hand-drawn diagrams turned into Mermaid charts.</li><li>Folder-based rules: every note in a folder becomes one destination entry, updated in place when you edit it instead of duplicated.</li><li>Per-destination controls including Notion property mapping, Linear tag filtering, and Google Drive folder selection.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.1.0.dmg"
+        sparkle:edSignature="rSzI46YK4TlWNqIPuSBj6tN4kC7mdbQS/5Dh+tmHBBHTDZgjT1F+TvUq/pG/2MDUVJqoXeFgCskKAPSq1OrnBg=="
+        length="4511390"
+        type="application/x-apple-diskimage" />
+    </item>
+
   </channel>
 </rss>

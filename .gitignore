@@ -14,10 +14,15 @@ Secrets.xcconfig
 
 # Dependencies and build artifacts
 node_modules/
-dist/
 build/
 .build/
 DerivedData/
+
+# Release artifacts (dist/appcast.xml is the canonical record and is kept)
+dist/*.dmg
+dist/*.sparkle.txt
+dist/*.xcarchive/
+dist/export-*/
 
 # IDE and editor files
 .vscode/

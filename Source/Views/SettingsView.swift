@@ -58,25 +58,12 @@ struct SettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 160)
+                    .fixedSize()
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Open main window on launch", description: "Otherwise SyncNerds lives in the menu bar only.") {
                     Toggle("", isOn: $settings.openWindowOnLaunch)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
-                }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Appearance", description: "Switch between themes any time from the menu bar.") {
-                    Picker("", selection: Binding(
-                        get: { ThemeStore.shared.current },
-                        set: { ThemeStore.shared.current = $0 }
-                    )) {
-                        ForEach(AppTheme.allCases) { theme in
-                            Text(theme.label).tag(theme)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 160)
                 }
             }
         }

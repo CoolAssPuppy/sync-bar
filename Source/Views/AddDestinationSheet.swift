@@ -20,7 +20,6 @@ struct AddDestinationSheet: View {
     @State private var selectedKind: DestinationKind = .notion
     @State private var markdownPath: String = ""
     @State private var appleNotesFolder: String = "SyncNerds"
-    @State private var googleEmail: String = ""
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
@@ -149,13 +148,14 @@ struct AddDestinationSheet: View {
 
     private var googleFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Adds a Google account row. Real Docs writes require an OAuth token in Settings; until then a mock returns a Docs URL.")
+            Text("Connect Google with OAuth. SyncNerds opens Google in your browser, you grant access to Docs and Drive, and the account is added here.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            AppSettingRow("Account email", description: nil) {
-                TextField("you@example.com", text: $googleEmail)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
+            if !AuthSecrets.isGoogleConfigured {
+                oauthNotConfiguredHint(provider: "Google")
+            }
+            if let errorMessage {
+                oauthErrorRow(errorMessage)
             }
         }
     }
@@ -210,14 +210,15 @@ struct AddDestinationSheet: View {
     }
 
     private var isOAuthKind: Bool {
-        selectedKind == .linear || selectedKind == .notion
+        selectedKind == .linear || selectedKind == .notion || selectedKind == .googleDocs
     }
 
     private var primaryTitle: LocalizedStringKey {
         switch selectedKind {
-        case .linear: return isConnecting ? "Connecting…" : "Connect Linear"
-        case .notion: return isConnecting ? "Connecting…" : "Connect Notion"
-        default:      return "Add destination"
+        case .linear:     return isConnecting ? "Connecting…" : "Connect Linear"
+        case .notion:     return isConnecting ? "Connecting…" : "Connect Notion"
+        case .googleDocs: return isConnecting ? "Connecting…" : "Connect Google"
+        default:          return "Add destination"
         }
     }
 
@@ -227,9 +228,10 @@ struct AddDestinationSheet: View {
 
     private func primaryAction() {
         switch selectedKind {
-        case .linear: Task { await connectLinear() }
-        case .notion: Task { await connectNotion() }
-        default:      submit()
+        case .linear:     Task { await connectLinear() }
+        case .notion:     Task { await connectNotion() }
+        case .googleDocs: Task { await connectGoogle() }
+        default:          submit()
         }
     }
 
@@ -237,9 +239,24 @@ struct AddDestinationSheet: View {
         switch selectedKind {
         case .notion:         return AuthSecrets.isNotionConfigured && !isConnecting
         case .linear:         return AuthSecrets.isLinearConfigured && !isConnecting
-        case .googleDocs:     return googleEmail.contains("@")
+        case .googleDocs:     return AuthSecrets.isGoogleConfigured && !isConnecting
         case .appleNotes:     return !appleNotesFolder.trimmingCharacters(in: .whitespaces).isEmpty
         case .markdownFolder: return !markdownPath.isEmpty
+        }
+    }
+
+    private func connectGoogle() async {
+        isConnecting = true
+        errorMessage = nil
+        defer { isConnecting = false }
+        do {
+            let account = try await GoogleAuthService.shared.connect()
+            ledger.upsertGoogleAccount(account)
+            isPresented = false
+        } catch OAuthError.userCancelled {
+            // User backed out; leave the sheet open.
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -275,15 +292,8 @@ struct AddDestinationSheet: View {
 
     private func submit() {
         switch selectedKind {
-        case .notion, .linear:
-            break  // handled by connect{Notion,Linear}() via primaryAction()
-        case .googleDocs:
-            ledger.upsertGoogleAccount(GoogleAccount(
-                id: googleEmail.lowercased(),
-                displayName: googleEmail,
-                connectedAt: Date()
-            ))
-            isPresented = false
+        case .notion, .linear, .googleDocs:
+            break  // handled by connect{Notion,Linear,Google}() via primaryAction()
         case .appleNotes:
             ledger.upsertAppleNotesTarget(AppleNotesTarget(
                 id: "an-" + UUID().uuidString.prefix(8).lowercased(),

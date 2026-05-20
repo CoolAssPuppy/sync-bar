@@ -78,11 +78,6 @@ struct GoogleAccountDetailView: View {
                 if case .googleDocs(let cfg) = config { return cfg.accountEmail == accountId }
                 return false
             }),
-            authorization: .keychainToken(
-                title: "Google access token",
-                description: "OAuth access token with Drive + Docs scopes. Without one, SyncNerds returns a synthetic doc URL.",
-                keychainKey: .googleAccessToken(email: accountId)
-            ),
             rename: { newName in ledger.renameGoogleAccount(id: accountId, newName: newName) },
             disconnect: { ledger.removeGoogleAccount(id: accountId) }
         )

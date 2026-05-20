@@ -20,7 +20,7 @@ This is the v0.2 build. The visual shell, sidebar navigation, menu bar popover w
 ### Destinations (one reMarkable notebook → 0..N destinations)
 - **Notion** — page or database. Connect with OAuth; real API writes once connected, mock otherwise.
 - **Linear** — issues per page. Connect with OAuth; real GraphQL writes once connected, mock otherwise.
-- **Google Docs** — one doc per page or append to a single doc. OAuth setup is documented; the client is still mock.
+- **Google Docs** — one doc per page, or append every page to one doc. Connect with OAuth; real Docs/Drive writes once connected, mock otherwise.
 - **Apple Notes** — creates the named folder if it doesn't exist and writes one note per page via AppleScript. No accounts or tokens required.
 - **Markdown files** — one .md file per page with optional YAML frontmatter and a code-fenced mermaid block when the OCR pass detects a diagram. No accounts required.
 
@@ -47,13 +47,12 @@ Tweak the prompt in one place: `OCRPrompts.systemPrompt`.
 
 ## New in this release (v0.2)
 
-- Notion and Linear OAuth connect flows, replacing manually pasted tokens. See [OAuth and developer app setup](#oauth-and-developer-app-setup).
+- Notion, Linear, and Google Docs OAuth connect flows, replacing manually pasted tokens. See [OAuth and developer app setup](#oauth-and-developer-app-setup).
 - A real reMarkable cloud client that walks the sync index graph and rasterizes pages for OCR. The protocol is reverse-engineered (no webhooks, polling only) and the v6 stroke rendering needs validation against a physical device.
 - Real destination brand logos and the Apple Notes automation entitlement.
 
 ## Deferred to a later release
 
-- Google Docs OAuth (the developer-app setup is documented; the client stays mock for now).
 - Real CloudKit reads/writes from `Ledger` (scaffolding is in `CloudKitLedger.swift` with the right entitlement; the active store is still UserDefaults until we can sign + entitle a build for real CloudKit testing).
 - Snapshot and UI tests.
 
@@ -137,11 +136,10 @@ See `ARCHITECTURE.md` for the full diagram and the data flow per sync cycle.
 
 ## OAuth and developer app setup
 
-Notion and Linear connect through OAuth (Google's setup is documented here too,
-but its client is still mock). Each needs a developer app you register once,
-plus client credentials stored in the Doppler `sync-bar` project and baked into
-the build. reMarkable uses an eight-character device code and needs no developer
-app. Apple Notes and Markdown are local and need nothing.
+Notion, Linear, and Google connect through OAuth. Each needs a developer app you
+register once, plus client credentials stored in the Doppler `sync-bar` project
+and baked into the build. reMarkable uses an eight-character device code and
+needs no developer app. Apple Notes and Markdown are local and need nothing.
 
 ### How credentials flow
 
@@ -177,14 +175,21 @@ The redirect URIs below are exact. Register them verbatim.
 3. Requested scopes are `read,write` (write is needed to create issues).
 4. Copy the **Client ID** and **Client secret**.
 
-### Google (documented; client still mock)
+### Google
 
-1. In the Google Cloud console, create an OAuth client of type **Desktop app**
-   (desktop clients use a loopback redirect; no custom scheme).
+1. In the Google Cloud console, create an OAuth client of type **Desktop app**.
+   Desktop clients use a loopback redirect (no custom scheme); Google accepts
+   `http://localhost` on any port, so there is no redirect URI to register. The
+   app listens on `http://localhost:53118/oauth/google`.
 2. Enable the **Google Docs API** and **Google Drive API**.
-3. Scopes when the client lands: `https://www.googleapis.com/auth/documents` and
-   `https://www.googleapis.com/auth/drive.file`.
-4. Copy the **Client ID** and **Client secret**.
+3. Configure the OAuth consent screen and add yourself as a test user (the Docs
+   and Drive scopes are sensitive, so an unverified app only works for listed
+   test users until it goes through Google verification).
+4. The requested scopes are `openid`, `email`,
+   `https://www.googleapis.com/auth/documents`, and
+   `https://www.googleapis.com/auth/drive.file` (drive.file limits SyncNerds to
+   the docs it creates).
+5. Copy the **Client ID** and **Client secret**.
 
 ### reMarkable
 
@@ -196,8 +201,7 @@ reverse-engineered, so expect to iterate against your device.
 
 ### Doppler keys
 
-Add these to the Doppler `sync-bar` project (config `dev`). Leave Google's empty
-until that client is implemented.
+Add these to the Doppler `sync-bar` project (config `dev`).
 
 | Key | From |
 |-----|------|
@@ -205,8 +209,8 @@ until that client is implemented.
 | `NOTION_CLIENT_SECRET` | Notion integration |
 | `LINEAR_CLIENT_ID` | Linear OAuth application |
 | `LINEAR_CLIENT_SECRET` | Linear OAuth application |
-| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client (optional for now) |
-| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth client (optional for now) |
+| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client (Desktop app) |
+| `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth client (Desktop app) |
 
 Then run `./scripts/pull-secrets.sh` and rebuild.
 

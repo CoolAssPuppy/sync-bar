@@ -7,6 +7,7 @@
 
 import AuthenticationServices
 import AppKit
+import CryptoKit
 
 /// Errors surfaced by the OAuth connect flows.
 enum OAuthError: LocalizedError, Equatable {
@@ -100,6 +101,19 @@ enum OAuth {
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
         return Data(bytes).base64URLEncodedString()
+    }
+
+    /// A PKCE code verifier: 32 random bytes, base64url-encoded (RFC 7636).
+    static func pkceVerifier() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return Data(bytes).base64URLEncodedString()
+    }
+
+    /// The S256 PKCE challenge for a verifier: base64url(SHA256(verifier)).
+    static func pkceChallenge(for verifier: String) -> String {
+        let digest = SHA256.hash(data: Data(verifier.utf8))
+        return Data(digest).base64URLEncodedString()
     }
 
     /// Encodes fields as an `application/x-www-form-urlencoded` body, percent

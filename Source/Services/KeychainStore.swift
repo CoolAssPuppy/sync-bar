@@ -25,6 +25,7 @@ final class KeychainStore: @unchecked Sendable {
         case linearAccessToken
         case googleAccessToken(email: String)
         case googleRefreshToken(email: String)
+        case googleTokenExpiry(email: String)
 
         fileprivate var account: String {
             switch self {
@@ -36,6 +37,7 @@ final class KeychainStore: @unchecked Sendable {
             case .linearAccessToken:             return "linear.access_token"
             case .googleAccessToken(let email):  return "google.\(email).access_token"
             case .googleRefreshToken(let email): return "google.\(email).refresh_token"
+            case .googleTokenExpiry(let email):  return "google.\(email).token_expiry"
             }
         }
     }

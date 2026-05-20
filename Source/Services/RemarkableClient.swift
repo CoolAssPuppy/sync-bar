@@ -38,8 +38,10 @@ protocol RemarkableClient: Sendable {
 enum RemarkableClientFactory {
     static func make(keychain: KeychainStore = .shared) -> RemarkableClient {
         if let token = keychain.value(for: .remarkableDeviceToken), !token.isEmpty {
+            Log.remarkable.info("client: REAL (device token present, \(token.count, privacy: .public) chars)")
             return RealRemarkableClient(keychain: keychain)
         }
+        Log.remarkable.info("client: MOCK (no device token in keychain — returning sample notebooks)")
         return MockRemarkableClient()
     }
 }

@@ -68,6 +68,8 @@ struct RealRemarkableClient: RemarkableClient {
             throw RemarkableError.network("Empty device token from reMarkable cloud.")
         }
         keychain.set(value: token, for: .remarkableDeviceToken)
+        let readBack = keychain.value(for: .remarkableDeviceToken)?.count ?? -1
+        Log.remarkable.info("device token stored (\(token.count, privacy: .public) chars), read-back \(readBack, privacy: .public) chars")
         return RemarkableAccount(
             pairedAt: Date(),
             userIdentifier: String(deviceUUID.prefix(8)),
@@ -79,32 +81,45 @@ struct RealRemarkableClient: RemarkableClient {
 
     func listNotebooks() async throws -> [RmNotebook] {
         let documents = try await rootIndexEntries()
+        Log.remarkable.info("listNotebooks: \(documents.count, privacy: .public) root documents")
         var notebooks: [RmNotebook] = []
         for document in documents {
-            guard let components = try? await documentComponents(documentHash: document.hash),
-                  let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components),
-                  let metadataData = try? await blob(hash: metadataEntry.hash),
-                  let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
-                  metadata.isNotebook else { continue }
-            notebooks.append(RmNotebook(
-                id: document.identifier,
-                name: metadata.visibleName,
-                parentFolder: nil,
-                lastModified: metadata.lastModified,
-                pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count
-            ))
+            do {
+                let components = try await documentComponents(documentHash: document.hash, documentId: document.identifier)
+                guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components) else {
+                    Log.remarkable.debug("doc \(document.identifier, privacy: .public): no .metadata in \(components.count, privacy: .public) components")
+                    continue
+                }
+                let metadataData = try await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier)
+                guard let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData) else {
+                    Log.remarkable.debug("doc \(document.identifier, privacy: .public): metadata parse failed (\(metadataData.count, privacy: .public) bytes)")
+                    continue
+                }
+                Log.remarkable.debug("doc \(document.identifier, privacy: .public): name=\(metadata.visibleName, privacy: .public) type=\(metadata.type, privacy: .public) deleted=\(metadata.deleted, privacy: .public)")
+                guard metadata.isNotebook else { continue }
+                notebooks.append(RmNotebook(
+                    id: document.identifier,
+                    name: metadata.visibleName,
+                    parentFolder: nil,
+                    lastModified: metadata.lastModified,
+                    pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count
+                ))
+            } catch {
+                Log.remarkable.error("doc \(document.identifier, privacy: .public) walk failed: \(String(describing: error), privacy: .public)")
+            }
         }
+        Log.remarkable.info("listNotebooks: \(notebooks.count, privacy: .public) notebooks found")
         return notebooks
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {
         let documents = try await rootIndexEntries()
         guard let document = documents.first(where: { $0.identifier == notebookId }) else { return [] }
-        let components = try await documentComponents(documentHash: document.hash)
+        let components = try await documentComponents(documentHash: document.hash, documentId: document.identifier)
 
         let lastModified: Date
         if let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components),
-           let metadataData = try? await blob(hash: metadataEntry.hash),
+           let metadataData = try? await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier),
            let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData) {
             lastModified = metadata.lastModified
         } else {
@@ -114,7 +129,7 @@ struct RealRemarkableClient: RemarkableClient {
         let pageHashes = RemarkableSyncIndex.pageBlobHashes(in: components)
         var order: [String] = []
         if let contentEntry = RemarkableSyncIndex.contentEntry(in: components),
-           let contentData = try? await blob(hash: contentEntry.hash),
+           let contentData = try? await blob(hash: contentEntry.hash, filename: contentEntry.identifier),
            let parsed = try? RemarkableSyncIndex.parseContentPageOrder(contentData) {
             order = parsed
         }
@@ -135,7 +150,8 @@ struct RealRemarkableClient: RemarkableClient {
     }
 
     func pageImage(for page: RmPage) async throws -> Data? {
-        let data = try await blob(hash: page.versionHash)
+        // A page blob is named "<documentUUID>/<pageUUID>.rm".
+        let data = try await blob(hash: page.versionHash, filename: "\(page.notebookId)/\(page.pageId).rm")
         guard let drawing = try? RemarkableLinesV6.parse(data), !drawing.isEmpty else { return nil }
         return RemarkableRenderer.pngData(for: drawing)
     }
@@ -145,17 +161,25 @@ struct RealRemarkableClient: RemarkableClient {
     private func rootIndexEntries() async throws -> [RemarkableIndexEntry] {
         let rootData = try await authedData(path: "/sync/v3/root")
         let rootHash = Self.parseRootHash(rootData)
-        let indexData = try await blob(hash: rootHash)
-        return try RemarkableSyncIndex.parseIndex(String(decoding: indexData, as: UTF8.self))
+        // The root index blob's logical name is always "root.docSchema".
+        let indexData = try await blob(hash: rootHash, filename: "root.docSchema")
+        let entries = try RemarkableSyncIndex.parseIndex(String(decoding: indexData, as: UTF8.self))
+        Log.remarkable.info("root index parsed into \(entries.count, privacy: .public) entries")
+        return entries
     }
 
-    private func documentComponents(documentHash: String) async throws -> [RemarkableIndexEntry] {
-        let data = try await blob(hash: documentHash)
+    private func documentComponents(documentHash: String, documentId: String) async throws -> [RemarkableIndexEntry] {
+        // A document's index blob is named "<documentUUID>.docSchema".
+        let data = try await blob(hash: documentHash, filename: "\(documentId).docSchema")
         return try RemarkableSyncIndex.parseIndex(String(decoding: data, as: UTF8.self))
     }
 
-    private func blob(hash: String) async throws -> Data {
-        try await authedData(path: "/sync/v3/files/\(hash)")
+    /// Fetches a content-addressed blob. The reMarkable "tortoise" sync requires
+    /// the blob's *logical* name in the `rm-filename` header (e.g.
+    /// `root.docSchema`, `<uuid>.metadata`, `<uuid>/<page>.rm`). A missing or
+    /// wrong value returns HTTP 400 "unexpected 'rm-filename' http header".
+    private func blob(hash: String, filename: String) async throws -> Data {
+        try await authedData(path: "/sync/v3/files/\(hash)", rmFilename: filename)
     }
 
     static func parseRootHash(_ data: Data) -> String {
@@ -168,11 +192,19 @@ struct RealRemarkableClient: RemarkableClient {
 
     // MARK: Auth
 
-    private func authedData(path: String) async throws -> Data {
+    private func authedData(path: String, rmFilename: String? = nil) async throws -> Data {
         let token = try await refreshUserTokenIfNeeded()
         var request = URLRequest(url: Self.cloudBase.appendingPathComponent(path))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let rmFilename {
+            request.setValue(rmFilename, forHTTPHeaderField: "rm-filename")
+        }
         let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        Log.remarkable.debug("GET \(path, privacy: .public) -> HTTP \(status, privacy: .public), \(data.count, privacy: .public) bytes")
+        if !(200..<300).contains(status) {
+            Log.remarkable.error("GET \(path, privacy: .public) body: \(String(decoding: data, as: UTF8.self).prefix(300), privacy: .public)")
+        }
         try Self.validate(response: response, data: data)
         return data
     }

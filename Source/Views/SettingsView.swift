@@ -22,6 +22,7 @@ struct SettingsView: View {
                 VStack(spacing: 14) {
                     generalCard
                     ocrCard
+                    resyncCard
                 }
                 .frame(maxWidth: .infinity)
 
@@ -141,6 +142,25 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 .help("Save key")
             }
+        }
+    }
+
+    // MARK: Resync
+
+    private var resyncCard: some View {
+        AppCard("Resync") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Reset your sync database")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("Delete the internal database that tracks syncs. Warning: this will resync every note.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+                AppSecondaryButton(title: "Resync notes", systemImage: "arrow.triangle.2.circlepath", tint: .warning) {
+                    Ledger.shared.resetSyncDatabase()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

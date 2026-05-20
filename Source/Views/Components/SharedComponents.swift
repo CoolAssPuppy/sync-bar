@@ -108,7 +108,7 @@ struct AppRowDivider: View {
 // MARK: - Button tints
 
 enum AppButtonTint {
-    case foreground, primary, destructive
+    case foreground, primary, destructive, warning
 }
 
 struct AppSecondaryButton: View {
@@ -151,12 +151,14 @@ struct AppSecondaryButton: View {
         case .foreground:  return theme.foreground
         case .primary:     return theme.primary
         case .destructive: return theme.destructive
+        case .warning:     return theme.warning
         }
     }
 
     private var borderColor: Color {
         switch tint {
         case .destructive: return theme.destructive.opacity(0.35)
+        case .warning:     return theme.warning.opacity(0.4)
         default:           return theme.borderStrong
         }
     }
@@ -242,6 +244,7 @@ struct AppIconButton: View {
         case .foreground:  return theme.muted
         case .primary:     return theme.primary
         case .destructive: return theme.destructive
+        case .warning:     return theme.warning
         }
     }
 

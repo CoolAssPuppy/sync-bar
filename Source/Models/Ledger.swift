@@ -339,6 +339,15 @@ final class Ledger: ObservableObject {
         persistSyncedHashes()
     }
 
+    /// Wipes the entire sync-tracking database (every recorded page hash) so the
+    /// next cycle resyncs all notes to all destinations. Does not touch the
+    /// visible event log.
+    func resetSyncDatabase() {
+        guard !syncedPageHashes.isEmpty else { return }
+        syncedPageHashes = [:]
+        persistSyncedHashes()
+    }
+
     /// Drops every page hash recorded for the given bindings. Called when a
     /// binding is removed or re-pointed at a new destination so the next cycle
     /// resyncs into the new target rather than treating it as already done.

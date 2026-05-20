@@ -37,7 +37,7 @@ struct MarkdownForm: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 240)
+                        .fixedSize()
                     }
                 }
                 AppRowDivider().padding(.vertical, 10)

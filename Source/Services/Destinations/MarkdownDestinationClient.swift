@@ -13,7 +13,7 @@ import Foundation
 struct MarkdownDestinationClient: DestinationClient {
     let kind: DestinationKind = .markdownFolder
 
-    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult {
         guard case .markdownFolder(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .markdownFolder)
         }
@@ -24,8 +24,16 @@ struct MarkdownDestinationClient: DestinationClient {
             throw DestinationError.fileSystem("Couldn't create folder \(folderUrl.path): \(error.localizedDescription)")
         }
 
+        // Update in place: if we wrote this note before, overwrite that exact
+        // file so an edit (even one that changes the templated name) updates the
+        // original rather than leaving an orphan and writing a new file.
         let fileName = Self.resolveFileName(template: config.fileNameTemplate, payload: payload) + ".md"
-        let fileUrl = folderUrl.appendingPathComponent(fileName)
+        let fileUrl: URL
+        if let existingExternalId, !existingExternalId.isEmpty {
+            fileUrl = URL(fileURLWithPath: existingExternalId)
+        } else {
+            fileUrl = folderUrl.appendingPathComponent(fileName)
+        }
 
         let frontmatter = config.includeFrontmatter ? Self.frontmatter(payload: payload) : ""
         let mermaidBlock = payload.mermaidSource.map { "\n\n```mermaid\n\($0)\n```\n" } ?? ""
@@ -39,7 +47,7 @@ struct MarkdownDestinationClient: DestinationClient {
         return DestinationWriteResult(
             externalId: fileUrl.path,
             externalURL: fileUrl,
-            notes: "Wrote \(fileName)"
+            notes: "Wrote \(fileUrl.lastPathComponent)"
         )
     }
 

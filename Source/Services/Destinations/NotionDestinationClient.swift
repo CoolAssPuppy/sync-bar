@@ -16,35 +16,36 @@ import Foundation
 struct NotionDestinationClient: DestinationClient {
     let kind: DestinationKind = .notion
 
-    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult {
         guard case .notion(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .notion)
         }
         if let token = KeychainStore.shared.value(for: .notionWorkspaceToken(workspaceId: config.workspaceId)),
            !token.isEmpty {
-            return try await writeWithRealNotion(token: token, config: config, payload: payload)
+            return try await writeWithRealNotion(token: token, config: config, payload: payload, existingId: existingExternalId)
         }
-        return try await writeWithMock(config: config, payload: payload)
+        return try await writeWithMock(config: config, payload: payload, existingId: existingExternalId)
     }
 
     // MARK: Real Notion (v2022-06-28)
 
-    private func writeWithRealNotion(token: String, config: NotionDestinationConfig, payload: DestinationPayload) async throws -> DestinationWriteResult {
-        let url = URL(string: "https://api.notion.com/v1/pages")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    private func writeWithRealNotion(token: String, config: NotionDestinationConfig, payload: DestinationPayload, existingId: String?) async throws -> DestinationWriteResult {
+        let properties = try await buildProperties(token: token, config: config, payload: payload)
+        let children = Self.buildChildren(payload: payload)
+        // Update in place when we've synced this note before, so an edit updates
+        // the same page/row instead of creating a duplicate.
+        if let pageId = existingId, !pageId.isEmpty {
+            return try await updatePage(token: token, pageId: pageId, properties: properties, children: children)
+        }
+        return try await createPage(token: token, config: config, properties: properties, children: children)
+    }
 
-        var parent: [String: Any] = [:]
-        var properties: [String: Any] = [:]
+    /// Title + mapped column values, shaped to the database's live schema.
+    private func buildProperties(token: String, config: NotionDestinationConfig, payload: DestinationPayload) async throws -> [String: Any] {
         switch config.destinationType {
         case .page:
-            parent = ["page_id": config.destinationId]
-            properties = ["title": ["title": [["text": ["content": payload.title]]]]]
+            return ["title": ["title": [["text": ["content": payload.title]]]]]
         case .database:
-            parent = ["database_id": config.destinationId]
             // Look up the live schema so we can (a) write the title under its
             // real property name and (b) shape each mapped value to the column's
             // actual type. Notion rejects a value whose shape doesn't match the
@@ -53,23 +54,24 @@ struct NotionDestinationClient: DestinationClient {
                 .databaseSchema(destinationId: config.destinationId, workspaceId: config.workspaceId)
             let typeByName = Dictionary(schema.map { ($0.name, $0.type) }, uniquingKeysWith: { first, _ in first })
             let titleName = schema.first(where: { $0.type == "title" })?.name ?? "Name"
-            properties[titleName] = ["title": [["text": ["content": payload.title]]]]
+            var properties: [String: Any] = [titleName: ["title": [["text": ["content": payload.title]]]]]
             for (columnName, mapping) in config.propertyMappings where columnName != titleName {
                 guard let columnType = typeByName[columnName] else { continue }
                 if let value = Self.propertyValue(for: mapping, columnType: columnType, payload: payload) {
                     properties[columnName] = value
                 }
             }
+            return properties
         }
+    }
 
+    private static func buildChildren(payload: DestinationPayload) -> [[String: Any]] {
         var children: [[String: Any]] = []
         for paragraph in payload.body.components(separatedBy: "\n\n") where !paragraph.isEmpty {
             children.append([
                 "object": "block",
                 "type": "paragraph",
-                "paragraph": [
-                    "rich_text": [["type": "text", "text": ["content": paragraph]]]
-                ]
+                "paragraph": ["rich_text": [["type": "text", "text": ["content": paragraph]]]]
             ])
         }
         if let mermaid = payload.mermaidSource {
@@ -82,18 +84,77 @@ struct NotionDestinationClient: DestinationClient {
                 ]
             ])
         }
+        return children
+    }
 
-        let body: [String: Any] = ["parent": parent, "properties": properties, "children": children]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    private func createPage(token: String, config: NotionDestinationConfig, properties: [String: Any], children: [[String: Any]]) async throws -> DestinationWriteResult {
+        let parent: [String: Any] = config.destinationType == .database
+            ? ["database_id": config.destinationId]
+            : ["page_id": config.destinationId]
+        var request = Self.notionRequest(url: "https://api.notion.com/v1/pages", method: "POST", token: token)
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["parent": parent, "properties": properties, "children": children])
 
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw NotionError.from(status: http.statusCode, data: data, context: "create \(config.destinationType == .database ? "database row" : "page")")
         }
+        struct Page: Decodable { let id: String; let url: String }
+        let parsed = try JSONDecoder().decode(Page.self, from: data)
+        return DestinationWriteResult(externalId: parsed.id, externalURL: URL(string: parsed.url), notes: nil)
+    }
+
+    /// Updates an existing page's properties, then replaces its body blocks so
+    /// the content reflects the edited note.
+    private func updatePage(token: String, pageId: String, properties: [String: Any], children: [[String: Any]]) async throws -> DestinationWriteResult {
+        var request = Self.notionRequest(url: "https://api.notion.com/v1/pages/\(pageId)", method: "PATCH", token: token)
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": properties])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw NotionError.from(status: http.statusCode, data: data, context: "update page")
+        }
+        try await replaceChildren(token: token, pageId: pageId, children: children)
 
         struct Page: Decodable { let id: String; let url: String }
         let parsed = try JSONDecoder().decode(Page.self, from: data)
         return DestinationWriteResult(externalId: parsed.id, externalURL: URL(string: parsed.url), notes: nil)
+    }
+
+    /// Archives the page's current top-level blocks and appends the fresh ones.
+    private func replaceChildren(token: String, pageId: String, children: [[String: Any]]) async throws {
+        // List existing children (notes are small; one page of 100 is plenty).
+        var listRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children?page_size=100", method: "GET", token: token)
+        listRequest.httpBody = nil
+        let (listData, listResponse) = try await URLSession.shared.data(for: listRequest)
+        if let http = listResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw NotionError.from(status: http.statusCode, data: listData, context: "list page blocks")
+        }
+        struct BlockList: Decodable { struct Block: Decodable { let id: String }; let results: [Block] }
+        let existing = (try? JSONDecoder().decode(BlockList.self, from: listData))?.results ?? []
+
+        for block in existing {
+            let deleteRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(block.id)", method: "DELETE", token: token)
+            let (delData, delResponse) = try await URLSession.shared.data(for: deleteRequest)
+            if let http = delResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw NotionError.from(status: http.statusCode, data: delData, context: "delete page block")
+            }
+        }
+
+        guard !children.isEmpty else { return }
+        var appendRequest = Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children", method: "PATCH", token: token)
+        appendRequest.httpBody = try JSONSerialization.data(withJSONObject: ["children": children])
+        let (appendData, appendResponse) = try await URLSession.shared.data(for: appendRequest)
+        if let http = appendResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw NotionError.from(status: http.statusCode, data: appendData, context: "append page blocks")
+        }
+    }
+
+    private static func notionRequest(url: String, method: String, token: String) -> URLRequest {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return request
     }
 
     // MARK: Property mapping → Notion JSON
@@ -200,9 +261,9 @@ struct NotionDestinationClient: DestinationClient {
 
     // MARK: Mock fallback
 
-    private func writeWithMock(config: NotionDestinationConfig, payload: DestinationPayload) async throws -> DestinationWriteResult {
+    private func writeWithMock(config: NotionDestinationConfig, payload: DestinationPayload, existingId: String?) async throws -> DestinationWriteResult {
         try await Task.sleep(nanoseconds: 200_000_000)
-        let id = "p-" + UUID().uuidString.prefix(10).lowercased()
+        let id = existingId ?? ("p-" + UUID().uuidString.prefix(10).lowercased())
         return DestinationWriteResult(
             externalId: id,
             externalURL: URL(string: "https://www.notion.so/preview/\(id)"),

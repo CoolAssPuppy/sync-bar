@@ -15,7 +15,7 @@ import AppKit
 struct AppleNotesDestinationClient: DestinationClient {
     let kind: DestinationKind = .appleNotes
 
-    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult {
         guard case .appleNotes(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .appleNotes)
         }
@@ -24,7 +24,14 @@ struct AppleNotesDestinationClient: DestinationClient {
         // Notes uses HTML for body rendering. Convert the OCR output into a
         // basic HTML structure with the mermaid diagram inlined as <pre>.
         let bodyHtml = Self.buildHtml(payload: payload)
-        let script = Self.appleScriptSource(folderName: folderName, title: payload.title, bodyHtml: bodyHtml)
+        // Update the note we made before when we have its id; the script falls
+        // back to creating one if it was deleted in Notes.
+        let script: String
+        if let existingExternalId, !existingExternalId.isEmpty {
+            script = Self.updateScriptSource(noteId: existingExternalId, folderName: folderName, title: payload.title, bodyHtml: bodyHtml)
+        } else {
+            script = Self.appleScriptSource(folderName: folderName, title: payload.title, bodyHtml: bodyHtml)
+        }
 
         return try await Task.detached(priority: .userInitiated) { () throws -> DestinationWriteResult in
             var errorInfo: NSDictionary?
@@ -40,7 +47,7 @@ struct AppleNotesDestinationClient: DestinationClient {
             return DestinationWriteResult(
                 externalId: noteId,
                 externalURL: nil,
-                notes: "Created in folder \"\(folderName)\""
+                notes: "Synced to folder \"\(folderName)\""
             )
         }.value
     }
@@ -62,6 +69,32 @@ struct AppleNotesDestinationClient: DestinationClient {
                     set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"}
                     return id of newNote
                 end tell
+            end tell
+        end tell
+        """
+    }
+
+    /// Updates the body of an existing note (found by id). If that note no
+    /// longer exists, falls back to creating one in the folder so an edit still
+    /// lands somewhere. Setting the body (whose first line is an `<h1>` title)
+    /// also updates the note's displayed name.
+    static func updateScriptSource(noteId: String, folderName: String, title: String, bodyHtml: String) -> String {
+        """
+        tell application "Notes"
+            tell account "iCloud"
+                try
+                    set theNote to note id "\(escape(noteId))"
+                    set body of theNote to "\(escape(bodyHtml))"
+                    return id of theNote
+                on error
+                    if not (exists folder "\(escape(folderName))") then
+                        make new folder with properties {name:"\(escape(folderName))"}
+                    end if
+                    tell folder "\(escape(folderName))"
+                        set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"}
+                        return id of newNote
+                    end tell
+                end try
             end tell
         end tell
         """

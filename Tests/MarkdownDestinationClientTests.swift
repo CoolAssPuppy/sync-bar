@@ -35,7 +35,7 @@ final class MarkdownDestinationClientTests: XCTestCase {
             pageNumber: 3
         )
 
-        let result = try await client.write(payload: payload, configuration: configuration)
+        let result = try await client.write(payload: payload, configuration: configuration, existingExternalId: nil)
         let written = try XCTUnwrap(result.externalURL)
         let contents = try String(contentsOf: written)
 

@@ -27,6 +27,7 @@ final class Ledger: ObservableObject {
     private static let eventsKey            = "ledger.events"
     private static let notebooksKey         = "ledger.notebooks"
     private static let syncedPageHashesKey  = "ledger.syncedPageHashes"
+    private static let syncedExternalIdsKey = "ledger.syncedExternalIds"
 
     @Published private(set) var remarkableAccount: RemarkableAccount?
     @Published private(set) var notionWorkspaces: [NotionWorkspace] = []
@@ -43,6 +44,12 @@ final class Ledger: ObservableObject {
     /// whose content hasn't changed since its last sync is skipped. Not
     /// `@Published`: no view observes it, and it churns during sync cycles.
     private var syncedPageHashes: [String: String] = [:]
+
+    /// External destination id (Notion page id, Google doc id, Linear issue id,
+    /// Apple Notes note id, Markdown file path) of the note last written for a
+    /// binding+file, keyed by `"<bindingId>|<pageId>"`. Lets the next sync update
+    /// that same note in place rather than creating a duplicate.
+    private var syncedExternalIds: [String: String] = [:]
 
     private static let maxEventsRetained = 500
     private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
@@ -310,35 +317,58 @@ final class Ledger: ObservableObject {
         syncedPageHashes[Self.syncedHashKey(bindingId: bindingId, pageId: pageId)]
     }
 
-    /// Records that `pageId` synced to `bindingId` at `versionHash` so future
-    /// cycles skip it until its content changes.
-    func recordSyncedPage(bindingId: String, pageId: String, versionHash: String) {
+    /// The external destination id of the note last written for this binding+file,
+    /// if any, so the destination client can update it in place.
+    func syncedExternalId(bindingId: String, pageId: String) -> String? {
+        syncedExternalIds[Self.syncedHashKey(bindingId: bindingId, pageId: pageId)]
+    }
+
+    /// Records that `pageId` synced to `bindingId` at `versionHash`, along with
+    /// the destination note's external id, so future cycles skip it until its
+    /// content changes and can update the same note in place when it does.
+    func recordSyncedPage(bindingId: String, pageId: String, versionHash: String, externalId: String?) {
         let key = Self.syncedHashKey(bindingId: bindingId, pageId: pageId)
-        guard syncedPageHashes[key] != versionHash else { return }
-        syncedPageHashes[key] = versionHash
-        persistSyncedHashes()
+        var changed = false
+        if syncedPageHashes[key] != versionHash {
+            syncedPageHashes[key] = versionHash
+            changed = true
+        }
+        if let externalId, !externalId.isEmpty, syncedExternalIds[key] != externalId {
+            syncedExternalIds[key] = externalId
+            persistSyncedExternalIds()
+        }
+        if changed { persistSyncedHashes() }
     }
 
-    /// Wipes the entire sync-tracking database (every recorded page hash) so the
-    /// next cycle resyncs all notes to all destinations. Does not touch the
-    /// visible event log.
+    /// Wipes the entire sync-tracking database (every recorded page hash and
+    /// external id) so the next cycle resyncs all notes to all destinations.
+    /// Does not touch the visible event log.
     func resetSyncDatabase() {
-        guard !syncedPageHashes.isEmpty else { return }
+        guard !syncedPageHashes.isEmpty || !syncedExternalIds.isEmpty else { return }
         syncedPageHashes = [:]
+        syncedExternalIds = [:]
         persistSyncedHashes()
+        persistSyncedExternalIds()
     }
 
-    /// Drops every page hash recorded for the given bindings. Called when a
-    /// binding is removed or re-pointed at a new destination so the next cycle
-    /// resyncs into the new target rather than treating it as already done.
+    /// Drops every page hash and external id recorded for the given bindings.
+    /// Called when a binding is removed or re-pointed at a new destination so the
+    /// next cycle resyncs into the new target rather than treating it as already
+    /// done (or updating a note in the old target).
     private func forgetSyncedHashes(forBindingIds bindingIds: Set<String>) {
         guard !bindingIds.isEmpty else { return }
         let prefixes = bindingIds.map { "\($0)|" }
-        let before = syncedPageHashes.count
+        let hashesBefore = syncedPageHashes.count
         syncedPageHashes = syncedPageHashes.filter { entry in
             !prefixes.contains { entry.key.hasPrefix($0) }
         }
-        if syncedPageHashes.count != before { persistSyncedHashes() }
+        if syncedPageHashes.count != hashesBefore { persistSyncedHashes() }
+
+        let idsBefore = syncedExternalIds.count
+        syncedExternalIds = syncedExternalIds.filter { entry in
+            !prefixes.contains { entry.key.hasPrefix($0) }
+        }
+        if syncedExternalIds.count != idsBefore { persistSyncedExternalIds() }
     }
 
     private static func syncedHashKey(bindingId: String, pageId: String) -> String {
@@ -452,6 +482,10 @@ final class Ledger: ObservableObject {
            let value = try? decoder.decode([String: String].self, from: data) {
             syncedPageHashes = value
         }
+        if let data = defaults.data(forKey: Self.syncedExternalIdsKey),
+           let value = try? decoder.decode([String: String].self, from: data) {
+            syncedExternalIds = value
+        }
 
         stripLeakedTestData(defaults: defaults)
     }
@@ -515,4 +549,5 @@ final class Ledger: ObservableObject {
     private func persistEvents()        { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
     private func persistNotebooks()     { persist(value: notebooks, key: Self.notebooksKey) }
     private func persistSyncedHashes()  { persistDebounced({ [weak self] in self?.syncedPageHashes ?? [:] }, key: Self.syncedPageHashesKey) }
+    private func persistSyncedExternalIds() { persistDebounced({ [weak self] in self?.syncedExternalIds ?? [:] }, key: Self.syncedExternalIdsKey) }
 }

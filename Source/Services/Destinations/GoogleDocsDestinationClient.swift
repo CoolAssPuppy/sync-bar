@@ -14,21 +14,75 @@ import Foundation
 struct GoogleDocsDestinationClient: DestinationClient {
     let kind: DestinationKind = .googleDocs
 
-    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult {
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult {
         guard case .googleDocs(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .googleDocs)
         }
         let hasAccount = !(KeychainStore.shared.value(for: .googleRefreshToken(email: config.accountEmail)) ?? "").isEmpty
         guard hasAccount else {
-            return try await writeWithMock(config: config, payload: payload)
+            return try await writeWithMock(config: config, payload: payload, existingId: existingExternalId)
         }
         let token = try await GoogleTokens.validAccessToken(email: config.accountEmail)
+        // Update in place: rewrite the doc we made before so an edited note
+        // doesn't create a second document.
+        if let docId = existingExternalId, !docId.isEmpty {
+            return try await rewriteDoc(token: token, docId: docId, payload: payload)
+        }
         switch config.appendMode {
         case .onePerPage:
             return try await createDocPerPage(token: token, config: config, payload: payload)
         case .appendToSingleDoc:
             return try await appendToSingleDoc(token: token, config: config, payload: payload)
         }
+    }
+
+    // MARK: Update in place
+
+    private func rewriteDoc(token: String, docId: String, payload: DestinationPayload) async throws -> DestinationWriteResult {
+        let endIndex = try await documentEndIndex(token: token, docId: docId)
+        var requests: [[String: Any]] = []
+        // The body always ends in a newline at endIndex-1 that can't be deleted;
+        // clear everything before it, then insert the fresh transcript at the top.
+        if endIndex > 2 {
+            requests.append(["deleteContentRange": ["range": ["startIndex": 1, "endIndex": endIndex - 1]]])
+        }
+        requests.append(["insertText": ["text": bodyText(payload), "location": ["index": 1]]])
+
+        var request = URLRequest(url: URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["requests": requests])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.validate(response: response, data: data)
+
+        try await renameDocument(token: token, docId: docId, name: payload.title)
+        return result(for: docId)
+    }
+
+    private func documentEndIndex(token: String, docId: String) async throws -> Int {
+        var components = URLComponents(string: "https://docs.googleapis.com/v1/documents/\(docId)")!
+        components.queryItems = [URLQueryItem(name: "fields", value: "body(content(endIndex))")]
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.validate(response: response, data: data)
+        struct Doc: Decodable {
+            struct Body: Decodable { struct Element: Decodable { let endIndex: Int? }; let content: [Element]? }
+            let body: Body?
+        }
+        let parsed = try JSONDecoder().decode(Doc.self, from: data)
+        return parsed.body?.content?.compactMap(\.endIndex).max() ?? 1
+    }
+
+    private func renameDocument(token: String, docId: String, name: String) async throws {
+        var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files/\(docId)")!)
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.validate(response: response, data: data)
     }
 
     // MARK: One doc per page
@@ -128,11 +182,11 @@ struct GoogleDocsDestinationClient: DestinationClient {
 
     // MARK: Mock fallback
 
-    private func writeWithMock(config: GoogleDocsDestinationConfig, payload: DestinationPayload) async throws -> DestinationWriteResult {
+    private func writeWithMock(config: GoogleDocsDestinationConfig, payload: DestinationPayload, existingId: String?) async throws -> DestinationWriteResult {
         try await Task.sleep(nanoseconds: 200_000_000)
-        let id = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20)
+        let id = existingId ?? String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20))
         return DestinationWriteResult(
-            externalId: String(id),
+            externalId: id,
             externalURL: URL(string: "https://docs.google.com/document/d/\(id)/edit"),
             notes: "Mock Google Docs write (no account connected)."
         )

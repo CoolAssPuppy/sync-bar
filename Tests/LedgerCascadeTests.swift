@@ -79,6 +79,23 @@ final class LedgerCascadeTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    func test_records_and_resets_external_ids_for_update_in_place() {
+        let ledger = Ledger.shared
+        ledger.recordSyncedPage(bindingId: "b1", pageId: "f1", versionHash: "h1", externalId: "notion-page-1")
+
+        XCTAssertEqual(ledger.syncedHash(bindingId: "b1", pageId: "f1"), "h1")
+        XCTAssertEqual(ledger.syncedExternalId(bindingId: "b1", pageId: "f1"), "notion-page-1")
+
+        // An edit changes the hash but should keep targeting the same note.
+        ledger.recordSyncedPage(bindingId: "b1", pageId: "f1", versionHash: "h2", externalId: "notion-page-1")
+        XCTAssertEqual(ledger.syncedHash(bindingId: "b1", pageId: "f1"), "h2")
+        XCTAssertEqual(ledger.syncedExternalId(bindingId: "b1", pageId: "f1"), "notion-page-1")
+
+        ledger.resetSyncDatabase()
+        XCTAssertNil(ledger.syncedHash(bindingId: "b1", pageId: "f1"))
+        XCTAssertNil(ledger.syncedExternalId(bindingId: "b1", pageId: "f1"))
+    }
+
     func test_updateBindingRunResult_skips_unchanged_writes() {
         let ledger = Ledger.shared
         var rule = SyncRule.new(notebookId: "nb-update", notebookName: "Update test")

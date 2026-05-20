@@ -235,9 +235,10 @@ final class SyncCoordinator: ObservableObject {
                 pageNumber: 1
             )
             do {
-                let result = try await client.write(payload: payload, configuration: binding.configuration)
+                let existingId = ledger.syncedExternalId(bindingId: binding.id, pageId: file.id)
+                let result = try await client.write(payload: payload, configuration: binding.configuration, existingExternalId: existingId)
                 notesSynced += 1
-                ledger.recordSyncedPage(bindingId: binding.id, pageId: file.id, versionHash: file.versionHash)
+                ledger.recordSyncedPage(bindingId: binding.id, pageId: file.id, versionHash: file.versionHash, externalId: result.externalId)
                 ledger.appendEvent(makeEvent(
                     rule: rule, binding: binding, folderName: folderName, type: .pageSynced,
                     noteId: file.id, noteName: file.name, url: result.externalURL?.absoluteString,

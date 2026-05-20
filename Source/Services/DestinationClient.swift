@@ -31,7 +31,11 @@ struct DestinationWriteResult: Sendable {
 
 protocol DestinationClient: Sendable {
     var kind: DestinationKind { get }
-    func write(payload: DestinationPayload, configuration: DestinationConfiguration) async throws -> DestinationWriteResult
+    /// Writes one note to the destination. When `existingExternalId` is non-nil,
+    /// the note was synced before and should be updated in place (same Notion
+    /// page, Google doc, Linear issue, Apple Notes note, or Markdown file) rather
+    /// than created anew. Clients fall back to creating if the prior note is gone.
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult
 }
 
 /// Errors raised by destination clients. Each case is destination-domain

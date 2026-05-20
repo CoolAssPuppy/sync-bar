@@ -238,12 +238,12 @@ struct WelcomeView: View {
         do {
             let workspace = try await NotionAuthService.shared.connect()
             ledger.upsertNotionWorkspace(workspace)
-            Telemetry.capture("destination.connected", properties: ["provider": "notion"])
+            Telemetry.capture("destination.connected", properties: ["provider": DestinationKind.notion.rawValue])
             step = .done
         } catch OAuthError.userCancelled {
             // User backed out of the browser flow; stay on this step.
         } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": "notion"])
+            Telemetry.capture("destination.connect_failed", properties: ["provider": DestinationKind.notion.rawValue])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }

@@ -226,52 +226,40 @@ struct AddDestinationSheet: View {
     }
 
     private func connectGoogle() async {
-        isConnecting = true
-        errorMessage = nil
-        defer { isConnecting = false }
-        do {
-            let account = try await GoogleAuthService.shared.connect()
-            ledger.upsertGoogleAccount(account)
-            Telemetry.capture("destination.connected", properties: ["provider": "googleDocs"])
-            isPresented = false
-        } catch OAuthError.userCancelled {
-            // User backed out; leave the sheet open.
-        } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": "googleDocs"])
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        await connect(.googleDocs) {
+            ledger.upsertGoogleAccount(try await GoogleAuthService.shared.connect())
         }
     }
 
     private func connectNotion() async {
-        isConnecting = true
-        errorMessage = nil
-        defer { isConnecting = false }
-        do {
-            let workspace = try await NotionAuthService.shared.connect()
-            ledger.upsertNotionWorkspace(workspace)
-            Telemetry.capture("destination.connected", properties: ["provider": "notion"])
-            isPresented = false
-        } catch OAuthError.userCancelled {
-            // User backed out; leave the sheet open.
-        } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": "notion"])
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        await connect(.notion) {
+            ledger.upsertNotionWorkspace(try await NotionAuthService.shared.connect())
         }
     }
 
     private func connectLinear() async {
+        await connect(.linear) {
+            for account in try await LinearAuthService.shared.connect() {
+                ledger.upsertLinearAccount(account)
+            }
+        }
+    }
+
+    /// Shared OAuth connect flow: flips the connecting flag, records analytics,
+    /// dismisses on success, and leaves the sheet open with no error when the
+    /// user cancels the web flow.
+    private func connect(_ kind: DestinationKind, perform: () async throws -> Void) async {
         isConnecting = true
         errorMessage = nil
         defer { isConnecting = false }
         do {
-            let accounts = try await LinearAuthService.shared.connect()
-            for account in accounts { ledger.upsertLinearAccount(account) }
-            Telemetry.capture("destination.connected", properties: ["provider": "linear"])
+            try await perform()
+            Telemetry.capture("destination.connected", properties: ["provider": kind.rawValue])
             isPresented = false
         } catch OAuthError.userCancelled {
             // User backed out of the web flow; leave the sheet open, no error.
         } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": "linear"])
+            Telemetry.capture("destination.connect_failed", properties: ["provider": kind.rawValue])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -290,7 +278,7 @@ struct AddDestinationSheet: View {
                     folderName: "Sync Bar",
                     connectedAt: Date()
                 ))
-                Telemetry.capture("destination.connected", properties: ["provider": "appleNotes"])
+                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
             }
             isPresented = false
         case .markdownFolder:
@@ -303,7 +291,7 @@ struct AddDestinationSheet: View {
                     folderPath: "",
                     connectedAt: Date()
                 ))
-                Telemetry.capture("destination.connected", properties: ["provider": "markdownFolder"])
+                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
             }
             isPresented = false
         }

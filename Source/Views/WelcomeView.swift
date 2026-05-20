@@ -15,13 +15,11 @@ struct WelcomeView: View {
 
     @State private var step: Step = .welcome
     @State private var oneTimeCode: String = ""
-    @State private var workspaceLabel: String = ""
     @State private var isPairing: Bool = false
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
     private let remarkable = MockRemarkableClient()
-    private let notion = MockNotionClient()
 
     enum Step {
         case welcome
@@ -141,12 +139,23 @@ struct WelcomeView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(theme.muted)
 
-                TextField("Workspace label (e.g. Personal)", text: $workspaceLabel)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
+                if !AuthSecrets.isNotionConfigured {
+                    Text("Notion OAuth isn't configured in this build. Add its client credentials (see the README) and rebuild, or skip for now.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.warning)
+                }
+                if let errorMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(theme.destructive)
+                        Text(errorMessage)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(theme.destructive)
+                    }
+                }
 
                 HStack(spacing: 10) {
-                    AppPrimaryButton(title: isConnecting ? "Connecting…" : "Connect Notion", systemImage: "link", isDisabled: isConnecting) {
+                    AppPrimaryButton(title: isConnecting ? "Connecting…" : "Connect Notion", systemImage: "link", isDisabled: isConnecting || !AuthSecrets.isNotionConfigured) {
                         Task { await connectNotion() }
                     }
                     AppSecondaryButton(title: "I'll do this later") {
@@ -225,14 +234,16 @@ struct WelcomeView: View {
 
     private func connectNotion() async {
         isConnecting = true
+        errorMessage = nil
         defer { isConnecting = false }
         do {
-            let workspace = try await notion.connectMockWorkspace(label: workspaceLabel)
+            let workspace = try await NotionAuthService.shared.connect()
             ledger.upsertNotionWorkspace(workspace)
-            workspaceLabel = ""
             step = .done
+        } catch OAuthError.userCancelled {
+            // User backed out of the browser flow; stay on this step.
         } catch {
-            errorMessage = Formatters.userMessage(for: error)
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

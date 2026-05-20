@@ -61,19 +61,6 @@ struct MockNotionClient: NotionClient {
         ]
     ]
 
-    func connectMockWorkspace(label: String) async throws -> NotionWorkspace {
-        try await Task.sleep(nanoseconds: 500_000_000)
-        let id = "ws-" + UUID().uuidString.prefix(8).lowercased()
-        return NotionWorkspace(
-            id: id,
-            workspaceName: label.isEmpty ? "Personal" : label,
-            workspaceIcon: ["🪐", "🛰", "🌌", "📡"].randomElement(),
-            botId: "bot-\(id)",
-            connectedAt: Date(),
-            lastCatalogRefreshAt: Date()
-        )
-    }
-
     func listDestinations(workspaceId: String) async throws -> [NotionDestination] {
         try await Task.sleep(nanoseconds: 200_000_000)
         return Self.presetDestinations["default", default: []]

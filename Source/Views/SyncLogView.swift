@@ -20,13 +20,13 @@ struct SyncLogView: View {
             if filteredEvents.isEmpty {
                 emptyState
             } else {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: 4) {
                     ForEach(filteredEvents) { event in
                         EventRow(event: event)
                     }
                 }
                 .padding(.horizontal, 24)
-                .padding(.vertical, 14)
+                .padding(.vertical, 12)
             }
         }
         .background(theme.background)
@@ -80,70 +80,93 @@ private struct EventRow: View {
                 .contentShape(Rectangle())
                 .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }
             if isExpanded {
-                Divider().background(theme.border).padding(.top, 10).padding(.bottom, 8)
+                Divider().background(theme.border).padding(.top, 8).padding(.bottom, 6)
                 expandedDetails
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .background(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                 .fill(theme.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous)
+            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
                 .strokeBorder(theme.border, lineWidth: 1)
         )
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            kindBadge
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(event.ruleName ?? event.eventType.label)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.foreground)
-                    if let provider = event.ocrProvider, !provider.isEmpty {
-                        Text(provider)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(theme.tertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(theme.cardElevated))
-                    }
-                    Spacer(minLength: 6)
-                    Text(Formatters.logRowLabel(for: event.occurredAt))
-                        .font(.system(size: 10))
-                        .foregroundStyle(theme.tertiary)
-                        .monospacedDigit()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(theme.tertiary)
-                }
+        HStack(spacing: 10) {
+            Image(systemName: badgeIcon(for: event.eventType))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(badgeColor(for: statusKind))
+                .frame(width: 16)
 
-                Text(detailLine)
+            // Sync from → to (folder → destination).
+            Text(event.ruleName ?? event.eventType.label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.foreground)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(2)
+
+            // The note (file), linked to its artifact when available.
+            filenameView
+                .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            Text(Formatters.logRowLabel(for: event.occurredAt))
+                .font(.system(size: 10))
+                .foregroundStyle(theme.tertiary)
+                .monospacedDigit()
+                .frame(minWidth: 58, alignment: .trailing)
+
+            Text(durationLabel)
+                .font(.system(size: 10))
+                .foregroundStyle(theme.tertiary)
+                .monospacedDigit()
+                .frame(width: 50, alignment: .trailing)
+
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(theme.tertiary)
+                .frame(width: 10)
+        }
+    }
+
+    @ViewBuilder
+    private var filenameView: some View {
+        if let name = event.rmNotebookName, !name.isEmpty {
+            if let url = event.notionPageUrl.flatMap(URL.init(string:)) {
+                Button(action: { NSWorkspace.shared.open(url) }) {
+                    HStack(spacing: 3) {
+                        Text(name)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(theme.primary)
+                }
+                .buttonStyle(.plain)
+                .help(url.absoluteString)
+            } else {
+                Text(name)
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
-                    .lineLimit(isExpanded ? nil : 2)
-                    .textSelection(.enabled)
-
-                if let url = event.notionPageUrl.flatMap(URL.init(string:)) {
-                    Button(action: { NSWorkspace.shared.open(url) }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.up.right.square")
-                                .font(.system(size: 9))
-                            Text(url.absoluteString)
-                                .font(.system(size: 10))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        .foregroundStyle(theme.primary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
+    }
+
+    private var durationLabel: String {
+        guard let ms = event.durationMs else { return "" }
+        if ms < 1000 { return "\(ms)ms" }
+        return String(format: "%.1fs", Double(ms) / 1000)
     }
 
     private var expandedDetails: some View {
@@ -200,35 +223,15 @@ private struct EventRow: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { didCopy = false }
     }
 
-    private var detailLine: String {
-        if let error = event.errorMessage, !error.isEmpty { return error }
-        var parts: [String] = []
-        if let notebook = event.rmNotebookName, !notebook.isEmpty { parts.append(notebook) }
-        if event.eventType == .pageSynced, let pageId = event.rmPageId { parts.append("page \(pageId)") }
-        if let duration = event.durationMs { parts.append("\(duration) ms") }
-        if parts.isEmpty { return event.eventType.label }
-        return parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder
-    private var kindBadge: some View {
-        let kind: StatusPill.Kind = {
-            switch event.eventType {
-            case .pageSynced:       return .success
-            case .pageFailed:       return .destructive
-            case .ruleRunStarted:   return .info
-            case .ruleRunCompleted: return .info
-            case .tokenRefreshed:   return .neutral
-            case .orphanDetected:   return .warning
-            }
-        }()
-        ZStack {
-            Circle().fill(badgeColor(for: kind).opacity(0.18))
-            Image(systemName: badgeIcon(for: event.eventType))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(badgeColor(for: kind))
+    private var statusKind: StatusPill.Kind {
+        switch event.eventType {
+        case .pageSynced:       return .success
+        case .pageFailed:       return .destructive
+        case .ruleRunStarted:   return .info
+        case .ruleRunCompleted: return .info
+        case .tokenRefreshed:   return .neutral
+        case .orphanDetected:   return .warning
         }
-        .frame(width: 28, height: 28)
     }
 
     private func badgeColor(for kind: StatusPill.Kind) -> Color {

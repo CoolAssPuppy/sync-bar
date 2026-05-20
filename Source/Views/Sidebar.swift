@@ -58,25 +58,14 @@ struct Sidebar: View {
     private var brandHeader: some View {
         HStack(spacing: 10) {
             BrandMark()
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Sync Bar")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.muted)
-            }
+            Text("Sync Bar")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.foreground)
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.top, 28)
         .padding(.bottom, 10)
-    }
-
-    private var subtitle: String {
-        if ledger.remarkableAccount == nil { return "Setup required" }
-        let total = ledger.rules.reduce(0) { $0 + $1.destinations.count }
-        return total == 0 ? "Add a destination" : "\(total) destination\(total == 1 ? "" : "s")"
     }
 
     // MARK: Source
@@ -86,7 +75,7 @@ struct Sidebar: View {
             sectionLabel("Source")
             AccountRow(
                 title: "reMarkable",
-                subtitle: ledger.remarkableAccount.map { "Paired \(Formatters.relativeLabel(for: $0.pairedAt))" } ?? "Not connected",
+                subtitle: ledger.remarkableAccount == nil ? "Not connected" : "",
                 icon: .systemSymbol("pencil.tip.crop.circle", accent: ledger.remarkableAccount != nil),
                 isSelected: selection == .remarkable
             )
@@ -327,10 +316,12 @@ private struct AccountRow: View {
                     .foregroundStyle(isSelected ? theme.foreground : theme.foregroundSoft)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.tertiary)
-                    .lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.tertiary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 6)

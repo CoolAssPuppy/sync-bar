@@ -47,7 +47,6 @@ struct RuleSliderView: View {
             Rectangle().fill(theme.divider).frame(width: 1),
             alignment: .leading
         )
-        .shadow(color: .black.opacity(0.35), radius: 18, x: -6, y: 0)
         .sheet(isPresented: Binding(
             get: { existingBindingIdToEdit != nil },
             set: { if !$0 { existingBindingIdToEdit = nil } }

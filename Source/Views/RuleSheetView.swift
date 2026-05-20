@@ -371,10 +371,18 @@ private struct RuleDestinationRow: View {
             DestinationIcon(kind: binding.kind, size: 30)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(binding.configuration.summary)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(binding.configuration.summary)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground)
+                        .lineLimit(1)
+                    if hasError {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(theme.destructive)
+                            .help(binding.lastRunError ?? "Last sync failed")
+                    }
+                }
                 Text(binding.kind.label)
                     .font(.system(size: 10))
                     .foregroundStyle(theme.muted)
@@ -386,11 +394,13 @@ private struct RuleDestinationRow: View {
 
             Spacer(minLength: 8)
 
-            Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
-                .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
             AppIconButton(systemName: "pencil", help: "Edit", action: onEdit)
             AppIconButton(systemName: "arrow.triangle.2.circlepath", help: "Sync now", spinOnTap: true, action: onSync)
             AppIconButton(systemName: "trash", help: "Remove", tint: .destructive, action: onRemove)
+
+            Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                .padding(.leading, 4)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -416,5 +426,10 @@ private struct RuleDestinationRow: View {
         case .success: return theme.success
         default:       return theme.muted
         }
+    }
+
+    private var hasError: Bool {
+        if case .error = binding.lastRunStatus { return true }
+        return !(binding.lastRunError ?? "").isEmpty
     }
 }

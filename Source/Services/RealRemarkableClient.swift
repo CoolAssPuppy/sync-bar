@@ -235,6 +235,21 @@ struct RealRemarkableClient: RemarkableClient {
     // MARK: Auth
 
     private func authedData(path: String, rmFilename: String? = nil) async throws -> Data {
+        var (data, response) = try await send(path: path, rmFilename: rmFilename)
+        if (response as? HTTPURLResponse)?.statusCode == 401 {
+            // The user token is short-lived (a few hours); the device token is
+            // long-lived. A 401 almost always means the cached user token
+            // expired — drop it, mint a fresh one from the device token, and
+            // retry once before declaring the device unpaired.
+            Log.remarkable.info("user token rejected (401); refreshing from device token and retrying")
+            keychain.delete(key: .remarkableUserToken)
+            (data, response) = try await send(path: path, rmFilename: rmFilename)
+        }
+        try Self.validate(response: response, data: data)
+        return data
+    }
+
+    private func send(path: String, rmFilename: String?) async throws -> (Data, URLResponse) {
         let token = try await refreshUserTokenIfNeeded()
         var request = URLRequest(url: Self.cloudBase.appendingPathComponent(path))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -247,8 +262,7 @@ struct RealRemarkableClient: RemarkableClient {
         if !(200..<300).contains(status) {
             Log.remarkable.error("GET \(path, privacy: .public) body: \(String(decoding: data, as: UTF8.self).prefix(300), privacy: .public)")
         }
-        try Self.validate(response: response, data: data)
-        return data
+        return (data, response)
     }
 
     private func refreshUserTokenIfNeeded() async throws -> String {

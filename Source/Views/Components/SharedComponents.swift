@@ -296,21 +296,26 @@ struct DestinationIcon: View {
 // MARK: - Brand mark
 
 struct BrandMark: View {
-    @Environment(\.theme) private var theme
-
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [theme.primary, theme.primaryDeep],
+                        colors: [Color(red: 0x28 / 255, green: 0x28 / 255, blue: 0x28 / 255),
+                                 Color(red: 0x16 / 255, green: 0x16 / 255, blue: 0x16 / 255)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            Image("MenuBarIconSyncing")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: 14, height: 14)
         }
         .frame(width: 22, height: 22)
     }

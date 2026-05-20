@@ -113,7 +113,14 @@ struct MainView: View {
             let client = RemarkableClientFactory.make()
             do {
                 let notebooks = try await client.listNotebooks()
-                await MainActor.run { ledger.setNotebooks(notebooks) }
+                await MainActor.run {
+                    ledger.setNotebooks(notebooks)
+                    // Clean up rules left pointing at folders that no longer
+                    // exist (e.g. orphaned by the folder/file model change).
+                    if !notebooks.isEmpty {
+                        ledger.pruneRules(keepingFolderIds: Set(notebooks.map(\.id)))
+                    }
+                }
             } catch {
                 Log.ui.error("Notebook refresh failed: \(String(describing: error), privacy: .public)")
             }

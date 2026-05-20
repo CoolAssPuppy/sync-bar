@@ -221,6 +221,16 @@ final class Ledger: ObservableObject {
         rules.first { $0.rmNotebookId == notebookId }
     }
 
+    /// Drops rules whose folder is no longer present (e.g. orphaned by the
+    /// folder/file model change or a deleted folder). Only call with a fully
+    /// loaded, non-empty folder list so a transient fetch can't wipe rules.
+    func pruneRules(keepingFolderIds folderIds: Set<String>) {
+        let orphaned = rules.filter { !folderIds.contains($0.rmNotebookId) }
+        guard !orphaned.isEmpty else { return }
+        for rule in orphaned { deleteRule(id: rule.id) }
+        Log.ledger.info("Pruned \(orphaned.count, privacy: .public) orphaned rule(s)")
+    }
+
     // MARK: Rename helpers (header drawer entry points)
 
     func renameNotionWorkspace(id: String, newName: String) {

@@ -170,7 +170,11 @@ struct NotionDestinationClient: DestinationClient {
             guard let name = optionNames().first else { return nil }
             return ["status": ["name": name]]
         case "multi_select":
+            // Notion forbids commas in option names; a comma-joined value means
+            // several options, so split and trim into discrete ones.
             let names = optionNames()
+                .flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+                .filter { !$0.isEmpty }
             return names.isEmpty ? nil : ["multi_select": names.map { ["name": $0] }]
         case "date":
             return ["date": ["start": ISO8601DateFormatter().string(from: resolvedDate())]]

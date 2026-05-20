@@ -1,7 +1,7 @@
 {
   "images" : [
-    { "filename" : "AppleNotes.png", "idiom" : "mac", "scale" : "1x" },
-    { "filename" : "AppleNotes@2x.png", "idiom" : "mac", "scale" : "2x" }
+    { "filename" : "apple-notes.svg", "idiom" : "universal" }
   ],
-  "info" : { "author" : "xcode", "version" : 1 }
+  "info" : { "author" : "xcode", "version" : 1 },
+  "properties" : { "preserves-vector-representation" : true }
 }

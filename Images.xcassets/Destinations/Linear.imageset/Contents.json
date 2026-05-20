@@ -1,7 +1,7 @@
 {
   "images" : [
-    { "filename" : "Linear.png", "idiom" : "mac", "scale" : "1x" },
-    { "filename" : "Linear@2x.png", "idiom" : "mac", "scale" : "2x" }
+    { "filename" : "linear.svg", "idiom" : "universal" }
   ],
-  "info" : { "author" : "xcode", "version" : 1 }
+  "info" : { "author" : "xcode", "version" : 1 },
+  "properties" : { "preserves-vector-representation" : true }
 }

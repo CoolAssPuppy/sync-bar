@@ -1,7 +1,7 @@
 {
   "images" : [
-    { "filename" : "GoogleDocs.png", "idiom" : "mac", "scale" : "1x" },
-    { "filename" : "GoogleDocs@2x.png", "idiom" : "mac", "scale" : "2x" }
+    { "filename" : "google.svg", "idiom" : "universal" }
   ],
-  "info" : { "author" : "xcode", "version" : 1 }
+  "info" : { "author" : "xcode", "version" : 1 },
+  "properties" : { "preserves-vector-representation" : true }
 }

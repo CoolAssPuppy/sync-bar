@@ -410,7 +410,9 @@ struct CodeBoxField: View {
             TextField("", text: Binding(
                 get: { value },
                 set: { newValue in
-                    let cleaned = newValue.uppercased()
+                    // reMarkable codes are lowercase and case-sensitive; keep
+                    // them lowercase so the boxes match the website and pairing.
+                    let cleaned = newValue.lowercased()
                         .filter { $0.isLetter || $0.isNumber }
                     value = String(cleaned.prefix(length))
                 }

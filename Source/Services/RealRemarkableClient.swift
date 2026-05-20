@@ -36,7 +36,8 @@ struct RealRemarkableClient: RemarkableClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let deviceUUID = UUID().uuidString.lowercased()
         let body: [String: Any] = [
-            "code": oneTimeCode.trimmingCharacters(in: .whitespacesAndNewlines),
+            // reMarkable one-time codes are lowercase and case-sensitive.
+            "code": oneTimeCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
             "deviceID": deviceUUID,
             "deviceDesc": "desktop-macos"
         ]

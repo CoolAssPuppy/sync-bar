@@ -11,6 +11,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# OAuth credentials are baked in from Secrets.xcconfig (gitignored). Seed an
+# empty one from the example so the build works before Doppler is wired up;
+# run scripts/pull-secrets.sh to populate it.
+[ -f Secrets.xcconfig ] || cp Secrets.xcconfig.example Secrets.xcconfig
+
 CONFIG="Debug"
 if [ "${1:-}" = "release" ]; then
   CONFIG="Release"

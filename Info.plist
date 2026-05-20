@@ -51,5 +51,17 @@
 	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
+	<key>NotionClientID</key>
+	<string>$(NOTION_CLIENT_ID)</string>
+	<key>NotionClientSecret</key>
+	<string>$(NOTION_CLIENT_SECRET)</string>
+	<key>LinearClientID</key>
+	<string>$(LINEAR_CLIENT_ID)</string>
+	<key>LinearClientSecret</key>
+	<string>$(LINEAR_CLIENT_SECRET)</string>
+	<key>GoogleClientID</key>
+	<string>$(GOOGLE_CLIENT_ID)</string>
+	<key>GoogleClientSecret</key>
+	<string>$(GOOGLE_CLIENT_SECRET)</string>
 </dict>
 </plist>

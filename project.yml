@@ -39,6 +39,9 @@ targets:
   SyncNerds:
     type: application
     platform: macOS
+    configFiles:
+      Debug: Secrets.xcconfig
+      Release: Secrets.xcconfig
     scheme:
       testTargets:
         - SyncNerdsTests

@@ -191,7 +191,6 @@ private struct SyncRuleCard: View {
     let onOpenWindow: () -> Void
 
     @Environment(\.theme) private var theme
-    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -207,11 +206,6 @@ private struct SyncRuleCard: View {
                 Text(secondaryLine)
                     .font(.system(size: 10))
                     .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                // TEMPORARY: explicit notebook name + absolute last-sync date.
-                Text(lastSyncDateLine)
-                    .font(.system(size: 9))
-                    .foregroundStyle(theme.tertiary)
                     .lineLimit(1)
             }
 
@@ -231,7 +225,6 @@ private struct SyncRuleCard: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1)
         )
-        .onHover { isHovered = $0 }
         .contentShape(Rectangle())
         .onTapGesture { onOpenWindow() }
     }
@@ -246,14 +239,6 @@ private struct SyncRuleCard: View {
             return "\(resultLabel) · \(Formatters.relativeLabel(for: lastRun))"
         }
         return destinationsLabel + " · never synced"
-    }
-
-    // TEMPORARY: surfaces the notebook name and the exact last-sync timestamp.
-    private var lastSyncDateLine: String {
-        guard let lastRun = rule.aggregateLastRunAt else {
-            return "\(rule.rmNotebookName) · last sync: never"
-        }
-        return "\(rule.rmNotebookName) · last sync: \(lastRun.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

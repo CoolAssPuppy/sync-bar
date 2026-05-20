@@ -61,7 +61,7 @@ final class LoopbackOAuthServer: @unchecked Sendable {
             guard let self else { return }
             if let data, let request = String(data: data, encoding: .utf8) {
                 let items = Self.parseQuery(fromRequestLine: request)
-                let body = "<!doctype html><html><body style=\"font-family:-apple-system,Helvetica,sans-serif;text-align:center;padding:48px;\"><h2>Sync Bar is connected.</h2><p>You can close this window and return to the app.</p></body></html>"
+                let body = Self.successPageHTML
                 let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
                     connection.cancel()
@@ -87,6 +87,48 @@ final class LoopbackOAuthServer: @unchecked Sendable {
         case .failure(let error): continuation?.resume(throwing: error)
         }
     }
+
+    /// Branded "connected" page shown in the browser after the OAuth redirect.
+    /// Strategic Nerds charcoal + yellow; attempts to auto-close the tab and
+    /// falls back to the close-this-window instruction when the browser blocks it.
+    private static let successPageHTML = """
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Sync Bar</title>
+      <style>
+        :root { color-scheme: dark; }
+        html, body { height: 100%; margin: 0; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+          background: #121212; color: #f5f5f5;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .card { text-align: center; padding: 56px 48px; max-width: 420px; }
+        .check {
+          width: 64px; height: 64px; border-radius: 50%; background: #FDB817;
+          display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;
+        }
+        h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+        p { font-size: 14px; line-height: 1.5; color: #a3a3a3; margin: 0; }
+        .brand { margin-top: 32px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #FDB817; font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="check">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h1>Connected</h1>
+        <p>Sync Bar is connected. You can close this window and return to the app.</p>
+        <div class="brand">Sync Bar</div>
+      </div>
+      <script>setTimeout(function () { try { window.close(); } catch (e) {} }, 800);</script>
+    </body>
+    </html>
+    """
 
     /// Parses the query items out of an HTTP request's start line, e.g.
     /// `GET /oauth/notion?code=abc&state=xyz HTTP/1.1`.

@@ -233,26 +233,37 @@ struct Sidebar: View {
         }
     }
 
+    /// The most recent successful-or-failed sync time across all bindings.
+    /// Read from the persisted rules so it survives relaunch (the coordinator's
+    /// in-memory lastTickAt resets to nil on launch).
+    private var lastSyncDate: Date? {
+        ledger.rules.flatMap(\.destinations).compactMap(\.lastRunAt).max()
+    }
+
+    private var hasRemarkable: Bool { ledger.remarkableAccount != nil }
+
+    private var hasSyncIssues: Bool {
+        ledger.rules.flatMap(\.destinations).contains { $0.lastRunStatus == .error }
+    }
+
     private var statusDot: Color {
         if coordinator.isSyncing { return theme.primary }
-        if AppSettings.shared.pauseSyncing { return theme.warning }
-        if ledger.rules.contains(where: { !$0.destinations.isEmpty }) { return theme.success }
-        return theme.tertiary
+        if !hasRemarkable { return theme.destructive }
+        if hasSyncIssues { return theme.warning }
+        return theme.success
     }
 
     private var statusPrimary: String {
-        if coordinator.isSyncing { return "Syncing now" }
-        if let last = coordinator.lastTickAt { return "Last synced \(Formatters.relativeLabel(for: last))" }
-        if ledger.rules.isEmpty { return "No rules yet" }
-        return "Never synced"
+        if !hasRemarkable { return "Not connected" }
+        if hasSyncIssues { return "Issues with reMarkable" }
+        return "Connected to reMarkable"
     }
 
     private var statusSecondary: String {
+        if coordinator.isSyncing { return "Syncing now…" }
         if AppSettings.shared.pauseSyncing { return "Syncing paused" }
-        if let next = coordinator.nextTickAt {
-            return "Next at \(Formatters.shortTime.string(from: next))"
-        }
-        return "Manual only"
+        guard let last = lastSyncDate else { return "Last sync: never" }
+        return "Last sync: \(Formatters.relativeLabel(for: last))"
     }
 
     private func footerButton(systemName: String,

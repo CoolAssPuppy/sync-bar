@@ -52,7 +52,20 @@ struct MainView: View {
         .environment(\.theme, theme)
         .environment(\.colorScheme, theme.isDark ? .dark : .light)
         .onAppear {
-            if ledger.notebooks.isEmpty && ledger.remarkableAccount != nil {
+            // The device token is the source of truth for "paired". If an
+            // account lingers without a token (e.g. the token was lost), the app
+            // would otherwise show the mock client's sample notebooks as if they
+            // were real. Reset that half-paired state so the pairing screen
+            // returns and the user can re-pair.
+            let hasToken = KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
+            if ledger.remarkableAccount != nil && !hasToken {
+                Log.ui.info("reMarkable account present but no device token — resetting to unpaired")
+                ledger.setRemarkableAccount(nil)
+                ledger.setNotebooks([])
+            }
+            // Always pull from reMarkable when genuinely paired so the live
+            // library is authoritative (and stale notebooks can't mask it).
+            if ledger.remarkableAccount != nil {
                 refreshNotebooks()
             }
             if ledger.remarkableAccount == nil && ledger.notionWorkspaces.isEmpty {

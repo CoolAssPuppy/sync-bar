@@ -74,9 +74,9 @@ CREATE_DMG_ARGS=(
   --volname "$APP_NAME"
   --window-pos 200 120
   --window-size 660 400
-  --icon-size 96
-  --icon "$APP_NAME.app" 355 200
-  --app-drop-link 555 200
+  --icon-size 90
+  --icon "$APP_NAME.app" 377 184
+  --app-drop-link 595 184
   --hide-extension "$APP_NAME.app"
   --no-internet-enable
   --hdiutil-quiet

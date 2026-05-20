@@ -50,7 +50,7 @@ struct NotebookListView: View {
             }
             Spacer()
 
-            AppIconButton(systemName: "arrow.clockwise", help: "Refresh notebooks", spinOnTap: true) {
+            AppIconButton(systemName: "arrow.clockwise", help: "Refresh folders", spinOnTap: true) {
                 onRefresh()
             }
             AppIconButton(systemName: "arrow.triangle.2.circlepath",
@@ -66,11 +66,11 @@ struct NotebookListView: View {
 
     private var headerSubtitle: String {
         if ledger.remarkableAccount == nil {
-            return "Pair your reMarkable to see notebooks"
+            return "Pair your reMarkable to see folders"
         }
         let total = ledger.notebooks.count
         let synced = ledger.rules.count
-        return "\(total) notebook\(total == 1 ? "" : "s") · \(synced) rule\(synced == 1 ? "" : "s")"
+        return "\(total) folder\(total == 1 ? "" : "s") · \(synced) rule\(synced == 1 ? "" : "s")"
     }
 
     // MARK: Pair / empty states
@@ -121,10 +121,10 @@ struct NotebookListView: View {
             Image(systemName: "books.vertical")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(theme.muted)
-            Text("No Notebooks Found")
+            Text("No Folders Found")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
-            Text("Pull down to refresh, or create a notebook on your reMarkable.")
+            Text("Create a folder on your reMarkable and put your notes inside it, then refresh.")
                 .font(.system(size: 12))
                 .foregroundStyle(theme.muted)
             AppSecondaryButton(title: "Refresh", systemImage: "arrow.clockwise", action: onRefresh)
@@ -220,7 +220,7 @@ private struct NotebookRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(theme.tertiary)
                     }
-                    Text("\(notebook.pageCount) page\(notebook.pageCount == 1 ? "" : "s")")
+                    Text("\(notebook.pageCount) note\(notebook.pageCount == 1 ? "" : "s")")
                         .font(.system(size: 10))
                         .foregroundStyle(theme.muted)
                     Text("·")

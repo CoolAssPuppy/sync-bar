@@ -10,9 +10,10 @@ import Foundation
 /// Default template applied when the user picks "Template" but hasn't
 /// customized one yet. Centralized so the rule sheet, engine, and any
 /// future migration code use the same string.
-let defaultTitleTemplate = "{notebook} – page {page_n}"
+let defaultTitleTemplate = "{folder_name} – {notebook}"
 
-/// Pure logic. Decides what to do with a given page for a given rule.
+/// Pure logic. Decides what to do with a given file (note) for a given rule.
+/// A rule targets a folder; each file in it becomes one note.
 struct RulesEngine {
     enum Directive: Equatable {
         case create(title: String)
@@ -21,60 +22,48 @@ struct RulesEngine {
 
     enum SkipReason: String, Equatable {
         case unchanged
-        case ocrEmpty
         case ruleDisabled
-        case ocrSkippedAndPageEmpty
+        case ocrSkippedAndEmpty
     }
 
-    func evaluate(rule: SyncRule, page: RmPage, ocrText: String?, previouslySyncedHash: String?) -> Directive {
+    func evaluate(rule: SyncRule, file: RmFile, folderName: String, ocrText: String?, previouslySyncedHash: String?) -> Directive {
         guard rule.enabled else { return .skip(reason: .ruleDisabled) }
 
-        if let lastHash = previouslySyncedHash, lastHash == page.versionHash {
+        if let lastHash = previouslySyncedHash, lastHash == file.versionHash {
             return .skip(reason: .unchanged)
         }
 
-        if rule.ocrMode == .none && !page.hasTypedText {
-            return .skip(reason: .ocrSkippedAndPageEmpty)
+        let text = (ocrText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if rule.ocrMode == .none && (text.isEmpty || text == "[blank page]") {
+            return .skip(reason: .ocrSkippedAndEmpty)
         }
 
-        let title = resolveTitle(rule: rule, page: page, ocrText: ocrText)
-        return .create(title: title)
+        return .create(title: resolveTitle(rule: rule, file: file, folderName: folderName, ocrText: ocrText))
     }
 
-    func resolveTitle(rule: SyncRule, page: RmPage, ocrText: String?) -> String {
+    func resolveTitle(rule: SyncRule, file: RmFile, folderName: String, ocrText: String?) -> String {
         switch rule.titleStrategy {
+        case .fileName:
+            return file.name.isEmpty ? folderName : file.name
         case .firstLineOfOcr:
             if let firstLine = ocrText?
                 .split(separator: "\n", omittingEmptySubsequences: true)
                 .first
                 .map(String.init)?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-               !firstLine.isEmpty {
+               !firstLine.isEmpty, firstLine != "[blank page]" {
                 return firstLine
             }
-            return fallbackTitle(rule: rule, page: page)
+            return file.name.isEmpty ? folderName : file.name
         case .template:
-            return applyTemplate(rule.titleTemplate ?? defaultTitleTemplate, rule: rule, page: page)
-        case .pageNumber:
-            return "Page \(page.positionInNotebook + 1)"
-        case .rmCreatedDate:
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            return formatter.string(from: page.createdAt)
+            let context = TitleTemplateContext(
+                notebook: file.name,
+                pageNumber: 1,
+                date: file.createdAt,
+                title: file.name,
+                folderName: folderName
+            )
+            return context.apply(to: rule.titleTemplate ?? defaultTitleTemplate)
         }
-    }
-
-    private func fallbackTitle(rule: SyncRule, page: RmPage) -> String {
-        "\(rule.rmNotebookName) · page \(page.positionInNotebook + 1)"
-    }
-
-    private func applyTemplate(_ template: String, rule: SyncRule, page: RmPage) -> String {
-        let context = TitleTemplateContext(
-            notebook: rule.rmNotebookName,
-            pageNumber: page.positionInNotebook + 1,
-            date: page.createdAt,
-            title: ""
-        )
-        return context.apply(to: template)
     }
 }

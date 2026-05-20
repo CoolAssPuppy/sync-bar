@@ -12,20 +12,20 @@ import SwiftUI
 /// that may itself contain tokens.
 enum NoteFieldValue: Equatable, Hashable {
     case noteTitle
-    case notebookName
-    case pageNumber
-    case pageDate
+    case noteName
+    case folderName
+    case noteDate
     case todaysDate
     case custom(String)
 
     var kind: NoteFieldKind {
         switch self {
-        case .noteTitle:    return .noteTitle
-        case .notebookName: return .notebookName
-        case .pageNumber:   return .pageNumber
-        case .pageDate:     return .pageDate
-        case .todaysDate:   return .todaysDate
-        case .custom:       return .custom
+        case .noteTitle:  return .noteTitle
+        case .noteName:   return .noteName
+        case .folderName: return .folderName
+        case .noteDate:   return .noteDate
+        case .todaysDate: return .todaysDate
+        case .custom:     return .custom
         }
     }
 
@@ -38,9 +38,9 @@ enum NoteFieldValue: Equatable, Hashable {
     var token: String {
         switch self {
         case .noteTitle:        return "{title}"
-        case .notebookName:     return "{notebook}"
-        case .pageNumber:       return "{page_n}"
-        case .pageDate:         return "{date}"
+        case .noteName:         return "{notebook}"
+        case .folderName:       return "{folder_name}"
+        case .noteDate:         return "{date}"
         case .todaysDate:       return "{today}"
         case .custom(let text): return text
         }
@@ -48,32 +48,32 @@ enum NoteFieldValue: Equatable, Hashable {
 
     init(token: String) {
         switch token {
-        case "{title}":    self = .noteTitle
-        case "{notebook}": self = .notebookName
-        case "{page_n}":   self = .pageNumber
-        case "{date}":     self = .pageDate
-        case "{today}":    self = .todaysDate
-        default:           self = .custom(token)
+        case "{title}":       self = .noteTitle
+        case "{notebook}":    self = .noteName
+        case "{folder_name}": self = .folderName
+        case "{date}":        self = .noteDate
+        case "{today}":       self = .todaysDate
+        default:              self = .custom(token)
         }
     }
 
     static func make(kind: NoteFieldKind, custom: String) -> NoteFieldValue {
         switch kind {
-        case .noteTitle:    return .noteTitle
-        case .notebookName: return .notebookName
-        case .pageNumber:   return .pageNumber
-        case .pageDate:     return .pageDate
-        case .todaysDate:   return .todaysDate
-        case .custom:       return .custom(custom)
+        case .noteTitle:  return .noteTitle
+        case .noteName:   return .noteName
+        case .folderName: return .folderName
+        case .noteDate:   return .noteDate
+        case .todaysDate: return .todaysDate
+        case .custom:     return .custom(custom)
         }
     }
 }
 
 enum NoteFieldKind: String, CaseIterable, Identifiable {
     case noteTitle
-    case notebookName
-    case pageNumber
-    case pageDate
+    case noteName
+    case folderName
+    case noteDate
     case todaysDate
     case custom
 
@@ -81,12 +81,12 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .noteTitle:    return "Title of note"
-        case .notebookName: return "Notebook name"
-        case .pageNumber:   return "Page number"
-        case .pageDate:     return "Page date"
-        case .todaysDate:   return "Today's date"
-        case .custom:       return "Custom text"
+        case .noteTitle:  return "Title of note"
+        case .noteName:   return "Note name"
+        case .folderName: return "Folder name"
+        case .noteDate:   return "Note date"
+        case .todaysDate: return "Today's date"
+        case .custom:     return "Custom text"
         }
     }
 }

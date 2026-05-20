@@ -73,10 +73,10 @@ struct RuleSliderView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(rule == nil ? "Set Up Sync for This Notebook" : "Edit Sync Rule")
+                Text(rule == nil ? "Set Up Sync for This Folder" : "Edit Sync Rule")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("\(notebook.name) · \(notebook.pageCount) page\(notebook.pageCount == 1 ? "" : "s")")
+                Text("\(notebook.name) · \(notebook.pageCount) note\(notebook.pageCount == 1 ? "" : "s")")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
             }
@@ -118,7 +118,7 @@ struct RuleSliderView: View {
     // MARK: Rule-level settings card
 
     private var ruleSettingsCard: some View {
-        AppCard("Defaults for This Notebook") {
+        AppCard("Defaults for This Folder") {
             VStack(spacing: 0) {
                 AppSettingRow("Title strategy", description: "How each page is titled at every destination.") {
                     Picker("", selection: titleStrategyBinding) {
@@ -131,7 +131,7 @@ struct RuleSliderView: View {
                 }
                 if currentTitleStrategy == .template {
                     AppRowDivider().padding(.vertical, 10)
-                    AppSettingRow("Template", description: "Tokens: {notebook}, {page_n}, {date}") {
+                    AppSettingRow("Template", description: "Tokens: {folder_name}, {notebook}, {date}, {today}") {
                         TextField("Template", text: titleTemplateBinding)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 280)

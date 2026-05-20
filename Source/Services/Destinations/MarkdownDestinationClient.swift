@@ -50,9 +50,10 @@ struct MarkdownDestinationClient: DestinationClient {
             notebook: payload.ruleNotebookName,
             pageNumber: payload.pageNumber,
             date: payload.sourceDate,
-            title: payload.title
+            title: payload.title,
+            folderName: payload.folderName
         )
-        let resolved = context.apply(to: template.isEmpty ? "{notebook}-page-{page_n}" : template)
+        let resolved = context.apply(to: template.isEmpty ? "{notebook}" : template)
         return sanitize(resolved)
     }
 

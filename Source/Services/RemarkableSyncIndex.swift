@@ -41,6 +41,7 @@ struct RemarkableMetadata: Equatable {
     let visibleName: String
     let type: String           // "DocumentType" or "CollectionType"
     let parent: String
+    let createdTime: Date
     let lastModified: Date
     let deleted: Bool
 
@@ -99,16 +100,19 @@ enum RemarkableSyncIndex {
             let visibleName: String?
             let type: String?
             let parent: String?
+            let createdTime: String?
             let lastModified: String?
             let deleted: Bool?
         }
         let raw = try JSONDecoder().decode(Raw.self, from: data)
-        let millis = Double(raw.lastModified ?? "") ?? 0
+        let modifiedMillis = Double(raw.lastModified ?? "") ?? 0
+        let createdMillis = Double(raw.createdTime ?? "") ?? modifiedMillis
         return RemarkableMetadata(
             visibleName: raw.visibleName ?? "Untitled",
             type: raw.type ?? "DocumentType",
             parent: raw.parent ?? "",
-            lastModified: Date(timeIntervalSince1970: millis / 1000),
+            createdTime: Date(timeIntervalSince1970: createdMillis / 1000),
+            lastModified: Date(timeIntervalSince1970: modifiedMillis / 1000),
             deleted: raw.deleted ?? false
         )
     }

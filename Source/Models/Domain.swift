@@ -34,6 +34,23 @@ struct RmPage: Codable, Equatable, Hashable, Identifiable, Sendable {
     var versionHash: String
 }
 
+/// A reMarkable document (a "notebook" file) inside a folder. In Sync Bar's
+/// model a folder is the rule target and each file in it becomes one note: all
+/// of the file's pages are transcribed and combined into a single destination
+/// entry. `versionHash` is the document's content hash, used for idempotency.
+struct RmFile: Codable, Equatable, Hashable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var folderId: String
+    var createdAt: Date
+    var lastModified: Date
+    var pageCount: Int
+    var versionHash: String
+}
+
+/// Sentinel folder id for files that live at the cloud root (no folder).
+let unfiledFolderId = "__unfiled__"
+
 // MARK: - Notion
 
 struct NotionWorkspace: Codable, Equatable, Identifiable, Hashable {
@@ -67,19 +84,17 @@ struct NotionDatabaseProperty: Codable, Equatable, Hashable {
 // MARK: - Sync rule
 
 enum TitleStrategy: String, Codable, CaseIterable, Identifiable {
+    case fileName
     case firstLineOfOcr
     case template
-    case pageNumber
-    case rmCreatedDate
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
+        case .fileName:       return "File name"
         case .firstLineOfOcr: return "First line of OCR"
         case .template:       return "Template"
-        case .pageNumber:     return "Page number"
-        case .rmCreatedDate:  return "reMarkable date"
         }
     }
 }

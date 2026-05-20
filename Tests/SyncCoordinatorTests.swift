@@ -36,7 +36,7 @@ final class SyncCoordinatorTests: XCTestCase {
         ]
         ledger.upsertRule(rule)
 
-        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
         coordinator.syncNow(ruleId: rule.id)
 
         try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -64,7 +64,7 @@ final class SyncCoordinatorTests: XCTestCase {
         rule.destinations = [markdownBinding(folderPath: unwritable)]
         ledger.upsertRule(rule)
 
-        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
 
@@ -86,9 +86,9 @@ final class SyncCoordinatorTests: XCTestCase {
         let folder = makeTempFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
 
-        // Occupy the slot for page 2's file with a non-empty directory so only
-        // that page's write throws; pages 1 and 3 still succeed.
-        let blocked = folder.appendingPathComponent("Test-page-2.md", isDirectory: true)
+        // Occupy the slot for the middle note's file with a non-empty directory
+        // so only that write throws; the other two notes still succeed.
+        let blocked = folder.appendingPathComponent("note1-page-1.md", isDirectory: true)
         try? FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: blocked.appendingPathComponent("keep.txt").path,
                                        contents: Data("x".utf8))
@@ -97,7 +97,7 @@ final class SyncCoordinatorTests: XCTestCase {
         rule.destinations = [markdownBinding(folderPath: folder.path)]
         ledger.upsertRule(rule)
 
-        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
 
@@ -128,7 +128,7 @@ final class SyncCoordinatorTests: XCTestCase {
         rule.destinations = [markdownBinding(folderPath: folder.path)]
         ledger.upsertRule(rule)
 
-        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
         XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
@@ -161,7 +161,7 @@ final class SyncCoordinatorTests: XCTestCase {
         rule.destinations = [binding]
         ledger.upsertRule(rule)
 
-        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
         XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
@@ -218,26 +218,42 @@ final class SyncCoordinatorTests: XCTestCase {
 /// the SyncCoordinator test pin the page count without relying on the
 /// shared mock fixture.
 private struct ScriptedRemarkableClient: RemarkableClient {
-    let pages: Int
+    /// Number of files (notes) in the folder; each has a single page so one
+    /// note is produced per file.
+    let files: Int
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {
         RemarkableAccount(pairedAt: Date(), userIdentifier: "test", lastSyncedAt: nil)
     }
 
-    func listNotebooks() async throws -> [RmNotebook] { [] }
+    func listNotebooks() async throws -> [RmNotebook] {
+        [RmNotebook(id: "folder-test", name: "Test", parentFolder: nil, lastModified: Date(), pageCount: files)]
+    }
 
-    func listPages(notebookId: String) async throws -> [RmPage] {
-        (0..<pages).map { index in
-            RmPage(
-                notebookId: notebookId,
-                pageId: "page-\(index)",
-                positionInNotebook: index,
+    func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
+        (0..<files).map { index in
+            RmFile(
+                id: "file-\(index)",
+                name: "note\(index)",
+                folderId: folderId,
                 createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-                modifiedAt: Date(timeIntervalSince1970: 1_700_001_000),
-                hasTypedText: true,
-                versionHash: "hash-\(index)"
+                lastModified: Date(timeIntervalSince1970: 1_700_001_000),
+                pageCount: 1,
+                versionHash: "file-hash-\(index)"
             )
         }
+    }
+
+    func listPages(notebookId: String) async throws -> [RmPage] {
+        [RmPage(
+            notebookId: notebookId,
+            pageId: "page-0",
+            positionInNotebook: 0,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            modifiedAt: Date(timeIntervalSince1970: 1_700_001_000),
+            hasTypedText: true,
+            versionHash: "page-\(notebookId)"
+        )]
     }
 
     func pageImage(for page: RmPage) async throws -> Data? { nil }

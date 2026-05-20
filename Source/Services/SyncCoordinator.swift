@@ -118,200 +118,158 @@ final class SyncCoordinator: ObservableObject {
         ])
     }
 
-    /// Maximum number of destinations we sync in parallel within one rule.
-    /// Apple Notes uses AppleScript and gets cranky under contention; three
-    /// is a comfortable ceiling.
-    private static let maxBindingConcurrency = 3
-
     private func runRule(_ rule: SyncRule, restrictedToBindingId: String?) async {
-        var pages: [RmPage] = []
+        let folderName = rule.rmNotebookName
+        var files: [RmFile] = []
         do {
-            pages = try await remarkable.listPages(notebookId: rule.rmNotebookId)
+            files = try await remarkable.listFiles(inFolderId: rule.rmNotebookId)
         } catch {
             recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))
             return
         }
 
-        // OCR once per page (one transcription, fanned out to every binding)
-        // instead of once per (page × binding). Same image, same model, same
-        // result, so destination-count multiplies cost without value.
+        let bindings = rule.destinations.filter { binding in
+            binding.enabled && (restrictedToBindingId == nil || binding.id == restrictedToBindingId)
+        }
+        guard !bindings.isEmpty, !files.isEmpty else { return }
+
+        // OCR each file once (combining all its pages into one transcript),
+        // reused across every binding — provider cost shouldn't scale with
+        // destination count.
         let ocr = OcrProviderFactory.make(
             provider: rule.ocrProviderOverride ?? self.settings.ocrProvider,
             model: self.settings.ocrModel
         )
-        var ocrResults: [(page: RmPage, result: OcrResult)] = []
+        var transcripts: [(file: RmFile, result: OcrResult)] = []
+        for file in files {
+            transcripts.append((file, await transcribeFile(file, using: ocr)))
+        }
+
+        for binding in bindings {
+            activeBindingId = binding.id
+            await runBinding(rule: rule, folderName: folderName, binding: binding, transcripts: transcripts, ocrName: ocr.name)
+        }
+        activeBindingId = nil
+    }
+
+    /// Transcribes every page of one file and combines them into a single
+    /// note-worth of text (and any Mermaid diagrams).
+    private func transcribeFile(_ file: RmFile, using ocr: OcrProvider) async -> OcrResult {
+        let pages = (try? await remarkable.listPages(notebookId: file.id)) ?? []
+        var texts: [String] = []
+        var mermaids: [String] = []
         for page in pages {
-            // The real client (when paired) will return the rasterized PNG
-            // for this page. Until that lands, skip the OCR call entirely
-            // and synthesize a `[blank page]` result so the rules engine
-            // can still drive create/skip decisions deterministically and
-            // we don't upload empty bytes to OpenAI / Anthropic.
-            guard let imageData = await imageData(for: page), !imageData.isEmpty else {
-                ocrResults.append((page, OcrResult(
-                    text: "[blank page]",
-                    mermaidSource: nil,
-                    provider: ocr.name,
-                    model: nil,
-                    tokensIn: nil,
-                    tokensOut: nil
-                )))
-                continue
-            }
+            guard let imageData = await imageData(for: page), !imageData.isEmpty else { continue }
             do {
                 let result = try await ocr.transcribe(imageData: imageData)
-                ocrResults.append((page, result))
+                let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty && trimmed != "[blank page]" { texts.append(trimmed) }
+                if let mermaid = result.mermaidSource { mermaids.append(mermaid) }
             } catch {
-                let message = Formatters.userMessage(for: error)
-                Log.ocr.error("OCR failed for rule \(rule.id, privacy: .public): \(message, privacy: .public)")
-                // Record the OCR failure on the rule (no binding yet —
-                // OCR sits above the per-binding fan-out) so the sync log
-                // explains why a page never reached its destination.
-                ledger.appendEvent(SyncEvent(
-                    id: UUID().uuidString, occurredAt: Date(),
-                    ruleId: rule.id, ruleName: rule.rmNotebookName,
-                    eventType: .pageFailed,
-                    rmNotebookName: rule.rmNotebookName, rmPageId: page.pageId,
-                    notionPageUrl: nil, durationMs: nil,
-                    ocrProvider: ocr.name, errorMessage: "OCR: \(message)"
+                Log.ocr.error("OCR failed for file \(file.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
+            }
+        }
+        return OcrResult(
+            text: texts.isEmpty ? "[blank page]" : texts.joined(separator: "\n\n"),
+            mermaidSource: mermaids.isEmpty ? nil : mermaids.joined(separator: "\n\n"),
+            provider: ocr.name, model: nil, tokensIn: nil, tokensOut: nil
+        )
+    }
+
+    private func runBinding(rule: SyncRule, folderName: String, binding: DestinationBinding,
+                            transcripts: [(file: RmFile, result: OcrResult)], ocrName: String) async {
+        let client = DestinationRouter.client(for: binding.kind)
+        ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunStarted))
+
+        // Apply optional per-binding overrides on top of the rule defaults.
+        var effectiveRule = rule
+        if let titleOverride = binding.titleStrategyOverride { effectiveRule.titleStrategy = titleOverride }
+        if let ocrModeOverride = binding.ocrModeOverride { effectiveRule.ocrMode = ocrModeOverride }
+
+        var notesSynced = 0
+        var firstError: String?
+        let runStart = Date()
+
+        for (file, ocrResult) in transcripts {
+            let directive = engine.evaluate(
+                rule: effectiveRule, file: file, folderName: folderName,
+                ocrText: ocrResult.text,
+                previouslySyncedHash: ledger.syncedHash(bindingId: binding.id, pageId: file.id)
+            )
+            guard case .create(let title) = directive else { continue }
+
+            let payload = DestinationPayload(
+                title: title,
+                body: ocrResult.text,
+                mermaidSource: ocrResult.mermaidSource,
+                sourceDate: file.createdAt,
+                pdfData: nil,
+                ocrProvider: ocrName,
+                ruleNotebookName: file.name,
+                folderName: folderName,
+                pageNumber: 1
+            )
+            do {
+                let result = try await client.write(payload: payload, configuration: binding.configuration)
+                notesSynced += 1
+                ledger.recordSyncedPage(bindingId: binding.id, pageId: file.id, versionHash: file.versionHash)
+                ledger.appendEvent(makeEvent(
+                    rule: rule, binding: binding, folderName: folderName, type: .pageSynced,
+                    noteId: file.id, noteName: file.name, url: result.externalURL?.absoluteString,
+                    ocrProvider: ocrName, durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
+                ))
+            } catch {
+                let msg = Formatters.userMessage(for: error)
+                if firstError == nil { firstError = msg }
+                ledger.appendEvent(makeEvent(
+                    rule: rule, binding: binding, folderName: folderName, type: .pageFailed,
+                    noteId: file.id, noteName: file.name, ocrProvider: ocrName, errorMessage: msg
                 ))
             }
         }
 
-        let bindings = rule.destinations.filter { binding in
-            binding.enabled && (restrictedToBindingId == nil || binding.id == restrictedToBindingId)
-        }
-
-        await withTaskGroup(of: Void.self) { group in
-            var inFlight = 0
-            for binding in bindings {
-                if inFlight >= Self.maxBindingConcurrency {
-                    await group.next()
-                    inFlight -= 1
-                }
-                let context = BindingRunContext(rule: rule, binding: binding, ocrResults: ocrResults, ocrName: ocr.name)
-                group.addTask { [weak self] in
-                    await self?.runBinding(context: context)
-                }
-                inFlight += 1
-            }
-        }
-    }
-
-    private struct BindingRunContext: Sendable {
-        let rule: SyncRule
-        let binding: DestinationBinding
-        let ocrResults: [(page: RmPage, result: OcrResult)]
-        let ocrName: String
-    }
-
-    private func runBinding(context: BindingRunContext) async {
-        let client = DestinationRouter.client(for: context.binding.kind)
-        activeBindingId = context.binding.id
-        ledger.appendEvent(makeEvent(context: context, type: .ruleRunStarted))
-
-        var pagesSynced = 0
-        var firstError: String?
-        let runStart = Date()
-
-        // Apply optional per-binding overrides on top of the rule defaults.
-        var effectiveRule = context.rule
-        if let titleOverride = context.binding.titleStrategyOverride {
-            effectiveRule.titleStrategy = titleOverride
-        }
-        if let ocrModeOverride = context.binding.ocrModeOverride {
-            effectiveRule.ocrMode = ocrModeOverride
-        }
-
-        for (page, ocrResult) in context.ocrResults {
-            let directive = engine.evaluate(
-                rule: effectiveRule, page: page,
-                ocrText: ocrResult.text,
-                previouslySyncedHash: ledger.syncedHash(bindingId: context.binding.id, pageId: page.pageId)
-            )
-            switch directive {
-            case .skip:
-                continue
-            case .create(let title):
-                let payload = DestinationPayload(
-                    title: title,
-                    body: ocrResult.text,
-                    mermaidSource: ocrResult.mermaidSource,
-                    sourceDate: page.createdAt,
-                    pdfData: nil,
-                    ocrProvider: context.ocrName,
-                    ruleNotebookName: context.rule.rmNotebookName,
-                    pageNumber: page.positionInNotebook + 1
-                )
-                do {
-                    let result = try await client.write(payload: payload, configuration: context.binding.configuration)
-                    pagesSynced += 1
-                    ledger.recordSyncedPage(
-                        bindingId: context.binding.id,
-                        pageId: page.pageId,
-                        versionHash: page.versionHash
-                    )
-                    ledger.appendEvent(makeEvent(
-                        context: context, type: .pageSynced,
-                        pageId: page.pageId, url: result.externalURL?.absoluteString,
-                        durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
-                    ))
-                } catch {
-                    let msg = Formatters.userMessage(for: error)
-                    if firstError == nil { firstError = msg }
-                    ledger.appendEvent(makeEvent(
-                        context: context, type: .pageFailed,
-                        pageId: page.pageId, errorMessage: msg
-                    ))
-                }
-            }
-        }
-
         let status: RuleRunStatus = {
-            if firstError != nil { return pagesSynced > 0 ? .partial : .error }
+            if firstError != nil { return notesSynced > 0 ? .partial : .error }
             return .success
         }()
         ledger.updateBindingRunResult(
-            ruleId: context.rule.id, bindingId: context.binding.id,
-            status: status, pagesSynced: pagesSynced, runAt: Date(),
+            ruleId: rule.id, bindingId: binding.id,
+            status: status, pagesSynced: notesSynced, runAt: Date(),
             error: firstError
         )
-        ledger.appendEvent(makeEvent(
-            context: context, type: .ruleRunCompleted,
-            durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
-        ))
+        ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunCompleted,
+                                     durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)))
 
-        // Provider kind + counts only — never notebook names, titles, or text.
         Telemetry.capture("destination.synced", properties: [
-            "provider": context.binding.kind.rawValue,
-            "pages_synced": pagesSynced,
+            "provider": binding.kind.rawValue,
+            "notes_synced": notesSynced,
             "status": status.rawValue,
         ])
 
         if firstError != nil, self.settings.notifyOnFailure {
-            postNotification(title: "Sync failed",
-                             body: "\(context.rule.rmNotebookName) → \(context.binding.configuration.summary)")
-        } else if firstError == nil, pagesSynced > 0, self.settings.notifyOnSuccess {
-            // Quiet cycles (all pages skipped because unchanged) don't earn
-            // a notification; otherwise opting in to success notifications
-            // means a banner every interval.
-            postNotification(title: "Sync complete",
-                             body: "\(context.rule.rmNotebookName): \(Formatters.syncResultLabel(pageCount: pagesSynced))")
+            postNotification(title: "Sync failed", body: "\(folderName) → \(binding.configuration.summary)")
+        } else if firstError == nil, notesSynced > 0, self.settings.notifyOnSuccess {
+            postNotification(title: "Sync complete", body: "\(folderName): \(Formatters.syncResultLabel(pageCount: notesSynced))")
         }
     }
 
-    private func makeEvent(context: BindingRunContext,
+    private func makeEvent(rule: SyncRule,
+                           binding: DestinationBinding,
+                           folderName: String,
                            type: SyncEventType,
-                           pageId: String? = nil,
+                           noteId: String? = nil,
+                           noteName: String? = nil,
                            url: String? = nil,
+                           ocrProvider: String? = nil,
                            durationMs: Int? = nil,
                            errorMessage: String? = nil) -> SyncEvent {
         SyncEvent(
             id: UUID().uuidString, occurredAt: Date(),
-            ruleId: context.rule.id, ruleName: ruleHeader(context.rule, binding: context.binding),
+            ruleId: rule.id, ruleName: "\(folderName) → \(binding.configuration.summary)",
             eventType: type,
-            rmNotebookName: context.rule.rmNotebookName, rmPageId: pageId,
+            rmNotebookName: noteName ?? folderName, rmPageId: noteId,
             notionPageUrl: url, durationMs: durationMs,
-            ocrProvider: context.ocrName, errorMessage: errorMessage
+            ocrProvider: ocrProvider, errorMessage: errorMessage
         )
     }
 

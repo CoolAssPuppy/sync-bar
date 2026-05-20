@@ -116,7 +116,8 @@ struct NotionDestinationClient: DestinationClient {
                     notebook: payload.ruleNotebookName,
                     pageNumber: payload.pageNumber,
                     date: payload.sourceDate,
-                    title: payload.title
+                    title: payload.title,
+                    folderName: payload.folderName
                 )
                 return context.apply(to: template)
             case .literal(let value):            return value

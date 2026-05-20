@@ -25,7 +25,13 @@ enum RemarkableError: LocalizedError, Sendable {
 
 protocol RemarkableClient: Sendable {
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount
+    /// Top-level folders (the rule targets). A synthetic "Unfiled" folder is
+    /// included only when files exist at the cloud root.
     func listNotebooks() async throws -> [RmNotebook]
+    /// The files (notes) inside a folder. Each becomes one destination note.
+    func listFiles(inFolderId folderId: String) async throws -> [RmFile]
+    /// Pages of a single file (`notebookId` is a file id). Their transcriptions
+    /// are combined into one note.
     func listPages(notebookId: String) async throws -> [RmPage]
     /// A rasterized PNG of the page, used as the OCR input. Returns nil when no
     /// rendering is available (e.g. the mock client), in which case the sync
@@ -41,56 +47,61 @@ enum RemarkableClientFactory {
             Log.remarkable.info("client: REAL (device token present, \(token.count, privacy: .public) chars)")
             return RealRemarkableClient(keychain: keychain)
         }
-        Log.remarkable.info("client: MOCK (no device token in keychain — returning sample notebooks)")
+        Log.remarkable.info("client: MOCK (no device token in keychain — returning sample folders)")
         return MockRemarkableClient()
     }
 }
 
-/// Deterministic mock client. Returns sample notebooks and pages drawn from
-/// a fixed list so the UI looks lived-in before the real device is paired.
+/// Deterministic mock client. Returns sample folders and files so the UI looks
+/// lived-in before the real device is paired.
 struct MockRemarkableClient: RemarkableClient {
-    private static let sampleNotebooks: [RmNotebook] = [
-        RmNotebook(id: "nb-journal",   name: "Daily journal", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 5), pageCount: 52),
-        RmNotebook(id: "nb-meetings",  name: "Weekly 1:1s", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 9), pageCount: 14),
-        RmNotebook(id: "nb-standup",   name: "Standup notes", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 26), pageCount: 31),
-        RmNotebook(id: "nb-quarterly", name: "Q3 planning", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 48), pageCount: 8),
-        RmNotebook(id: "nb-research",  name: "Customer interviews", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 72), pageCount: 17),
-        RmNotebook(id: "nb-book",      name: "Architecture sketches", parentFolder: "Projects", lastModified: Date().addingTimeInterval(-3_600 * 96), pageCount: 13),
-        RmNotebook(id: "nb-onboard",   name: "Reading notes", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 120), pageCount: 26),
-        RmNotebook(id: "nb-travel",    name: "Japan trip planning", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 168), pageCount: 9)
+    private static func ago(_ hours: Double) -> Date { Date().addingTimeInterval(-3_600 * hours) }
+
+    private static let folders: [RmNotebook] = [
+        RmNotebook(id: "f-work",     name: "Work",     parentFolder: nil, lastModified: ago(5),  pageCount: 3),
+        RmNotebook(id: "f-personal", name: "Personal", parentFolder: nil, lastModified: ago(9),  pageCount: 2),
+        RmNotebook(id: "f-projects", name: "Projects", parentFolder: nil, lastModified: ago(96), pageCount: 2)
+    ]
+
+    private static let files: [RmFile] = [
+        RmFile(id: "file-standup",   name: "Standup notes",        folderId: "f-work",     createdAt: ago(26),  lastModified: ago(5),   pageCount: 3, versionHash: "h-standup"),
+        RmFile(id: "file-1on1",      name: "Weekly 1:1s",          folderId: "f-work",     createdAt: ago(9),   lastModified: ago(9),   pageCount: 2, versionHash: "h-1on1"),
+        RmFile(id: "file-quarterly", name: "Q3 planning",          folderId: "f-work",     createdAt: ago(48),  lastModified: ago(48),  pageCount: 1, versionHash: "h-quarterly"),
+        RmFile(id: "file-journal",   name: "Daily journal",        folderId: "f-personal", createdAt: ago(5),   lastModified: ago(5),   pageCount: 2, versionHash: "h-journal"),
+        RmFile(id: "file-travel",    name: "Japan trip planning",  folderId: "f-personal", createdAt: ago(168), lastModified: ago(168), pageCount: 2, versionHash: "h-travel"),
+        RmFile(id: "file-arch",      name: "Architecture sketches",folderId: "f-projects", createdAt: ago(96),  lastModified: ago(96),  pageCount: 2, versionHash: "h-arch"),
+        RmFile(id: "file-book",      name: "Book outline",         folderId: "f-projects", createdAt: ago(120), lastModified: ago(120), pageCount: 1, versionHash: "h-book")
     ]
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {
-        // Simulate latency.
         try await Task.sleep(nanoseconds: 600_000_000)
         let trimmed = oneTimeCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard trimmed.count == 8 else { throw RemarkableError.invalidOneTimeCode }
-        return RemarkableAccount(
-            pairedAt: Date(),
-            userIdentifier: "rm-\(trimmed.prefix(6))",
-            lastSyncedAt: nil
-        )
+        return RemarkableAccount(pairedAt: Date(), userIdentifier: "rm-\(trimmed.prefix(6))", lastSyncedAt: nil)
     }
 
     func listNotebooks() async throws -> [RmNotebook] {
         try await Task.sleep(nanoseconds: 300_000_000)
-        return Self.sampleNotebooks
+        return Self.folders
+    }
+
+    func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
+        try await Task.sleep(nanoseconds: 100_000_000)
+        return Self.files.filter { $0.folderId == folderId }
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {
-        try await Task.sleep(nanoseconds: 150_000_000)
-        guard let notebook = Self.sampleNotebooks.first(where: { $0.id == notebookId }) else {
-            return []
-        }
-        return (0..<notebook.pageCount).map { index in
+        try await Task.sleep(nanoseconds: 100_000_000)
+        guard let file = Self.files.first(where: { $0.id == notebookId }) else { return [] }
+        return (0..<file.pageCount).map { index in
             RmPage(
                 notebookId: notebookId,
                 pageId: "page-\(index)",
                 positionInNotebook: index,
-                createdAt: notebook.lastModified.addingTimeInterval(TimeInterval(-3_600 * index)),
-                modifiedAt: notebook.lastModified.addingTimeInterval(TimeInterval(-1_800 * index)),
-                hasTypedText: index % 4 != 0,
-                versionHash: "hash-\(notebookId)-\(index)"
+                createdAt: file.createdAt,
+                modifiedAt: file.lastModified,
+                hasTypedText: true,
+                versionHash: "\(file.versionHash)-\(index)"
             )
         }
     }

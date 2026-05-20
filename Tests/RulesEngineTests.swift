@@ -11,53 +11,63 @@ import XCTest
 final class RulesEngineTests: XCTestCase {
     private let engine = RulesEngine()
 
-    func test_unchanged_page_skips() {
+    func test_unchanged_file_skips() {
         let rule = makeRule()
-        let page = makePage(versionHash: "abc")
-        let directive = engine.evaluate(rule: rule, page: page, ocrText: nil, previouslySyncedHash: "abc")
+        let file = makeFile(versionHash: "abc")
+        let directive = engine.evaluate(rule: rule, file: file, folderName: "Work", ocrText: "hi", previouslySyncedHash: "abc")
         XCTAssertEqual(directive, .skip(reason: .unchanged))
     }
 
     func test_disabled_rule_skips() {
         var rule = makeRule()
         rule.enabled = false
-        let directive = engine.evaluate(rule: rule, page: makePage(), ocrText: "hi", previouslySyncedHash: nil)
+        let directive = engine.evaluate(rule: rule, file: makeFile(), folderName: "Work", ocrText: "hi", previouslySyncedHash: nil)
         XCTAssertEqual(directive, .skip(reason: .ruleDisabled))
     }
 
-    func test_page_number_title() {
+    func test_file_name_title() {
         var rule = makeRule()
-        rule.titleStrategy = .pageNumber
-        let title = engine.resolveTitle(rule: rule, page: makePage(positionInNotebook: 4), ocrText: nil)
-        XCTAssertEqual(title, "Page 5")
-    }
-
-    func test_first_line_falls_back_when_ocr_empty() {
-        let rule = makeRule()
-        let title = engine.resolveTitle(rule: rule, page: makePage(positionInNotebook: 2), ocrText: nil)
-        XCTAssertEqual(title, "Quarterly · page 3")
+        rule.titleStrategy = .fileName
+        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Sprint plan"), folderName: "Work", ocrText: nil)
+        XCTAssertEqual(title, "Sprint plan")
     }
 
     func test_first_line_uses_ocr_when_present() {
-        let rule = makeRule()
-        let title = engine.resolveTitle(rule: rule, page: makePage(), ocrText: "Sprint planning\nMore notes")
+        var rule = makeRule()
+        rule.titleStrategy = .firstLineOfOcr
+        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Note"), folderName: "Work", ocrText: "Sprint planning\nMore notes")
         XCTAssertEqual(title, "Sprint planning")
+    }
+
+    func test_first_line_falls_back_to_file_name_when_ocr_empty() {
+        var rule = makeRule()
+        rule.titleStrategy = .firstLineOfOcr
+        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Untitled note"), folderName: "Work", ocrText: nil)
+        XCTAssertEqual(title, "Untitled note")
+    }
+
+    func test_template_resolves_folder_and_note() {
+        var rule = makeRule()
+        rule.titleStrategy = .template
+        rule.titleTemplate = "{folder_name} / {notebook}"
+        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Standup"), folderName: "Work", ocrText: nil)
+        XCTAssertEqual(title, "Work / Standup")
     }
 
     // MARK: Helpers
 
     private func makeRule() -> SyncRule {
-        SyncRule.new(notebookId: "nb-1", notebookName: "Quarterly")
+        SyncRule.new(notebookId: "folder-1", notebookName: "Work")
     }
 
-    private func makePage(versionHash: String = "v1", positionInNotebook: Int = 0) -> RmPage {
-        RmPage(
-            notebookId: "nb-1",
-            pageId: "page-\(positionInNotebook)",
-            positionInNotebook: positionInNotebook,
+    private func makeFile(name: String = "Note", versionHash: String = "v1") -> RmFile {
+        RmFile(
+            id: "file-1",
+            name: name,
+            folderId: "folder-1",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            modifiedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            hasTypedText: true,
+            lastModified: Date(timeIntervalSince1970: 1_700_001_000),
+            pageCount: 2,
             versionHash: versionHash
         )
     }

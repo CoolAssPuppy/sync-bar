@@ -79,37 +79,79 @@ struct RealRemarkableClient: RemarkableClient {
 
     // MARK: Listing
 
-    func listNotebooks() async throws -> [RmNotebook] {
+    /// One root document with its parsed metadata. Documents (files and folders)
+    /// are stored flat at the root; `metadata.parent` records the containing
+    /// folder.
+    private struct DocumentEntry {
+        let id: String
+        let hash: String
+        let metadata: RemarkableMetadata
+        let pageCount: Int
+    }
+
+    /// Walks the root index and reads every document's metadata once.
+    private func entries() async throws -> [DocumentEntry] {
         let documents = try await rootIndexEntries()
-        Log.remarkable.info("listNotebooks: \(documents.count, privacy: .public) root documents")
-        var notebooks: [RmNotebook] = []
+        var result: [DocumentEntry] = []
         for document in documents {
             do {
                 let components = try await documentComponents(documentHash: document.hash, documentId: document.identifier)
-                guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components) else {
-                    Log.remarkable.debug("doc \(document.identifier, privacy: .public): no .metadata in \(components.count, privacy: .public) components")
-                    continue
-                }
-                let metadataData = try await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier)
-                guard let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData) else {
-                    Log.remarkable.debug("doc \(document.identifier, privacy: .public): metadata parse failed (\(metadataData.count, privacy: .public) bytes)")
-                    continue
-                }
-                Log.remarkable.debug("doc \(document.identifier, privacy: .public): name=\(metadata.visibleName, privacy: .public) type=\(metadata.type, privacy: .public) deleted=\(metadata.deleted, privacy: .public)")
-                guard metadata.isNotebook else { continue }
-                notebooks.append(RmNotebook(
+                guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components),
+                      let metadataData = try? await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier),
+                      let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
+                      !metadata.deleted else { continue }
+                result.append(DocumentEntry(
                     id: document.identifier,
-                    name: metadata.visibleName,
-                    parentFolder: nil,
-                    lastModified: metadata.lastModified,
+                    hash: document.hash,
+                    metadata: metadata,
                     pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count
                 ))
             } catch {
                 Log.remarkable.error("doc \(document.identifier, privacy: .public) walk failed: \(String(describing: error), privacy: .public)")
             }
         }
-        Log.remarkable.info("listNotebooks: \(notebooks.count, privacy: .public) notebooks found")
-        return notebooks
+        return result
+    }
+
+    func listNotebooks() async throws -> [RmNotebook] {
+        let all = try await entries()
+        let folders = all.filter { $0.metadata.isFolder }
+        let files = all.filter { $0.metadata.isNotebook }
+        var result = folders.map { folder in
+            RmNotebook(
+                id: folder.id,
+                name: folder.metadata.visibleName,
+                parentFolder: folder.metadata.parent.isEmpty ? nil : folder.metadata.parent,
+                lastModified: folder.metadata.lastModified,
+                pageCount: files.filter { $0.metadata.parent == folder.id }.count
+            )
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        let rootFiles = files.filter { $0.metadata.parent.isEmpty }
+        if !rootFiles.isEmpty {
+            result.insert(RmNotebook(id: unfiledFolderId, name: "Unfiled", parentFolder: nil, lastModified: Date(), pageCount: rootFiles.count), at: 0)
+        }
+        Log.remarkable.info("listNotebooks: \(folders.count, privacy: .public) folders, \(files.count, privacy: .public) files")
+        return result
+    }
+
+    func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
+        let targetParent = (folderId == unfiledFolderId) ? "" : folderId
+        return try await entries()
+            .filter { $0.metadata.isNotebook && $0.metadata.parent == targetParent }
+            .map { file in
+                RmFile(
+                    id: file.id,
+                    name: file.metadata.visibleName,
+                    folderId: folderId,
+                    createdAt: file.metadata.createdTime,
+                    lastModified: file.metadata.lastModified,
+                    pageCount: file.pageCount,
+                    versionHash: file.hash
+                )
+            }
+            .sorted { $0.lastModified > $1.lastModified }
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {

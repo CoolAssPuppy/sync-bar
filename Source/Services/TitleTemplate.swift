@@ -11,6 +11,7 @@ import Foundation
 /// templates. Adding one means: add a case, give it a placeholder string,
 /// and supply a value in `Context`.
 enum TitleToken: String, CaseIterable {
+    case folderName  = "folder_name"
     case notebook
     case pageNumber  = "page_n"
     case date
@@ -21,11 +22,12 @@ enum TitleToken: String, CaseIterable {
 
     var helpText: String {
         switch self {
-        case .notebook:   return "Source reMarkable notebook"
+        case .folderName: return "Containing folder name"
+        case .notebook:   return "Note (file) name"
         case .pageNumber: return "1-indexed page number"
-        case .date:       return "Page creation date (yyyy-MM-dd)"
+        case .date:       return "Note creation date (yyyy-MM-dd)"
         case .today:      return "Today's date when synced (yyyy-MM-dd)"
-        case .title:      return "Resolved page title"
+        case .title:      return "Resolved note title"
         }
     }
 }
@@ -37,6 +39,8 @@ struct TitleTemplateContext {
     var pageNumber: Int
     var date: Date
     var title: String
+    /// Containing folder name (the rule's subject). Defaults to empty.
+    var folderName: String = ""
     /// "Today" at resolution time. Defaults to now; injectable for tests.
     var today: Date = Date()
 
@@ -48,6 +52,7 @@ struct TitleTemplateContext {
 
     func value(for token: TitleToken) -> String {
         switch token {
+        case .folderName: return folderName
         case .notebook:   return notebook
         case .pageNumber: return "\(pageNumber)"
         case .date:       return Self.dateFormatter.string(from: date)

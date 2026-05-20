@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// One page-worth of content ready to write to a destination. Filled by
-/// the rules engine after OCR has resolved.
+/// One note-worth of content ready to write to a destination — the combined
+/// transcription of all the file's pages.
 struct DestinationPayload: Sendable {
     var title: String
     var body: String              // already includes ```mermaid block if any
@@ -17,7 +17,8 @@ struct DestinationPayload: Sendable {
     var sourceDate: Date
     var pdfData: Data?            // optional attachment when rule.savePdfAttachment is on
     var ocrProvider: String?
-    var ruleNotebookName: String
+    var ruleNotebookName: String  // the note (file) name
+    var folderName: String = ""   // the containing folder (rule subject)
     var pageNumber: Int
 }
 

@@ -119,10 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Check for updates…", action: #selector(checkForUpdatesAction), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Quit Sync Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        for item in menu.items {
-            if item.action != nil {
-                item.target = self
-            }
+        for item in menu.items where item.action != nil {
+            item.target = self
         }
         return menu
     }

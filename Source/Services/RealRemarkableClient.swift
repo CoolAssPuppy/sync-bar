@@ -224,7 +224,7 @@ struct RealRemarkableClient: RemarkableClient {
         let rootHash = Self.parseRootHash(rootData)
         // The root index blob's logical name is always "root.docSchema".
         let indexData = try await blob(hash: rootHash, filename: "root.docSchema")
-        let entries = try RemarkableSyncIndex.parseIndex(String(decoding: indexData, as: UTF8.self))
+        let entries = try RemarkableSyncIndex.parseIndex(String(bytes: indexData, encoding: .utf8) ?? "")
         Log.remarkable.info("root index parsed into \(entries.count, privacy: .public) entries")
         return entries
     }
@@ -232,7 +232,7 @@ struct RealRemarkableClient: RemarkableClient {
     private func documentComponents(documentHash: String, documentId: String) async throws -> [RemarkableIndexEntry] {
         // A document's index blob is named "<documentUUID>.docSchema".
         let data = try await blob(hash: documentHash, filename: "\(documentId).docSchema")
-        return try RemarkableSyncIndex.parseIndex(String(decoding: data, as: UTF8.self))
+        return try RemarkableSyncIndex.parseIndex(String(bytes: data, encoding: .utf8) ?? "")
     }
 
     /// Fetches a content-addressed blob. The reMarkable "tortoise" sync requires
@@ -248,7 +248,7 @@ struct RealRemarkableClient: RemarkableClient {
            let hash = object["hash"] as? String {
             return hash
         }
-        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (String(bytes: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: Auth
@@ -279,7 +279,7 @@ struct RealRemarkableClient: RemarkableClient {
         let status = (response as? HTTPURLResponse)?.statusCode ?? -1
         Log.remarkable.debug("GET \(path, privacy: .public) -> HTTP \(status, privacy: .public), \(data.count, privacy: .public) bytes")
         if !(200..<300).contains(status) {
-            Log.remarkable.error("GET \(path, privacy: .public) body: \(String(decoding: data, as: UTF8.self).prefix(300), privacy: .public)")
+            Log.remarkable.error("GET \(path, privacy: .public) body: \((String(bytes: data, encoding: .utf8) ?? "").prefix(300), privacy: .public)")
         }
         return (data, response)
     }

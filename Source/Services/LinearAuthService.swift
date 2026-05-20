@@ -63,14 +63,10 @@ final class LinearAuthService {
 
     private struct TeamsResponse: Decodable {
         struct DataField: Decodable {
-            struct Viewer: Decodable {
-                struct Organization: Decodable { let name: String }
-                let organization: Organization?
-            }
-            struct Teams: Decodable {
-                struct Node: Decodable { let id: String; let name: String }
-                let nodes: [Node]
-            }
+            struct Organization: Decodable { let name: String }
+            struct Node: Decodable { let id: String; let name: String }
+            struct Viewer: Decodable { let organization: Organization? }
+            struct Teams: Decodable { let nodes: [Node] }
             let viewer: Viewer?
             let teams: Teams
         }

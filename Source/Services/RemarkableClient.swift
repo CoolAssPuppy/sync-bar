@@ -67,6 +67,8 @@ struct MockRemarkableClient: RemarkableClient {
         RmNotebook(id: "f-projects", name: "Projects", parentFolder: nil, lastModified: ago(96), pageCount: 2)
     ]
 
+    // Column-aligned sample fixtures read better on one line each.
+    // swiftlint:disable line_length
     private static let files: [RmFile] = [
         RmFile(id: "file-standup",   name: "Standup notes",        folderId: "f-work",     createdAt: ago(26),  lastModified: ago(5),   pageCount: 3, versionHash: "h-standup",   tags: ["Action", "Work"]),
         RmFile(id: "file-1on1",      name: "Weekly 1:1s",          folderId: "f-work",     createdAt: ago(9),   lastModified: ago(9),   pageCount: 2, versionHash: "h-1on1",      tags: ["Work"]),
@@ -76,6 +78,7 @@ struct MockRemarkableClient: RemarkableClient {
         RmFile(id: "file-arch",      name: "Architecture sketches",folderId: "f-projects", createdAt: ago(96),  lastModified: ago(96),  pageCount: 2, versionHash: "h-arch",       tags: ["Idea"]),
         RmFile(id: "file-book",      name: "Book outline",         folderId: "f-projects", createdAt: ago(120), lastModified: ago(120), pageCount: 1, versionHash: "h-book",       tags: ["Idea"])
     ]
+    // swiftlint:enable line_length
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {
         try await Task.sleep(nanoseconds: 600_000_000)

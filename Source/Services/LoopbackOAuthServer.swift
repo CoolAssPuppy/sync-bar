@@ -88,6 +88,8 @@ final class LoopbackOAuthServer: @unchecked Sendable {
         }
     }
 
+    // SVG path data in the embedded HTML can't be line-wrapped.
+    // swiftlint:disable line_length
     /// Branded "connected" page shown in the browser after the OAuth redirect.
     /// Strategic Nerds charcoal + yellow; attempts to auto-close the tab and
     /// falls back to the close-this-window instruction when the browser blocks it.
@@ -134,6 +136,7 @@ final class LoopbackOAuthServer: @unchecked Sendable {
     </body>
     </html>
     """
+    // swiftlint:enable line_length
 
     /// Parses the query items out of an HTTP request's start line, e.g.
     /// `GET /oauth/notion?code=abc&state=xyz HTTP/1.1`.

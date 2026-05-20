@@ -103,15 +103,21 @@ struct RuleSliderView: View {
         .padding(.vertical, 14)
     }
 
+    private struct RuleStatusGlyph {
+        let symbol: String
+        let color: Color
+        let help: String
+    }
+
     /// Health glyph for the rule: green check when syncing cleanly, yellow
     /// triangle on partial failures, red triangle on errors, muted otherwise.
-    private func ruleStatus(_ rule: SyncRule) -> (symbol: String, color: Color, help: String) {
-        guard rule.enabled else { return ("pause.circle.fill", theme.tertiary, "Disabled") }
+    private func ruleStatus(_ rule: SyncRule) -> RuleStatusGlyph {
+        guard rule.enabled else { return RuleStatusGlyph(symbol: "pause.circle.fill", color: theme.tertiary, help: "Disabled") }
         let statuses = rule.destinations.map(\.lastRunStatus)
-        if statuses.contains(.error)   { return ("exclamationmark.triangle.fill", theme.destructive, "Last sync failed") }
-        if statuses.contains(.partial) { return ("exclamationmark.triangle.fill", theme.warning, "Some pages failed") }
-        if statuses.contains(.success) { return ("checkmark.circle.fill", theme.success, "Syncing normally") }
-        return ("circle", theme.tertiary, "Not yet run")
+        if statuses.contains(.error)   { return RuleStatusGlyph(symbol: "exclamationmark.triangle.fill", color: theme.destructive, help: "Last sync failed") }
+        if statuses.contains(.partial) { return RuleStatusGlyph(symbol: "exclamationmark.triangle.fill", color: theme.warning, help: "Some pages failed") }
+        if statuses.contains(.success) { return RuleStatusGlyph(symbol: "checkmark.circle.fill", color: theme.success, help: "Syncing normally") }
+        return RuleStatusGlyph(symbol: "circle", color: theme.tertiary, help: "Not yet run")
     }
 
     // MARK: Rule-level settings card

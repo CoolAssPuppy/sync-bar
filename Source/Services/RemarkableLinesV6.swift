@@ -103,7 +103,7 @@ enum RemarkableLinesV6 {
     /// Reads the one-digit version from the fixed-width ASCII header.
     static func version(of data: Data) throws -> Int {
         guard data.count >= headerLength else { throw ParseError.badHeader }
-        let header = String(decoding: data.prefix(headerLength), as: UTF8.self)
+        let header = String(bytes: data.prefix(headerLength), encoding: .utf8) ?? ""
         guard header.hasPrefix(headerPrefix),
               let versionChar = header.dropFirst(headerPrefix.count).first,
               let version = Int(String(versionChar)) else {

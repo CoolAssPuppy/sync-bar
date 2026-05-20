@@ -167,7 +167,11 @@ struct AddDestinationSheet: View {
 
     private var markdownFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, anything. You'll choose the destination folder when you set up a sync for a reMarkable folder.")
+            Text("""
+                Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, \
+                anything. You'll choose the destination folder when you set up a sync for a \
+                reMarkable folder.
+                """)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }

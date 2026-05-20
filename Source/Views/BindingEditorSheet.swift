@@ -116,13 +116,28 @@ struct BindingEditorSheet: View {
                     mappingRows: NotionFormState.mappingRows(from: cfg.propertyMappings)
                 ))
             case .linear(let cfg):
-                _localLinear = State(initialValue: LinearFormState(workspaceId: cfg.workspaceId, projectId: cfg.projectId ?? "", projectName: cfg.projectName ?? "", defaultLabel: cfg.defaultLabel ?? "", requiredTags: cfg.requiredTags ?? []))
+                _localLinear = State(initialValue: LinearFormState(
+                    workspaceId: cfg.workspaceId,
+                    projectId: cfg.projectId ?? "",
+                    projectName: cfg.projectName ?? "",
+                    defaultLabel: cfg.defaultLabel ?? "",
+                    requiredTags: cfg.requiredTags ?? []
+                ))
             case .googleDocs(let cfg):
-                _localGoogle = State(initialValue: GoogleFormState(email: cfg.accountEmail, folderId: cfg.folderId ?? "", folderName: cfg.folderName ?? "", appendMode: cfg.appendMode))
+                _localGoogle = State(initialValue: GoogleFormState(
+                    email: cfg.accountEmail,
+                    folderId: cfg.folderId ?? "",
+                    folderName: cfg.folderName ?? "",
+                    appendMode: cfg.appendMode
+                ))
             case .appleNotes(let cfg):
                 _localAppleNotes = State(initialValue: AppleNotesFormState(folderName: cfg.folderName))
             case .markdownFolder(let cfg):
-                _localMarkdown = State(initialValue: MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate, includeFrontmatter: cfg.includeFrontmatter))
+                _localMarkdown = State(initialValue: MarkdownFormState(
+                    folderPath: cfg.folderPath,
+                    fileNameTemplate: cfg.fileNameTemplate,
+                    includeFrontmatter: cfg.includeFrontmatter
+                ))
             }
         }
     }

@@ -17,7 +17,7 @@ final class OAuthHelpersTests: XCTestCase {
 
     func test_formURLEncoding_escapes_reserved_characters() {
         let body = OAuth.formURLEncoded(["grant_type": "authorization_code", "code": "a+b/c=d&e"])
-        let text = String(decoding: body, as: UTF8.self)
+        let text = String(bytes: body, encoding: .utf8) ?? ""
         // The two fields are joined by a literal & ...
         let pairs = text.split(separator: "&").map(String.init)
         XCTAssertEqual(pairs.count, 2)

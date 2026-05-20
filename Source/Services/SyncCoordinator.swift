@@ -137,7 +137,7 @@ final class SyncCoordinator: ObservableObject {
         Telemetry.capture("sync.run", properties: [
             "trigger": trigger.rawValue,
             "rules": rules.count,
-            "duration_ms": Int(Date().timeIntervalSince(cycleStart) * 1_000),
+            "duration_ms": Int(Date().timeIntervalSince(cycleStart) * 1_000)
         ])
     }
 
@@ -273,7 +273,7 @@ final class SyncCoordinator: ObservableObject {
         Telemetry.capture("destination.synced", properties: [
             "provider": binding.kind.rawValue,
             "notes_synced": notesSynced,
-            "status": status.rawValue,
+            "status": status.rawValue
         ])
 
         if firstError != nil, self.settings.notifyOnFailure {

@@ -55,7 +55,8 @@ struct RealNotionClient: NotionClient {
 
         struct SearchResponse: Decodable {
             struct Item: Decodable {
-                struct Title: Decodable { struct Inner: Decodable { let plain_text: String? }; let title: [Inner]? }
+                struct Inner: Decodable { let plain_text: String? }
+                struct Title: Decodable { let title: [Inner]? }
                 struct PropertiesContainer: Decodable { let title: Title? }
                 struct Parent: Decodable { let type: String? }
                 struct Icon: Decodable { let emoji: String? }
@@ -64,7 +65,7 @@ struct RealNotionClient: NotionClient {
                 let properties: PropertiesContainer?
                 let parent: Parent?
                 let icon: Icon?
-                let title: [Title.Inner]?  // databases ship their title at the top level
+                let title: [Inner]?  // databases ship their title at the top level
             }
             let results: [Item]
         }

@@ -17,6 +17,8 @@ enum NoteFieldValue: Equatable, Hashable {
     case noteDate
     case todaysDate
     case custom(String)
+    /// Fixed Notion option(s) chosen for a select / multi_select / status column.
+    case options([String])
 
     var kind: NoteFieldKind {
         switch self {
@@ -26,6 +28,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .noteDate:   return .noteDate
         case .todaysDate: return .todaysDate
         case .custom:     return .custom
+        case .options:    return .options
         }
     }
 
@@ -34,7 +37,13 @@ enum NoteFieldValue: Equatable, Hashable {
         return ""
     }
 
+    var selectedOptions: [String] {
+        if case .options(let names) = self { return names }
+        return []
+    }
+
     /// The title-template token (or literal custom text) this value resolves to.
+    /// `.options` has no token; it round-trips as a select/multi_select mapping.
     var token: String {
         switch self {
         case .noteTitle:        return "{title}"
@@ -43,6 +52,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .noteDate:         return "{date}"
         case .todaysDate:       return "{today}"
         case .custom(let text): return text
+        case .options:          return ""
         }
     }
 
@@ -65,6 +75,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .noteDate:   return .noteDate
         case .todaysDate: return .todaysDate
         case .custom:     return .custom(custom)
+        case .options:    return .options([])
         }
     }
 }
@@ -76,8 +87,12 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
     case noteDate
     case todaysDate
     case custom
+    case options
 
     var id: String { rawValue }
+
+    /// Kinds offered for plain (non-option) columns.
+    static var textKinds: [NoteFieldKind] { allCases.filter { $0 != .options } }
 
     var label: String {
         switch self {
@@ -87,8 +102,20 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
         case .noteDate:   return "Note date"
         case .todaysDate: return "Today's date"
         case .custom:     return "Custom text"
+        case .options:    return "Specific options"
         }
     }
+}
+
+/// A destination column the user can map to, plus its selectable options when
+/// it's a select / multi_select / status column.
+struct MappingColumn: Identifiable, Equatable {
+    let name: String
+    let options: [String]
+    let allowsMultiple: Bool
+
+    var id: String { name }
+    var isOptionBased: Bool { !options.isEmpty }
 }
 
 /// One key -> value mapping row (e.g. a Notion column -> a note field).
@@ -104,15 +131,19 @@ struct FieldMapping: Identifiable, Equatable {
     }
 }
 
-/// Reusable +/- list of key -> value mappings. Keys are chosen from
-/// `availableKeys` (e.g. a database's columns); each value is a note field or
-/// custom text. Designed to be dropped into any destination that maps fields.
+/// +/- list of column -> value mappings. Columns come from a Notion database;
+/// select / multi_select / status columns let the user pick from the column's
+/// own options, everything else maps to a note field or custom text.
 struct FieldMappingControl: View {
     @Binding var rows: [FieldMapping]
-    let availableKeys: [String]
+    let columns: [MappingColumn]
     var keyLabel: String = "Column"
 
     @Environment(\.theme) private var theme
+
+    private func column(named name: String) -> MappingColumn? {
+        columns.first(where: { $0.name == name })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -126,16 +157,29 @@ struct FieldMappingControl: View {
                 }
             }
             addButton
-                .disabled(availableKeys.isEmpty)
+                .disabled(columns.isEmpty)
                 .padding(.top, 6)
         }
     }
 
     private func mappingRow(_ row: Binding<FieldMapping>) -> some View {
-        HStack(spacing: 8) {
-            Picker("", selection: row.key) {
-                ForEach(availableKeys, id: \.self) { key in
-                    Text(key).tag(key)
+        let selectedColumn = column(named: row.wrappedValue.key)
+        return HStack(spacing: 8) {
+            Picker("", selection: Binding(
+                get: { row.wrappedValue.key },
+                set: { newKey in
+                    row.wrappedValue.key = newKey
+                    // Reset the value to suit the new column's type.
+                    let isOption = column(named: newKey)?.isOptionBased == true
+                    if isOption, row.wrappedValue.value.kind != .options {
+                        row.wrappedValue.value = .options([])
+                    } else if !isOption, row.wrappedValue.value.kind == .options {
+                        row.wrappedValue.value = .noteName
+                    }
+                }
+            )) {
+                ForEach(columns) { column in
+                    Text(column.name).tag(column.name)
                 }
             }
             .labelsHidden()
@@ -145,24 +189,28 @@ struct FieldMappingControl: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(theme.tertiary)
 
-            Picker("", selection: Binding(
-                get: { row.wrappedValue.value.kind },
-                set: { row.wrappedValue.value = .make(kind: $0, custom: row.wrappedValue.value.customText) }
-            )) {
-                ForEach(NoteFieldKind.allCases) { kind in
-                    Text(kind.label).tag(kind)
+            if let selectedColumn, selectedColumn.isOptionBased {
+                optionsMenu(row: row, column: selectedColumn)
+            } else {
+                Picker("", selection: Binding(
+                    get: { row.wrappedValue.value.kind },
+                    set: { row.wrappedValue.value = .make(kind: $0, custom: row.wrappedValue.value.customText) }
+                )) {
+                    ForEach(NoteFieldKind.textKinds) { kind in
+                        Text(kind.label).tag(kind)
+                    }
                 }
-            }
-            .labelsHidden()
-            .fixedSize()
+                .labelsHidden()
+                .fixedSize()
 
-            if row.wrappedValue.value.kind == .custom {
-                TextField("Custom text", text: Binding(
-                    get: { row.wrappedValue.value.customText },
-                    set: { row.wrappedValue.value = .custom($0) }
-                ))
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 160)
+                if row.wrappedValue.value.kind == .custom {
+                    TextField("Custom text", text: Binding(
+                        get: { row.wrappedValue.value.customText },
+                        set: { row.wrappedValue.value = .custom($0) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 160)
+                }
             }
 
             Spacer(minLength: 0)
@@ -175,6 +223,40 @@ struct FieldMappingControl: View {
             .buttonStyle(.plain)
             .help("Remove mapping")
         }
+    }
+
+    private func optionsMenu(row: Binding<FieldMapping>, column: MappingColumn) -> some View {
+        let selected = row.wrappedValue.value.selectedOptions
+        return Menu {
+            ForEach(column.options, id: \.self) { option in
+                Button {
+                    toggle(option, in: row, allowsMultiple: column.allowsMultiple)
+                } label: {
+                    if selected.contains(option) {
+                        Label(option, systemImage: "checkmark")
+                    } else {
+                        Text(option)
+                    }
+                }
+            }
+        } label: {
+            Text(selected.isEmpty
+                 ? (column.allowsMultiple ? "Choose options" : "Choose an option")
+                 : selected.joined(separator: ", "))
+                .font(.system(size: 11))
+                .lineLimit(1)
+        }
+        .fixedSize()
+    }
+
+    private func toggle(_ option: String, in row: Binding<FieldMapping>, allowsMultiple: Bool) {
+        var names = row.wrappedValue.value.selectedOptions
+        if allowsMultiple {
+            if let index = names.firstIndex(of: option) { names.remove(at: index) } else { names.append(option) }
+        } else {
+            names = names.contains(option) ? [] : [option]
+        }
+        row.wrappedValue.value = .options(names)
     }
 
     private var addButton: some View {
@@ -192,8 +274,9 @@ struct FieldMappingControl: View {
 
     private func addRow() {
         let used = Set(rows.map(\.key))
-        let nextKey = availableKeys.first(where: { !used.contains($0) }) ?? availableKeys.first ?? ""
-        rows.append(FieldMapping(key: nextKey, value: .noteTitle))
+        guard let nextColumn = columns.first(where: { !used.contains($0.name) }) ?? columns.first else { return }
+        let value: NoteFieldValue = nextColumn.isOptionBased ? .options([]) : .noteTitle
+        rows.append(FieldMapping(key: nextColumn.name, value: value))
     }
 
     private func remove(_ id: UUID) {

@@ -102,9 +102,20 @@ struct NotionForm: View {
     }
 
     /// Database columns the user can map (the title column is set automatically
-    /// from the rule's title strategy, so it's excluded here).
-    private func mappableColumns(_ properties: [NotionDatabaseProperty]) -> [String] {
-        properties.filter { $0.type != "title" }.map(\.name)
+    /// from the rule's title strategy, so it's excluded here). select /
+    /// multi_select / status columns carry their Notion options so the user can
+    /// pick from them; multi_select allows several.
+    private func mappingColumns(_ properties: [NotionDatabaseProperty]) -> [MappingColumn] {
+        let optionTypes: Set<String> = ["select", "multi_select", "status"]
+        return properties
+            .filter { $0.type != "title" }
+            .map { property in
+                MappingColumn(
+                    name: property.name,
+                    options: optionTypes.contains(property.type) ? property.options : [],
+                    allowsMultiple: property.type == "multi_select"
+                )
+            }
     }
 
     @ViewBuilder
@@ -131,7 +142,7 @@ struct NotionForm: View {
                 Text("Fill database columns with fields from each note.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
-                FieldMappingControl(rows: $binding.mappingRows, availableKeys: mappableColumns(properties))
+                FieldMappingControl(rows: $binding.mappingRows, columns: mappingColumns(properties))
             }
         }
     }

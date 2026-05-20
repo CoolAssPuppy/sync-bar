@@ -49,21 +49,36 @@ struct MarkdownFormState {
 
 extension NotionFormState {
     /// Builds editable mapping rows from the persisted property mappings.
-    /// Only token-based (`.text`) mappings round-trip through the simple control.
+    /// Token-based (`.text`) and option-based (`.selectOption` /
+    /// `.multiSelectOptions`) mappings round-trip through the control.
     static func mappingRows(from propertyMappings: [String: NotionPropertyMapping]) -> [FieldMapping] {
         propertyMappings
             .compactMap { key, mapping -> FieldMapping? in
-                guard case .text(let template) = mapping else { return nil }
-                return FieldMapping(key: key, value: NoteFieldValue(token: template))
+                switch mapping {
+                case .text(let template):
+                    return FieldMapping(key: key, value: NoteFieldValue(token: template))
+                case .multiSelectOptions(let names):
+                    return FieldMapping(key: key, value: .options(names))
+                case .selectOption(let name):
+                    return FieldMapping(key: key, value: .options([name]))
+                default:
+                    return nil
+                }
             }
             .sorted { $0.key < $1.key }
     }
 
     /// Converts mapping rows back into the persisted property-mapping shape.
+    /// Selected options become `.multiSelectOptions`; the write path narrows it
+    /// to the column's actual type (select / status take the first option).
     static func propertyMappings(from rows: [FieldMapping]) -> [String: NotionPropertyMapping] {
         var output: [String: NotionPropertyMapping] = [:]
         for row in rows where !row.key.isEmpty {
-            output[row.key] = .text(template: row.value.token)
+            if case .options(let names) = row.value {
+                output[row.key] = names.isEmpty ? .leaveBlank : .multiSelectOptions(names)
+            } else {
+                output[row.key] = .text(template: row.value.token)
+            }
         }
         return output
     }

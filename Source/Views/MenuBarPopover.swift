@@ -257,36 +257,48 @@ private struct SyncRuleCard: View {
     }
 }
 
-/// Up to four destination icons overlapping in a horizontal stack so the
-/// popover row shows where a notebook fans out to without listing each
-/// binding.
+/// One destination's brand mark with a small count badge when a notebook fans
+/// out to more than one destination — compact, instead of a row of icons.
 private struct DestinationIconStack: View {
     let kinds: [DestinationKind]
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        let unique = Array(NSOrderedSet(array: kinds)) as? [DestinationKind] ?? []
-        let shown = Array(unique.prefix(4))
-        HStack(spacing: -6) {
-            ForEach(Array(shown.enumerated()), id: \.offset) { _, kind in
-                DestinationIcon(kind: kind, size: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.black.opacity(0.001))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            }
-            if kinds.isEmpty {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(Color.gray.opacity(0.15))
-                    Image(systemName: "questionmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 22, height: 22)
+        ZStack(alignment: .bottomTrailing) {
+            primaryIcon
+            if kinds.count > 1 {
+                countBadge(kinds.count)
+                    .offset(x: 4, y: 4)
             }
         }
-        .frame(minWidth: 22)
+        .frame(width: 26, height: 24, alignment: .center)
+    }
+
+    @ViewBuilder
+    private var primaryIcon: some View {
+        if let kind = kinds.first {
+            DestinationIcon(kind: kind, size: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.gray.opacity(0.15))
+                Image(systemName: "questionmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 22, height: 22)
+        }
+    }
+
+    private func countBadge(_ count: Int) -> some View {
+        Text("\(count)")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(theme.primaryForeground)
+            .padding(.horizontal, count > 9 ? 3 : 0)
+            .frame(minWidth: 14, minHeight: 14)
+            .background(Capsule().fill(theme.primary))
+            .overlay(Capsule().strokeBorder(theme.background, lineWidth: 1.5))
     }
 }
 

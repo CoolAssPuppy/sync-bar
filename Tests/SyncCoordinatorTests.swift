@@ -113,12 +113,11 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
-    /// Pins CURRENT behavior: the coordinator passes `previouslySyncedHash:
-    /// nil` (SyncCoordinator.runBinding) and the Ledger keeps no per-page
-    /// synced-hash store, so an unchanged page is synced again on every
-    /// cycle. When version-hash idempotency is wired up, this test should be
-    /// flipped to assert the second cycle syncs 0 pages.
-    func test_second_cycle_resyncs_unchanged_pages_no_hash_dedup() async {
+    /// Idempotency: once a page has synced to a binding, a later cycle over
+    /// the same page version skips it. The scripted client returns identical
+    /// pages (stable versionHash) every call, so a second cycle should sync
+    /// zero pages and emit no new pageSynced events.
+    func test_second_cycle_skips_unchanged_pages() async {
         let ledger = Ledger.shared
         AppSettings.shared.ocrProvider = .vision
         await prepare(ledger: ledger)
@@ -129,9 +128,6 @@ final class SyncCoordinatorTests: XCTestCase {
         rule.destinations = [markdownBinding(folderPath: folder.path)]
         ledger.upsertRule(rule)
 
-        // The scripted client returns identical pages (same versionHash) every
-        // call, so the only thing that could skip page 2 on cycle two is hash
-        // dedup — which isn't implemented.
         let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -139,10 +135,52 @@ final class SyncCoordinatorTests: XCTestCase {
 
         coordinator.syncNow(ruleId: rule.id)
         try? await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        XCTAssertEqual(binding?.lastRunPagesSynced, 0)
+        XCTAssertEqual(binding?.lastRunStatus, .success)
 
         let synced = ledger.events.filter { $0.ruleId == rule.id && $0.eventType == .pageSynced }
-        XCTAssertEqual(synced.count, 6)
+        XCTAssertEqual(synced.count, 3)
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_editing_binding_destination_resyncs_pages() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+        let firstFolder = makeTempFolder()
+        let secondFolder = makeTempFolder()
+        defer {
+            try? FileManager.default.removeItem(at: firstFolder)
+            try? FileManager.default.removeItem(at: secondFolder)
+        }
+
+        var rule = SyncRule.new(notebookId: "nb-reedit", notebookName: "Test")
+        let binding = markdownBinding(folderPath: firstFolder.path)
+        rule.destinations = [binding]
+        ledger.upsertRule(rule)
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+
+        // Re-point the same binding at a new folder. Its synced history must be
+        // dropped so the pages land in the new target rather than being skipped.
+        let moved = DestinationBinding(
+            id: binding.id,
+            configuration: .markdownFolder(MarkdownFolderDestinationConfig(
+                folderPath: secondFolder.path,
+                fileNameTemplate: "{notebook}-page-{page_n}",
+                includeFrontmatter: false
+            ))
+        )
+        ledger.updateBinding(ruleId: rule.id, binding: moved)
+
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
 
         ledger.deleteRule(id: rule.id)
     }

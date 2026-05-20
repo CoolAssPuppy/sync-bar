@@ -26,6 +26,7 @@ final class Ledger: ObservableObject {
     private static let rulesKey             = "ledger.rules"
     private static let eventsKey            = "ledger.events"
     private static let notebooksKey         = "ledger.notebooks"
+    private static let syncedPageHashesKey  = "ledger.syncedPageHashes"
 
     @Published private(set) var remarkableAccount: RemarkableAccount?
     @Published private(set) var notionWorkspaces: [NotionWorkspace] = []
@@ -36,6 +37,12 @@ final class Ledger: ObservableObject {
     @Published private(set) var rules: [SyncRule] = []
     @Published private(set) var events: [SyncEvent] = []
     @Published private(set) var notebooks: [RmNotebook] = []
+
+    /// Version hash of the last page successfully written to a binding, keyed
+    /// by `"<bindingId>|<pageId>"`. The sync engine consults this so a page
+    /// whose content hasn't changed since its last sync is skipped. Not
+    /// `@Published`: no view observes it, and it churns during sync cycles.
+    private var syncedPageHashes: [String: String] = [:]
 
     private static let maxEventsRetained = 500
     private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
@@ -163,11 +170,17 @@ final class Ledger: ObservableObject {
         guard let removedIndex = self[keyPath: keyPath].firstIndex(where: { $0.id == id }) else { return }
         let removed = self[keyPath: keyPath].remove(at: removedIndex)
         var cascaded = false
+        var removedBindingIds: Set<String> = []
         for ruleIndex in rules.indices {
-            let before = rules[ruleIndex].destinations.count
+            let before = rules[ruleIndex].destinations
             rules[ruleIndex].destinations.removeAll { bindingMatches($0.configuration, removed) }
-            if rules[ruleIndex].destinations.count != before { cascaded = true }
+            if rules[ruleIndex].destinations.count != before.count {
+                cascaded = true
+                let surviving = Set(rules[ruleIndex].destinations.map(\.id))
+                removedBindingIds.formUnion(before.map(\.id).filter { !surviving.contains($0) })
+            }
         }
+        forgetSyncedHashes(forBindingIds: removedBindingIds)
         persist(value: self[keyPath: keyPath], key: key)
         if cascaded { persistRules() }
         NotificationCenter.default.post(name: notification, object: nil)
@@ -188,7 +201,9 @@ final class Ledger: ObservableObject {
     }
 
     func deleteRule(id: String) {
+        let removedBindingIds = Set(rules.first(where: { $0.id == id })?.destinations.map(\.id) ?? [])
         rules.removeAll { $0.id == id }
+        forgetSyncedHashes(forBindingIds: removedBindingIds)
         persistRules()
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
@@ -297,6 +312,41 @@ final class Ledger: ObservableObject {
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
 
+    // MARK: Sync idempotency
+
+    /// The version hash last synced for this page on this binding, if any.
+    /// A match against `RmPage.versionHash` means the page is unchanged and
+    /// can be skipped this cycle.
+    func syncedHash(bindingId: String, pageId: String) -> String? {
+        syncedPageHashes[Self.syncedHashKey(bindingId: bindingId, pageId: pageId)]
+    }
+
+    /// Records that `pageId` synced to `bindingId` at `versionHash` so future
+    /// cycles skip it until its content changes.
+    func recordSyncedPage(bindingId: String, pageId: String, versionHash: String) {
+        let key = Self.syncedHashKey(bindingId: bindingId, pageId: pageId)
+        guard syncedPageHashes[key] != versionHash else { return }
+        syncedPageHashes[key] = versionHash
+        persistSyncedHashes()
+    }
+
+    /// Drops every page hash recorded for the given bindings. Called when a
+    /// binding is removed or re-pointed at a new destination so the next cycle
+    /// resyncs into the new target rather than treating it as already done.
+    private func forgetSyncedHashes(forBindingIds bindingIds: Set<String>) {
+        guard !bindingIds.isEmpty else { return }
+        let prefixes = bindingIds.map { "\($0)|" }
+        let before = syncedPageHashes.count
+        syncedPageHashes = syncedPageHashes.filter { entry in
+            !prefixes.contains { entry.key.hasPrefix($0) }
+        }
+        if syncedPageHashes.count != before { persistSyncedHashes() }
+    }
+
+    private static func syncedHashKey(bindingId: String, pageId: String) -> String {
+        "\(bindingId)|\(pageId)"
+    }
+
     func addBinding(ruleId: String, binding: DestinationBinding) {
         guard let ruleIndex = rules.firstIndex(where: { $0.id == ruleId }) else { return }
         rules[ruleIndex].destinations.append(binding)
@@ -308,8 +358,14 @@ final class Ledger: ObservableObject {
     func updateBinding(ruleId: String, binding: DestinationBinding) {
         guard let ruleIndex = rules.firstIndex(where: { $0.id == ruleId }),
               let bindingIndex = rules[ruleIndex].destinations.firstIndex(where: { $0.id == binding.id }) else { return }
+        let previousConfiguration = rules[ruleIndex].destinations[bindingIndex].configuration
         rules[ruleIndex].destinations[bindingIndex] = binding
         rules[ruleIndex].updatedAt = Date()
+        // Re-pointing the binding at a new destination invalidates its synced
+        // history; pages must land in the new target on the next cycle.
+        if previousConfiguration != binding.configuration {
+            forgetSyncedHashes(forBindingIds: [binding.id])
+        }
         persistRules()
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
@@ -318,6 +374,7 @@ final class Ledger: ObservableObject {
         guard let ruleIndex = rules.firstIndex(where: { $0.id == ruleId }) else { return }
         rules[ruleIndex].destinations.removeAll { $0.id == bindingId }
         rules[ruleIndex].updatedAt = Date()
+        forgetSyncedHashes(forBindingIds: [bindingId])
         persistRules()
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
@@ -392,6 +449,11 @@ final class Ledger: ObservableObject {
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
         events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
         notebooks         = decodeArray([RmNotebook].self,      key: Self.notebooksKey,        defaults: defaults, decoder: decoder)
+
+        if let data = defaults.data(forKey: Self.syncedPageHashesKey),
+           let value = try? decoder.decode([String: String].self, from: data) {
+            syncedPageHashes = value
+        }
     }
 
     private func decodeArray<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults, decoder: JSONDecoder) -> T where T: ExpressibleByArrayLiteral {
@@ -427,8 +489,9 @@ final class Ledger: ObservableObject {
         }
     }
 
-    private func persistRemarkable() { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
-    private func persistRules()      { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
-    private func persistEvents()     { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
-    private func persistNotebooks()  { persist(value: notebooks, key: Self.notebooksKey) }
+    private func persistRemarkable()    { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
+    private func persistRules()         { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
+    private func persistEvents()        { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
+    private func persistNotebooks()     { persist(value: notebooks, key: Self.notebooksKey) }
+    private func persistSyncedHashes()  { persistDebounced({ [weak self] in self?.syncedPageHashes ?? [:] }, key: Self.syncedPageHashesKey) }
 }

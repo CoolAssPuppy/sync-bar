@@ -212,7 +212,8 @@ final class SyncCoordinator: ObservableObject {
         for (page, ocrResult) in context.ocrResults {
             let directive = engine.evaluate(
                 rule: effectiveRule, page: page,
-                ocrText: ocrResult.text, previouslySyncedHash: nil
+                ocrText: ocrResult.text,
+                previouslySyncedHash: ledger.syncedHash(bindingId: context.binding.id, pageId: page.pageId)
             )
             switch directive {
             case .skip:
@@ -231,6 +232,11 @@ final class SyncCoordinator: ObservableObject {
                 do {
                     let result = try await client.write(payload: payload, configuration: context.binding.configuration)
                     pagesSynced += 1
+                    ledger.recordSyncedPage(
+                        bindingId: context.binding.id,
+                        pageId: page.pageId,
+                        versionHash: page.versionHash
+                    )
                     ledger.appendEvent(makeEvent(
                         context: context, type: .pageSynced,
                         pageId: page.pageId, url: result.externalURL?.absoluteString,

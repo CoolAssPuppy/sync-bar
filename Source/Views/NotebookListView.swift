@@ -263,28 +263,43 @@ private struct NotebookRow: View {
 
     @ViewBuilder
     private var statusPill: some View {
-        if let rule {
-            if !rule.enabled {
-                StatusPill(label: "Disabled", kind: .neutral)
-            } else if rule.destinations.isEmpty {
-                StatusPill(label: "Draft", kind: .neutral)
-            } else if let lastRun = rule.aggregateLastRunAt {
-                StatusPill(label: "\(rule.destinations.count) dest · \(Formatters.relativeLabel(for: lastRun))", kind: pillKind(rule))
-            } else {
-                StatusPill(label: "\(rule.destinations.count) destination\(rule.destinations.count == 1 ? "" : "s")", kind: .info)
+        if let rule, !rule.destinations.isEmpty {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(rule.destinations.count) destination\(rule.destinations.count == 1 ? "" : "s")")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.muted)
+                if !rule.enabled {
+                    Text("Disabled")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.tertiary)
+                } else if let lastRun = rule.aggregateLastRunAt {
+                    Text("Synced \(Formatters.relativeLabel(for: lastRun))")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(syncColor(rule))
+                } else {
+                    Text("Not synced yet")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.tertiary)
+                }
             }
+        } else if rule != nil {
+            Text("Draft")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.tertiary)
         } else {
-            StatusPill(label: "No rule", kind: .neutral)
+            Text("No rule")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.tertiary)
         }
     }
 
-    private func pillKind(_ rule: SyncRule) -> StatusPill.Kind {
+    private func syncColor(_ rule: SyncRule) -> Color {
         switch rule.aggregateLastRunStatus {
-        case .success:  return .success
-        case .partial:  return .warning
-        case .error:    return .destructive
-        case .running:  return .info
-        case .neverRun: return .neutral
+        case .success:  return theme.success
+        case .partial:  return theme.warning
+        case .error:    return theme.destructive
+        case .running:  return theme.primary
+        case .neverRun: return theme.muted
         }
     }
 }

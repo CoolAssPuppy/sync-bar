@@ -25,7 +25,7 @@ struct RealRemarkableClient: RemarkableClient {
         self.keychain = keychain
     }
 
-    private static let pairBase  = URL(string: "https://webapp-production-dot-remarkable-production.appspot.com")!
+    private static let pairBase  = URL(string: "https://webapp.cloud.remarkable.com")!
     private static let cloudBase = URL(string: "https://internal.cloud.remarkable.com")!
 
     // MARK: Pairing
@@ -44,7 +44,14 @@ struct RealRemarkableClient: RemarkableClient {
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw RemarkableError.invalidOneTimeCode
+            let snippet = String(data: data, encoding: .utf8)?.prefix(300) ?? ""
+            Log.remarkable.error("Pairing failed: HTTP \(http.statusCode, privacy: .public) — \(snippet, privacy: .public)")
+            // 4xx from the device endpoint means the code is wrong/expired;
+            // anything else is an endpoint/network problem, surfaced verbatim.
+            if (400..<500).contains(http.statusCode) {
+                throw RemarkableError.invalidOneTimeCode
+            }
+            throw RemarkableError.network("reMarkable pairing returned HTTP \(http.statusCode).")
         }
         guard let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !token.isEmpty else {

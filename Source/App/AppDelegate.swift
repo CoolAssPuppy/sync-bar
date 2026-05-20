@@ -31,7 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         subscribeToNotifications()
         coordinator.start()
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if let error {
+                Log.app.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
+            } else if !granted {
+                Log.app.info("Notification authorization denied by the user.")
+            }
+        }
 
         let firstRun = Ledger.shared.notionWorkspaces.isEmpty && Ledger.shared.remarkableAccount == nil
         if AppSettings.shared.openWindowOnLaunch || firstRun {

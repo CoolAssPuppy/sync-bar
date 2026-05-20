@@ -147,11 +147,20 @@ struct RuleSliderView: View {
                     .labelsHidden()
                     .fixedSize()
                 }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Attach PDF", description: "Save the source PDF alongside transcribed text where the destination supports it.") {
-                    Toggle("", isOn: savePdfBinding)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
-                }
+                // "Attach PDF" is hidden until the feature is actually built.
+                // Today the sync path never generates or attaches a PDF (it
+                // passes pdfData: nil), so the toggle did nothing. It's also
+                // blocked for Notion specifically: the Notion API can't accept a
+                // local file upload — it only references files by URL — so
+                // attaching to a Notion page would require hosting the rendered
+                // page somewhere first. Re-enable once a real per-destination
+                // attachment path exists (Markdown/Drive can attach directly;
+                // Notion needs a hosted URL).
+                // AppRowDivider().padding(.vertical, 10)
+                // AppSettingRow("Attach PDF", description: "Save the source PDF alongside transcribed text where the destination supports it.") {
+                //     Toggle("", isOn: savePdfBinding)
+                //         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                // }
             }
         }
     }
@@ -355,16 +364,18 @@ struct RuleSliderView: View {
         )
     }
 
-    private var savePdfBinding: Binding<Bool> {
-        Binding(
-            get: { rule?.savePdfAttachment ?? true },
-            set: { newValue in
-                var copy = ensureRule()
-                copy.savePdfAttachment = newValue
-                ledger.upsertRule(copy)
-            }
-        )
-    }
+    // Disabled with the "Attach PDF" row above — restore both together once PDF
+    // attachment is implemented per destination.
+    // private var savePdfBinding: Binding<Bool> {
+    //     Binding(
+    //         get: { rule?.savePdfAttachment ?? true },
+    //         set: { newValue in
+    //             var copy = ensureRule()
+    //             copy.savePdfAttachment = newValue
+    //             ledger.upsertRule(copy)
+    //         }
+    //     )
+    // }
 }
 
 // MARK: - Destination row

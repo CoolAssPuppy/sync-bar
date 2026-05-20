@@ -19,4 +19,5 @@ lint:
 	./scripts/lint.sh
 
 clean:
-	rm -rf build SyncNerds.xcodeproj
+	rm -rf build SyncBar.xcodeproj
+	rm -rf "$(HOME)/Library/Developer/Xcode/DerivedData/SyncBar-"*

@@ -265,6 +265,17 @@ echo ""
 echo "==> Verifying appcast via Dub shortlink"
 curl -sL "$DUB_SHORTLINK" | grep -E '<(title|sparkle:shortVersionString|enclosure)' | head -6
 
+#----------------------------------------------------------------------
+# 11. Prune build intermediates from dist/
+#----------------------------------------------------------------------
+# The .xcarchive and export-* dirs each contain a full SyncBar.app copy that
+# Spotlight indexes (the source of duplicate "Sync Bar" hits). They're not
+# needed once the DMG is built and uploaded, so drop them here. The shipped
+# DMG, appcast.xml, and the Sparkle signature stay.
+echo "==> Pruning build intermediates from dist/"
+rm -rf "$ARCHIVE" "$EXPORT_DIR"
+find "$DIST" -maxdepth 1 -type d \( -name "*.xcarchive" -o -name "export-*" \) -exec rm -rf {} + 2>/dev/null || true
+
 echo ""
 echo "============================================================"
 echo "Released $APP_NAME $VERSION (build $NEW_BUILD)"

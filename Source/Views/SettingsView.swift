@@ -69,7 +69,7 @@ struct SettingsView: View {
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Send anonymous usage data",
-                              description: "Anonymous app-health metrics that help improve Sync Bar. Never your notes or who you are.") {
+                              description: "Anonymous metrics to help improve Sync Bar. Never any personal data.") {
                     Toggle("", isOn: Binding(
                         get: { telemetryOptedIn },
                         set: { newValue in
@@ -199,8 +199,7 @@ struct SettingsView: View {
                         }
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Check for updates",
-                              description: "Sparkle pulls from coolasspuppy.com/syncbar-updates and verifies the signature.") {
+                AppSettingRow("Check for updates", description: nil) {
                     AppSecondaryButton(title: "Check now", systemImage: "arrow.down.circle") {
                         UpdaterManager.shared.checkForUpdates()
                     }

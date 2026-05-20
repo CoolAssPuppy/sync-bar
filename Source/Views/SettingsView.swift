@@ -27,7 +27,6 @@ struct SettingsView: View {
                 VStack(spacing: 14) {
                     notificationsCard
                     updatesCard
-                    developerCard
                     contactCard
                 }
                 .frame(maxWidth: .infinity)
@@ -161,33 +160,16 @@ struct SettingsView: View {
                     Text(UpdaterManager.shared.currentVersion)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(theme.muted)
+                        .contextMenu {
+                            Button("Load sample data") { DemoData.load() }
+                            Button("Clear sample data") { DemoData.clear() }
+                        }
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Check for updates",
                               description: "Sparkle pulls from coolasspuppy.com/syncbar-updates and verifies the signature.") {
                     AppSecondaryButton(title: "Check now", systemImage: "arrow.down.circle") {
                         UpdaterManager.shared.checkForUpdates()
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Developer
-
-    private var developerCard: some View {
-        AppCard("Developer") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Populate the app with sample notebooks, connected destinations, rules, and a sync history so you can explore or screenshot every screen without a real device.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    AppSecondaryButton(title: "Load sample data", systemImage: "wand.and.stars") {
-                        DemoData.load()
-                    }
-                    AppSecondaryButton(title: "Clear sample data", systemImage: "trash", tint: .destructive) {
-                        DemoData.clear()
                     }
                 }
             }

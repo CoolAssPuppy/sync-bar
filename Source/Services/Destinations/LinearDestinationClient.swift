@@ -44,7 +44,7 @@ struct LinearDestinationClient: DestinationClient {
 
         var request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
         request.httpMethod = "POST"
-        request.setValue(token, forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["query": mutation, "variables": variables])
 

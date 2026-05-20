@@ -52,11 +52,6 @@ struct LinearAccountDetailView: View {
                 if case .linear(let cfg) = config { return cfg.workspaceId == accountId }
                 return false
             }),
-            authorization: .keychainToken(
-                title: "Linear access token",
-                description: "Personal access token from linear.app/settings/account/security. Without one, SyncNerds writes via a mock that returns a synthetic identifier.",
-                keychainKey: .linearAccessToken
-            ),
             rename: { newName in ledger.renameLinearAccount(id: accountId, newName: newName) },
             disconnect: { ledger.removeLinearAccount(id: accountId) }
         )

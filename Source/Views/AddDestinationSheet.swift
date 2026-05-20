@@ -21,9 +21,9 @@ struct AddDestinationSheet: View {
     @State private var inputLabel: String = ""
     @State private var markdownPath: String = ""
     @State private var appleNotesFolder: String = "SyncNerds"
-    @State private var linearTeamName: String = ""
-    @State private var linearOrgName: String = ""
     @State private var googleEmail: String = ""
+    @State private var isConnecting: Bool = false
+    @State private var errorMessage: String?
 
     var body: some View {
         let theme = themeStore.palette
@@ -121,20 +121,31 @@ struct AddDestinationSheet: View {
 
     private var linearFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connects a Linear team. Without an access token, SyncNerds writes via a mock that returns a synthetic issue identifier.")
+            Text("Connect Linear with OAuth. SyncNerds opens Linear in a secure window, then adds every team you can access as a destination.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            AppSettingRow("Team name", description: nil) {
-                TextField("Engineering, Growth, …", text: $linearTeamName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
+            if !AuthSecrets.isLinearConfigured {
+                oauthNotConfiguredHint(provider: "Linear")
             }
-            AppSettingRow("Organization", description: nil) {
-                TextField("Acme Inc", text: $linearOrgName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
+            if let errorMessage {
+                oauthErrorRow(errorMessage)
             }
         }
+    }
+
+    private func oauthNotConfiguredHint(provider: String) -> some View {
+        Text("\(provider) OAuth isn't configured in this build. Add its client credentials (see the README) and rebuild.")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.orange)
+    }
+
+    private func oauthErrorRow(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(message)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.red)
     }
 
     private var googleFields: some View {
@@ -190,8 +201,8 @@ struct AddDestinationSheet: View {
         HStack {
             Spacer()
             AppSecondaryButton(title: "Cancel") { isPresented = false }
-            AppPrimaryButton(title: "Add destination", systemImage: "plus", isDisabled: !canSubmit) {
-                submit()
+            AppPrimaryButton(title: primaryTitle, systemImage: primaryIcon, isDisabled: !canSubmit) {
+                primaryAction()
             }
         }
         .padding(.horizontal, 20)
@@ -199,13 +210,46 @@ struct AddDestinationSheet: View {
         .background(theme.surface)
     }
 
+    private var primaryTitle: LocalizedStringKey {
+        switch selectedKind {
+        case .linear: return isConnecting ? "Connecting…" : "Connect Linear"
+        default:      return "Add destination"
+        }
+    }
+
+    private var primaryIcon: String {
+        selectedKind == .linear ? "link" : "plus"
+    }
+
+    private func primaryAction() {
+        switch selectedKind {
+        case .linear: Task { await connectLinear() }
+        default:      submit()
+        }
+    }
+
     private var canSubmit: Bool {
         switch selectedKind {
         case .notion:         return !inputLabel.trimmingCharacters(in: .whitespaces).isEmpty
-        case .linear:         return !linearTeamName.trimmingCharacters(in: .whitespaces).isEmpty
+        case .linear:         return AuthSecrets.isLinearConfigured && !isConnecting
         case .googleDocs:     return googleEmail.contains("@")
         case .appleNotes:     return !appleNotesFolder.trimmingCharacters(in: .whitespaces).isEmpty
         case .markdownFolder: return !markdownPath.isEmpty
+        }
+    }
+
+    private func connectLinear() async {
+        isConnecting = true
+        errorMessage = nil
+        defer { isConnecting = false }
+        do {
+            let accounts = try await LinearAuthService.shared.connect()
+            for account in accounts { ledger.upsertLinearAccount(account) }
+            isPresented = false
+        } catch OAuthError.userCancelled {
+            // User backed out of the web flow; leave the sheet open, no error.
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -218,14 +262,7 @@ struct AddDestinationSheet: View {
                 isPresented = false
             }
         case .linear:
-            ledger.upsertLinearAccount(LinearAccount(
-                id: "team-" + UUID().uuidString.prefix(8).lowercased(),
-                name: linearTeamName.trimmingCharacters(in: .whitespaces),
-                organizationName: linearOrgName.trimmingCharacters(in: .whitespaces).isEmpty
-                    ? "Personal" : linearOrgName.trimmingCharacters(in: .whitespaces),
-                connectedAt: Date()
-            ))
-            isPresented = false
+            break  // handled by connectLinear() via primaryAction()
         case .googleDocs:
             ledger.upsertGoogleAccount(GoogleAccount(
                 id: googleEmail.lowercased(),

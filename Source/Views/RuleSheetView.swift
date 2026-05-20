@@ -82,15 +82,18 @@ struct RuleSliderView: View {
             }
             Spacer()
             if let rule {
+                let status = ruleStatus(rule)
+                Image(systemName: status.symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(status.color)
+                    .help(status.help)
                 Toggle("", isOn: ruleEnabledBinding(rule))
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(theme.primary)
-                Text(rule.enabled ? "Enabled" : "Disabled")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(rule.enabled ? theme.success : theme.tertiary)
-                AppSecondaryButton(title: "Delete rule", systemImage: "trash", tint: .destructive) {
+                    .help(rule.enabled ? "Disable rule" : "Enable rule")
+                AppIconButton(systemName: "trash", help: "Delete rule", tint: .destructive) {
                     ledger.deleteRule(id: rule.id)
                     onClose()
                 }
@@ -99,6 +102,17 @@ struct RuleSliderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    /// Health glyph for the rule: green check when syncing cleanly, yellow
+    /// triangle on partial failures, red triangle on errors, muted otherwise.
+    private func ruleStatus(_ rule: SyncRule) -> (symbol: String, color: Color, help: String) {
+        guard rule.enabled else { return ("pause.circle.fill", theme.tertiary, "Disabled") }
+        let statuses = rule.destinations.map(\.lastRunStatus)
+        if statuses.contains(.error)   { return ("exclamationmark.triangle.fill", theme.destructive, "Last sync failed") }
+        if statuses.contains(.partial) { return ("exclamationmark.triangle.fill", theme.warning, "Some pages failed") }
+        if statuses.contains(.success) { return ("checkmark.circle.fill", theme.success, "Syncing normally") }
+        return ("circle", theme.tertiary, "Not yet run")
     }
 
     // MARK: Rule-level settings card

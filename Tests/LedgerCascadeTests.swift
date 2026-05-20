@@ -96,6 +96,27 @@ final class LedgerCascadeTests: XCTestCase {
         XCTAssertNil(ledger.syncedExternalId(bindingId: "b1", pageId: "f1"))
     }
 
+    func test_demo_mode_is_isolated_and_restores_real_data() {
+        let ledger = Ledger.shared
+        // Seed a real rule, then verify demo mode hides it and exiting brings it back.
+        var realRule = SyncRule.new(notebookId: "nb-real", notebookName: "Real Folder")
+        realRule.destinations = [DestinationBinding(configuration: .appleNotes(AppleNotesDestinationConfig(folderName: "Notes")))]
+        ledger.upsertRule(realRule)
+        XCTAssertTrue(ledger.rules.contains { $0.id == realRule.id })
+
+        ledger.setDemoMode(true)
+        XCTAssertTrue(ledger.isDemoMode)
+        XCTAssertTrue(ledger.rules.contains { $0.id == "demo-rule-1" }, "demo data should be loaded")
+        XCTAssertFalse(ledger.rules.contains { $0.id == realRule.id }, "real rule must not appear in demo mode")
+
+        ledger.setDemoMode(false)
+        XCTAssertFalse(ledger.isDemoMode)
+        XCTAssertFalse(ledger.rules.contains { $0.id == "demo-rule-1" }, "demo data must be gone after exit")
+        XCTAssertTrue(ledger.rules.contains { $0.id == realRule.id }, "real rule must come back")
+
+        ledger.deleteRule(id: realRule.id)
+    }
+
     func test_updateBindingRunResult_skips_unchanged_writes() {
         let ledger = Ledger.shared
         var rule = SyncRule.new(notebookId: "nb-update", notebookName: "Update test")

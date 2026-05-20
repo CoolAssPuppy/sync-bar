@@ -10,8 +10,9 @@ import Foundation
 /// Seeds the ledger with a realistic, fully-populated dataset so the whole UI
 /// (notebooks, connected destinations, rules with varied sync status, and a
 /// sync-event history) can be explored or screenshotted without a real device
-/// or live cloud content. All seeded entities use `demo-` ids (and the sample
-/// notebooks) so `clear()` can remove exactly what it added.
+/// or live cloud content. Loaded into the isolated demo store by
+/// `Ledger.setDemoMode(true)`; the real data lives in a separate store and is
+/// never touched.
 @MainActor
 enum DemoData {
 
@@ -50,19 +51,6 @@ enum DemoData {
 
         for rule in rules() { ledger.upsertRule(rule) }
         for event in events() { ledger.appendEvent(event) }
-    }
-
-    // MARK: Clear
-
-    static func clear(into ledger: Ledger = .shared) {
-        for id in ruleIds { ledger.deleteRule(id: id) }
-        ledger.removeNotionWorkspace(id: notionId)
-        ledger.removeLinearAccount(id: linearId)
-        ledger.removeGoogleAccount(id: googleId)
-        ledger.removeAppleNotesTarget(id: appleNotesId)
-        ledger.removeMarkdownTarget(id: markdownId)
-        ledger.setNotebooks([])
-        ledger.clearEvents()
     }
 
     // MARK: Builders

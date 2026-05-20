@@ -55,17 +55,87 @@ final class Ledger: ObservableObject {
     private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
     private var pendingPersistTasks: [String: Task<Void, Never>] = [:]
 
-    /// Backing store for all persistence. Under XCTest we use a throwaway suite
-    /// so test runs never leak rules/events/accounts into the real app.
-    static let defaults: UserDefaults = {
+    static let demoSuiteName = "com.strategicnerds.SyncBar.demo"
+
+    /// The real persistence store. Under XCTest we use a throwaway suite so test
+    /// runs never leak rules/events/accounts into the real app.
+    private static func realStore() -> UserDefaults {
         if NSClassFromString("XCTestCase") != nil {
             return UserDefaults(suiteName: "com.strategicnerds.SyncBar.tests") ?? .standard
         }
         return .standard
-    }()
+    }
+
+    /// Active backing store. Swapped to an isolated demo suite while demo mode
+    /// is on (for screenshots) and back to the real store when off, so demo
+    /// data never touches real data. Demo mode is session-only — a launch
+    /// always starts on the real store.
+    private var store: UserDefaults = Ledger.realStore()
+
+    /// Whether the ledger is currently serving ephemeral demo data.
+    @Published private(set) var isDemoMode = false
 
     private init() {
         load()
+    }
+
+    // MARK: Demo mode
+
+    /// Enters or exits ephemeral demo mode. In demo mode the ledger reads and
+    /// writes an isolated suite seeded with sample data, leaving the real data
+    /// untouched; exiting reloads the real data. Demo mode never persists across
+    /// launches, and the demo suite is wiped on both entry and exit so it can't
+    /// linger.
+    func setDemoMode(_ on: Bool) {
+        guard on != isDemoMode else { return }
+
+        // Before leaving the real store, flush any debounced writes synchronously
+        // so a just-made change isn't lost; then drop the (now stale) tasks so
+        // they can't fire against the store we're switching to.
+        if !isDemoMode { flushPending() }
+        pendingPersistTasks.values.forEach { $0.cancel() }
+        pendingPersistTasks.removeAll()
+
+        if on {
+            let demo = UserDefaults(suiteName: Self.demoSuiteName) ?? Self.realStore()
+            demo.removePersistentDomain(forName: Self.demoSuiteName)   // start fresh
+            store = demo
+            isDemoMode = true
+            load()
+            DemoData.load(into: self)
+        } else {
+            let leaving = store
+            store = Self.realStore()
+            isDemoMode = false
+            leaving.removePersistentDomain(forName: Self.demoSuiteName)  // leave nothing behind
+            load()
+        }
+        broadcastChanged()
+    }
+
+    /// Synchronously writes every collection to the current store. Used before a
+    /// store swap so a debounced write still in flight isn't dropped.
+    private func flushPending() {
+        persist(value: remarkableAccount, key: Self.remarkableAccountKey)
+        persist(value: notionWorkspaces, key: Self.notionWorkspacesKey)
+        persist(value: linearAccounts, key: Self.linearAccountsKey)
+        persist(value: googleAccounts, key: Self.googleAccountsKey)
+        persist(value: markdownTargets, key: Self.markdownTargetsKey)
+        persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
+        persist(value: rules, key: Self.rulesKey)
+        persist(value: events, key: Self.eventsKey)
+        persist(value: notebooks, key: Self.notebooksKey)
+        persist(value: syncedPageHashes, key: Self.syncedPageHashesKey)
+        persist(value: syncedExternalIds, key: Self.syncedExternalIdsKey)
+    }
+
+    /// Posts every "changed" notification so views that observe NotificationCenter
+    /// (rather than the @Published arrays) refresh after a wholesale store swap.
+    private func broadcastChanged() {
+        for name: Notification.Name in [.remarkableAccountChanged, .notionWorkspacesChanged,
+                                        .destinationsChanged, .rulesChanged, .eventsChanged, .notebooksChanged] {
+            NotificationCenter.default.post(name: name, object: nil)
+        }
     }
 
     // MARK: Public API
@@ -463,7 +533,7 @@ final class Ledger: ObservableObject {
     // MARK: Persistence
 
     private func load() {
-        let defaults = Self.defaults
+        let defaults = store
         let decoder = JSONDecoder()
 
         if let data = defaults.data(forKey: Self.remarkableAccountKey) {
@@ -525,7 +595,7 @@ final class Ledger: ObservableObject {
     fileprivate func persist<T: Encodable>(value: T, key: String) {
         let encoder = JSONEncoder()
         guard let data = try? encoder.encode(value) else { return }
-        Self.defaults.set(data, forKey: key)
+        store.set(data, forKey: key)
     }
 
     /// Coalesces high-frequency writes (events, rule run-status updates) so

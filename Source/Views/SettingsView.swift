@@ -193,16 +193,21 @@ struct SettingsView: View {
                     Text(UpdaterManager.shared.currentVersion)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(theme.muted)
-                        .contextMenu {
-                            Button("Load sample data") { DemoData.load() }
-                            Button("Clear sample data") { DemoData.clear() }
-                        }
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Check for updates", description: nil) {
                     AppSecondaryButton(title: "Check now", systemImage: "arrow.down.circle") {
                         UpdaterManager.shared.checkForUpdates()
                     }
+                }
+                AppRowDivider().padding(.vertical, 10)
+                AppSettingRow("Demo mode",
+                              description: "Show sample data for screenshots. Your real notebooks, rules, and history stay untouched — turn this off (or just relaunch) to bring them back.") {
+                    Toggle("", isOn: Binding(
+                        get: { ledger.isDemoMode },
+                        set: { ledger.setDemoMode($0) }
+                    ))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
             }
         }

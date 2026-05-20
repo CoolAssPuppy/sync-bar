@@ -58,6 +58,9 @@ final class SyncCoordinator: ObservableObject {
     /// sample folders. Runs at launch so the menu bar dropdown is clean even
     /// without opening the main window.
     func refreshFolders() async {
+        // Demo mode shows ephemeral sample folders/rules; refreshing from the
+        // real device would prune them, so skip while it's on.
+        guard !ledger.isDemoMode else { return }
         guard keychain.value(for: .remarkableDeviceToken)?.isEmpty == false else { return }
         do {
             let folders = try await remarkable.listNotebooks()
@@ -104,6 +107,7 @@ final class SyncCoordinator: ObservableObject {
     }
 
     private func runCycle(ruleId: String?, bindingId: String?, trigger: SyncTrigger) async {
+        guard !ledger.isDemoMode else { return }
         guard ledger.remarkableAccount != nil else {
             Log.sync.info("Skipping cycle: no reMarkable account paired.")
             return

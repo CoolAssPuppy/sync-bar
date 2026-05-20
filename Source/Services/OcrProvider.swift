@@ -117,7 +117,10 @@ struct OpenAIOcrProvider: OcrProvider {
                 ["role": "user", "content": [
                     ["type": "text", "text": OCRPrompts.userMessage],
                     ["type": "image_url",
-                     "image_url": ["url": "data:image/png;base64,\(imageData.base64EncodedString())"]]
+                     // "high" makes the model tile and read fine detail rather
+                     // than downsampling — important for handwriting + diagrams.
+                     "image_url": ["url": "data:image/png;base64,\(imageData.base64EncodedString())",
+                                   "detail": "high"]]
                 ]]
             ],
             "max_tokens": 2_000

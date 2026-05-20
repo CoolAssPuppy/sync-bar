@@ -38,9 +38,19 @@ enum OCRPrompts {
        <mermaid>
        (mermaid source here)
        </mermaid>
-       Pick the appropriate diagram type: `flowchart TD`, `sequenceDiagram`, \
-    `classDiagram`, `stateDiagram-v2`, `erDiagram`, or `mindmap`. Use short \
-    node ids and clean labels. Do not invent content the page does not show.
+       Reproduce the diagram FAITHFULLY, not a tidied-up version:
+       - Include every node, using its exact handwritten label text (verbatim; \
+    use [?] for an unreadable word). Do not merge, drop, or rename nodes.
+       - Include every connector, with the correct direction the arrowhead \
+    shows. If a line has no arrowhead, use an undirected link.
+       - Put any text written on or beside an arrow as that edge's label.
+       - Keep the spatial structure (top-to-bottom vs left-to-right, branches, \
+    groupings) as drawn.
+       - Do NOT invent nodes, edges, or connections the page doesn't show. If a \
+    connection is ambiguous, include it as a plain link rather than guessing.
+       Pick the diagram type that matches what's drawn: `flowchart TD` (or `LR`), \
+    `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`, `erDiagram`, or \
+    `mindmap`. Use short node ids with the real labels in brackets.
     6. If the page mixes prose and a diagram, output the prose first, a blank \
     line, then the `<mermaid>...</mermaid>` block.
     7. Do not add commentary, headings, markdown formatting, or any text \

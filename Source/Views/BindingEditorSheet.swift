@@ -45,7 +45,7 @@ struct BindingEditorSheet: View {
         switch kind {
         case .notion:         NotionForm(binding: $localNotion, workspaces: ledger.notionWorkspaces)
         case .linear:         LinearForm(binding: $localLinear, accounts: ledger.linearAccounts)
-        case .googleDocs:     GoogleDocsForm(binding: $localGoogle, accounts: ledger.googleAccounts)
+        case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes, targets: ledger.appleNotesTargets)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
         }

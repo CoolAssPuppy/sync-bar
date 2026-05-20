@@ -22,7 +22,7 @@ struct LinearForm: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 240)
+                    .fixedSize()
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Project (optional)", description: nil) {

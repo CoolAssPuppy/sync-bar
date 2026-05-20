@@ -1,6 +1,6 @@
 //
 //  GoogleDocsForm.swift
-//  SyncBar
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -9,26 +9,15 @@ import SwiftUI
 
 struct GoogleDocsForm: View {
     @Binding var binding: GoogleFormState
-    let accounts: [GoogleAccount]
+
+    @State private var folders: LoadState<[GoogleDriveFolder]> = .idle
+    @Environment(\.theme) private var theme
 
     var body: some View {
         AppCard("Google Docs") {
             VStack(spacing: 0) {
-                AppSettingRow("Account", description: nil) {
-                    Picker("", selection: $binding.email) {
-                        Text("Select…").tag("")
-                        ForEach(accounts) { account in
-                            Text(account.displayName).tag(account.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 260)
-                }
-                AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Drive folder (optional)", description: "Drive folder ID. Leave blank to drop docs at the user's root.") {
-                    TextField("Drive folder ID", text: $binding.folderId)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 260)
+                AppSettingRow("Drive folder", description: "Where new docs are created. Leave on My Drive to use the root.") {
+                    folderControl
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Append mode", description: nil) {
@@ -38,9 +27,54 @@ struct GoogleDocsForm: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 240)
+                    .fixedSize()
                 }
             }
+        }
+        .task { await loadFolders() }
+    }
+
+    @ViewBuilder
+    private var folderControl: some View {
+        switch folders {
+        case .idle, .loading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Loading folders…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+            }
+        case .failed(let message):
+            Text(message)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.destructive)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 260, alignment: .trailing)
+        case .loaded(let list):
+            Picker("", selection: $binding.folderId) {
+                Text("My Drive (root)").tag("")
+                ForEach(list) { folder in
+                    Text(folder.name).tag(folder.id)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .onChange(of: binding.folderId) { _, newValue in
+                binding.folderName = list.first(where: { $0.id == newValue })?.name ?? ""
+            }
+        }
+    }
+
+    private func loadFolders() async {
+        guard !binding.email.isEmpty else {
+            folders = .failed("No Google account on this destination.")
+            return
+        }
+        folders = .loading
+        do {
+            folders = .loaded(try await GoogleTokens.listFolders(email: binding.email))
+        } catch {
+            folders = .failed(Formatters.userMessage(for: error))
         }
     }
 }

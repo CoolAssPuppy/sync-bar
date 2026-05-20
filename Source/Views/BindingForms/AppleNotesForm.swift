@@ -17,7 +17,8 @@ struct AppleNotesForm: View {
                 AppSettingRow("Folder", description: "Sync Bar creates the folder in iCloud Notes if it doesn't exist.") {
                     TextField("Folder name", text: $binding.folderName)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 240)
+                        .controlSize(.large)
+                        .frame(width: 260)
                 }
                 if !targets.isEmpty {
                     AppRowDivider().padding(.vertical, 10)
@@ -28,7 +29,7 @@ struct AppleNotesForm: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 240)
+                        .fixedSize()
                     }
                 }
             }

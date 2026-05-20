@@ -14,6 +14,12 @@
 import Foundation
 import AppKit
 
+/// A Google Drive folder the user can target.
+struct GoogleDriveFolder: Identifiable, Decodable, Equatable {
+    let id: String
+    let name: String
+}
+
 /// Decoded Google token endpoint response.
 struct GoogleTokenResponse: Decodable {
     let access_token: String
@@ -47,6 +53,28 @@ enum GoogleTokens {
             "code_verifier": verifier
         ])
         return try await post(body: body, context: "Google token exchange", session: session)
+    }
+
+    /// Lists the account's Drive folders so a destination can target one.
+    /// Requires the drive.metadata.readonly scope.
+    static func listFolders(email: String, session: URLSession = .shared) async throws -> [GoogleDriveFolder] {
+        let token = try await validAccessToken(email: email, session: session)
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: "mimeType = 'application/vnd.google-apps.folder' and trashed = false"),
+            URLQueryItem(name: "fields", value: "files(id,name)"),
+            URLQueryItem(name: "pageSize", value: "200"),
+            URLQueryItem(name: "orderBy", value: "name")
+        ]
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? "HTTP \(http.statusCode)"
+            throw OAuthError.invalidResponse("Drive folder list failed (HTTP \(http.statusCode)): \(snippet)")
+        }
+        struct FolderList: Decodable { let files: [GoogleDriveFolder] }
+        return (try? JSONDecoder().decode(FolderList.self, from: data))?.files ?? []
     }
 
     static func fetchEmail(accessToken: String, session: URLSession = .shared) async throws -> String {
@@ -126,7 +154,7 @@ final class GoogleAuthService {
     static var redirectURI: String { "http://localhost:\(loopbackPort)/oauth/google" }
 
     private static let authorizeBase = "https://accounts.google.com/o/oauth2/v2/auth"
-    static let scopes = "openid email https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"
+    static let scopes = "openid email https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly"
 
     static func authorizeURL(clientId: String, state: String, challenge: String) -> URL {
         var components = URLComponents(string: authorizeBase)!

@@ -76,7 +76,7 @@ struct Sidebar: View {
             AccountRow(
                 title: "reMarkable",
                 subtitle: ledger.remarkableAccount == nil ? "Not connected" : "",
-                icon: .systemSymbol("pencil.tip.crop.circle", accent: ledger.remarkableAccount != nil),
+                icon: .asset("Remarkable"),
                 isSelected: selection == .remarkable
             )
             .onTapGesture { selection = .remarkable }
@@ -284,6 +284,8 @@ struct Sidebar: View {
 enum AccountRowIcon {
     case systemSymbol(String, accent: Bool)
     case destination(DestinationKind)
+    /// A bundled brand image (e.g. the reMarkable logo) rendered in a rounded tile.
+    case asset(String)
 }
 
 private struct AccountRow: View {
@@ -357,6 +359,17 @@ private struct AccountRow: View {
             )
         case .destination(let kind):
             DestinationIcon(kind: kind, size: 22)
+        case .asset(let name):
+            Image(name)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(theme.borderStrong, lineWidth: 1)
+                )
         }
     }
 }

@@ -208,6 +208,11 @@ private struct SyncRuleCard: View {
                     .font(.system(size: 10))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
+                // TEMPORARY: explicit notebook name + absolute last-sync date.
+                Text(lastSyncDateLine)
+                    .font(.system(size: 9))
+                    .foregroundStyle(theme.tertiary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -241,6 +246,14 @@ private struct SyncRuleCard: View {
             return "\(resultLabel) · \(Formatters.relativeLabel(for: lastRun))"
         }
         return destinationsLabel + " · never synced"
+    }
+
+    // TEMPORARY: surfaces the notebook name and the exact last-sync timestamp.
+    private var lastSyncDateLine: String {
+        guard let lastRun = rule.aggregateLastRunAt else {
+            return "\(rule.rmNotebookName) · last sync: never"
+        }
+        return "\(rule.rmNotebookName) · last sync: \(lastRun.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

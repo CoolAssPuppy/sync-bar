@@ -52,6 +52,40 @@ struct AppleNotesDestinationClient: DestinationClient {
         }.value
     }
 
+    /// Lists the folder names in the local iCloud Notes account so the binding
+    /// form can offer them. Runs off the main actor (Apple Events block).
+    static func listFolders() async throws -> [String] {
+        let script = """
+        tell application "Notes"
+            tell account "iCloud"
+                set out to ""
+                repeat with f in folders
+                    set out to out & (name of f) & linefeed
+                end repeat
+                return out
+            end tell
+        end tell
+        """
+        return try await Task.detached(priority: .userInitiated) { () throws -> [String] in
+            var errorInfo: NSDictionary?
+            guard let appleScript = NSAppleScript(source: script) else {
+                throw DestinationError.scriptFailed("Couldn't construct Apple Notes script.")
+            }
+            let descriptor = appleScript.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let message = errorInfo["NSAppleScriptErrorMessage"] as? String ?? "Couldn't read Apple Notes folders."
+                throw DestinationError.scriptFailed(message)
+            }
+            let names = (descriptor.stringValue ?? "")
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            // De-dupe (a name can repeat across sub-accounts) while keeping order.
+            var seen = Set<String>()
+            return names.filter { seen.insert($0).inserted }
+        }.value
+    }
+
     // MARK: Script building (internal for testing)
 
     /// Builds the AppleScript that creates or reuses the iCloud folder and adds

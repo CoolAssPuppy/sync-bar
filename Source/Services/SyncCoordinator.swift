@@ -184,7 +184,7 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
-    private struct BindingRunContext {
+    private struct BindingRunContext: Sendable {
         let rule: SyncRule
         let binding: DestinationBinding
         let ocrResults: [(page: RmPage, result: OcrResult)]

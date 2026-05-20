@@ -23,7 +23,7 @@ struct RmNotebook: Codable, Equatable, Identifiable, Hashable {
     var pageCount: Int
 }
 
-struct RmPage: Codable, Equatable, Hashable, Identifiable {
+struct RmPage: Codable, Equatable, Hashable, Identifiable, Sendable {
     var id: String { "\(notebookId)-\(pageId)" }
     var notebookId: String
     var pageId: String

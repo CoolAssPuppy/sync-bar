@@ -199,8 +199,7 @@ struct Sidebar: View {
             Spacer(minLength: 6)
 
             footerButton(systemName: "list.bullet.rectangle",
-                         help: "Open sync log",
-                         badgeCount: ledger.events.count) {
+                         help: "Open sync log") {
                 onOpenLog()
             }
 
@@ -258,29 +257,20 @@ struct Sidebar: View {
 
     private func footerButton(systemName: String,
                               help: LocalizedStringKey,
-                              badgeCount: Int = 0,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: systemName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.muted)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                            .fill(theme.card)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
-                            .strokeBorder(theme.borderStrong, lineWidth: 1)
-                    )
-                if badgeCount > 0 {
-                    Circle()
-                        .fill(theme.warning)
-                        .frame(width: 6, height: 6)
-                        .offset(x: 2, y: -2)
-                }
-            }
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.muted)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .fill(theme.card)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                        .strokeBorder(theme.borderStrong, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .help(help)

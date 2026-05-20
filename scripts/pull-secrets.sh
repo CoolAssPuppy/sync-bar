@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# Pull OAuth client credentials from the Doppler `sync-bar` project into
-# Secrets.xcconfig (gitignored), which the build bakes into Info.plist.
+# Pull OAuth client credentials and the PostHog analytics key from the Doppler
+# `sync-bar` project into Secrets.xcconfig (gitignored), which the build bakes
+# into Info.plist.
 #
 # Usage:
 #   ./scripts/pull-secrets.sh [config]      # config defaults to "dev"
@@ -26,6 +27,7 @@ KEYS=(
   NOTION_CLIENT_ID NOTION_CLIENT_SECRET
   LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET
   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
+  POSTHOG_API_KEY
 )
 
 echo "==> Pulling OAuth credentials from Doppler ($PROJECT/$CONFIG)"

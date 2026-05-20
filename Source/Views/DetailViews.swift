@@ -217,8 +217,10 @@ struct RemarkableDetailView: View {
             ledger.setRemarkableAccount(account)
             let notebooks = try await remarkable.listNotebooks()
             ledger.setNotebooks(notebooks)
+            Telemetry.capture("remarkable.paired")
             oneTimeCode = ""
         } catch {
+            Telemetry.capture("remarkable.pair_failed")
             errorMessage = Formatters.userMessage(for: error)
         }
     }

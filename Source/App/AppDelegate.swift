@@ -27,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        Telemetry.setup()
+        captureLaunchEvents()
+
         setupStatusItem()
         subscribeToNotifications()
         coordinator.start()
@@ -47,6 +50,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.showMainWindow()
             }
+        }
+    }
+
+    // MARK: Telemetry
+
+    /// Fires `app.launched` and, when the installed build changed since the
+    /// last launch, `update.installed` with the previous/current versions.
+    private func captureLaunchEvents() {
+        Telemetry.capture("app.launched")
+
+        let versionKey = "\(Bundle.main.bundleIdentifier ?? "syncbar").telemetry.lastVersion"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let previous = UserDefaults.standard.string(forKey: versionKey)
+        if let previous, previous != current {
+            Telemetry.capture("update.installed", properties: ["from": previous, "to": current])
+        }
+        if previous != current {
+            UserDefaults.standard.set(current, forKey: versionKey)
         }
     }
 
@@ -154,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        Telemetry.capture("menu.opened")
 
         popoverEventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]

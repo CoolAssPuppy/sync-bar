@@ -50,9 +50,15 @@ final class SyncCoordinator: ObservableObject {
     func start() { restartTimer() }
     func stop()  { timerTask?.cancel(); timerTask = nil }
 
+    /// What kicked off a cycle, attached to the `sync.run` analytics event.
+    private enum SyncTrigger: String {
+        case manual
+        case scheduled
+    }
+
     func syncNow(ruleId: String? = nil, bindingId: String? = nil) {
         guard !isSyncing else { return }
-        Task { await runCycle(ruleId: ruleId, bindingId: bindingId) }
+        Task { await runCycle(ruleId: ruleId, bindingId: bindingId, trigger: .manual) }
     }
 
     private func restartTimer() {
@@ -72,13 +78,13 @@ final class SyncCoordinator: ObservableObject {
                 guard seconds > 0, !self.settings.pauseSyncing else { return }
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
-                await self.runCycle(ruleId: nil, bindingId: nil)
+                await self.runCycle(ruleId: nil, bindingId: nil, trigger: .scheduled)
                 self.nextTickAt = Date().addingTimeInterval(TimeInterval(seconds))
             }
         }
     }
 
-    private func runCycle(ruleId: String?, bindingId: String?) async {
+    private func runCycle(ruleId: String?, bindingId: String?, trigger: SyncTrigger) async {
         guard ledger.remarkableAccount != nil else {
             Log.sync.info("Skipping cycle: no reMarkable account paired.")
             return
@@ -92,6 +98,7 @@ final class SyncCoordinator: ObservableObject {
 
         isSyncing = true
         NotificationCenter.default.post(name: .syncStarted, object: nil)
+        let cycleStart = Date()
 
         for rule in rules {
             activeRuleId = rule.id
@@ -103,6 +110,12 @@ final class SyncCoordinator: ObservableObject {
         lastTickAt = Date()
         isSyncing = false
         NotificationCenter.default.post(name: .syncFinished, object: nil)
+
+        Telemetry.capture("sync.run", properties: [
+            "trigger": trigger.rawValue,
+            "rules": rules.count,
+            "duration_ms": Int(Date().timeIntervalSince(cycleStart) * 1_000),
+        ])
     }
 
     /// Maximum number of destinations we sync in parallel within one rule.
@@ -266,6 +279,13 @@ final class SyncCoordinator: ObservableObject {
             context: context, type: .ruleRunCompleted,
             durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
         ))
+
+        // Provider kind + counts only — never notebook names, titles, or text.
+        Telemetry.capture("destination.synced", properties: [
+            "provider": context.binding.kind.rawValue,
+            "pages_synced": pagesSynced,
+            "status": status.rawValue,
+        ])
 
         if firstError != nil, self.settings.notifyOnFailure {
             postNotification(title: "Sync failed",

@@ -223,8 +223,10 @@ struct WelcomeView: View {
             ledger.setRemarkableAccount(account)
             let notebooks = try await remarkable.listNotebooks()
             ledger.setNotebooks(notebooks)
+            Telemetry.capture("remarkable.paired")
             step = .connectNotion
         } catch {
+            Telemetry.capture("remarkable.pair_failed")
             errorMessage = Formatters.userMessage(for: error)
         }
     }
@@ -236,10 +238,12 @@ struct WelcomeView: View {
         do {
             let workspace = try await NotionAuthService.shared.connect()
             ledger.upsertNotionWorkspace(workspace)
+            Telemetry.capture("destination.connected", properties: ["provider": "notion"])
             step = .done
         } catch OAuthError.userCancelled {
             // User backed out of the browser flow; stay on this step.
         } catch {
+            Telemetry.capture("destination.connect_failed", properties: ["provider": "notion"])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }

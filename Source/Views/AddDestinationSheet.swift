@@ -252,10 +252,12 @@ struct AddDestinationSheet: View {
         do {
             let account = try await GoogleAuthService.shared.connect()
             ledger.upsertGoogleAccount(account)
+            Telemetry.capture("destination.connected", properties: ["provider": "googleDocs"])
             isPresented = false
         } catch OAuthError.userCancelled {
             // User backed out; leave the sheet open.
         } catch {
+            Telemetry.capture("destination.connect_failed", properties: ["provider": "googleDocs"])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -267,10 +269,12 @@ struct AddDestinationSheet: View {
         do {
             let workspace = try await NotionAuthService.shared.connect()
             ledger.upsertNotionWorkspace(workspace)
+            Telemetry.capture("destination.connected", properties: ["provider": "notion"])
             isPresented = false
         } catch OAuthError.userCancelled {
             // User backed out; leave the sheet open.
         } catch {
+            Telemetry.capture("destination.connect_failed", properties: ["provider": "notion"])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -282,10 +286,12 @@ struct AddDestinationSheet: View {
         do {
             let accounts = try await LinearAuthService.shared.connect()
             for account in accounts { ledger.upsertLinearAccount(account) }
+            Telemetry.capture("destination.connected", properties: ["provider": "linear"])
             isPresented = false
         } catch OAuthError.userCancelled {
             // User backed out of the web flow; leave the sheet open, no error.
         } catch {
+            Telemetry.capture("destination.connect_failed", properties: ["provider": "linear"])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -300,6 +306,7 @@ struct AddDestinationSheet: View {
                 folderName: appleNotesFolder,
                 connectedAt: Date()
             ))
+            Telemetry.capture("destination.connected", properties: ["provider": "appleNotes"])
             isPresented = false
         case .markdownFolder:
             let url = URL(fileURLWithPath: markdownPath, isDirectory: true)
@@ -309,6 +316,7 @@ struct AddDestinationSheet: View {
                 folderPath: markdownPath,
                 connectedAt: Date()
             ))
+            Telemetry.capture("destination.connected", properties: ["provider": "markdownFolder"])
             isPresented = false
         }
     }

@@ -13,6 +13,9 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: "2.6.0"
+  PostHog:
+    url: https://github.com/PostHog/posthog-ios
+    from: "3.0.0"
 
 settings:
   base:
@@ -53,6 +56,7 @@ targets:
     dependencies:
       - package: KeychainAccess
       - package: Sparkle
+      - package: PostHog
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBar

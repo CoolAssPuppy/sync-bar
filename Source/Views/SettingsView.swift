@@ -14,6 +14,7 @@ struct SettingsView: View {
 
     @State private var openaiKey: String = ""
     @State private var anthropicKey: String = ""
+    @State private var telemetryOptedIn = Telemetry.isOptedIn
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,6 +66,18 @@ struct SettingsView: View {
                     Toggle("", isOn: $settings.openWindowOnLaunch)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
+                AppRowDivider().padding(.vertical, 10)
+                AppSettingRow("Send anonymous usage data",
+                              description: "Anonymous app-health metrics that help improve Sync Bar. Never your notes or who you are.") {
+                    Toggle("", isOn: Binding(
+                        get: { telemetryOptedIn },
+                        set: { newValue in
+                            telemetryOptedIn = newValue
+                            Telemetry.setOptedIn(newValue)
+                        }
+                    ))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                }
             }
         }
     }
@@ -81,7 +94,7 @@ struct SettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 160)
+                    .fixedSize()
                 }
                 if settings.ocrProvider == .openai {
                     AppRowDivider().padding(.vertical, 10)

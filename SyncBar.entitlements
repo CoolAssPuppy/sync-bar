@@ -5,7 +5,7 @@
 	<!--
 	iCloud Key-Value Storage. Used for cross-device preference sync via
 	NSUbiquitousKeyValueStore. Matching capability must be enabled in
-	App Store Connect for the com.strategicnerds.SyncNerdsApp bundle id.
+	App Store Connect for the com.strategicnerds.SyncBar bundle id.
 	-->
 	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
 	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
@@ -16,7 +16,7 @@
 	-->
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.strategicnerds.syncnerds</string>
+		<string>iCloud.com.strategicnerds.syncbar</string>
 	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>

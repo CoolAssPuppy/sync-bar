@@ -1,6 +1,6 @@
 # Architecture
 
-SyncNerds is a SwiftUI menu bar app that orchestrates one-way syncs from a reMarkable tablet to five user-facing destination kinds. The design mirrors mail-notifier and linear-bar in look, feel, and structural choices.
+SyncBar is a SwiftUI menu bar app that orchestrates one-way syncs from a reMarkable tablet to five user-facing destination kinds. The design mirrors mail-notifier and linear-bar in look, feel, and structural choices.
 
 ## Overview
 
@@ -119,7 +119,7 @@ For v0.2 everything lives in `UserDefaults` behind the `Ledger` API:
 
 `AppSettings` writes individual primitive defaults under `settings.*` keys.
 
-Tokens go through `KeychainStore` (synchronizable iCloud Keychain entries, service `com.strategicnerds.SyncNerdsApp`). Typed keys cover OpenAI, Anthropic, reMarkable device + user, per-Notion-workspace, Linear, and per-Google-account tokens.
+Tokens go through `KeychainStore` (synchronizable iCloud Keychain entries, service `com.strategicnerds.SyncBar`). Typed keys cover OpenAI, Anthropic, reMarkable device + user, per-Notion-workspace, Linear, and per-Google-account tokens.
 
 When CloudKit lands, the active `Ledger` rewrites its internal storage with the same public methods. Views never touch persistence directly so the swap is local.
 

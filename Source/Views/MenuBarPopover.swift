@@ -1,6 +1,6 @@
 //
 //  MenuBarPopover.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -46,7 +46,7 @@ struct MenuBarPopover: View {
             BrandMark()
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("SyncNerds")
+                Text("Sync Bar")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 HStack(spacing: 6) {
@@ -167,14 +167,14 @@ struct MenuBarPopover: View {
                 help: settings.pauseSyncing ? "Resume syncing" : "Pause syncing"
             ) { actions.togglePause() }
 
-            AppIconButton(systemName: "macwindow", help: "Open SyncNerds") { actions.openMainWindow() }
+            AppIconButton(systemName: "macwindow", help: "Open Sync Bar") { actions.openMainWindow() }
             AppIconButton(systemName: "gearshape", help: "Settings (⌘,)") { actions.openSettings() }
 
             Spacer(minLength: 0)
             ThemeStrip()
             Spacer(minLength: 0)
 
-            AppIconButton(systemName: "power", help: "Quit SyncNerds") { actions.quit() }
+            AppIconButton(systemName: "power", help: "Quit Sync Bar") { actions.quit() }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
@@ -322,7 +322,7 @@ private struct EmptyRulesState: View {
                     .frame(maxWidth: 260)
             }
 
-            AppPrimaryButton(title: "Open SyncNerds", systemImage: "macwindow", action: onOpen)
+            AppPrimaryButton(title: "Open Sync Bar", systemImage: "macwindow", action: onOpen)
                 .padding(.top, 4)
         }
     }

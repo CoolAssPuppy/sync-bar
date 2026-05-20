@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# Build a distributable, notarized, Sparkle-signed DMG for SyncNerds.
+# Build a distributable, notarized, Sparkle-signed DMG for SyncBar.
 #
 # Prerequisites:
-#   1. Xcode Archive + Developer ID export of "SyncNerds.app" (the .app must
+#   1. Xcode Archive + Developer ID export of "SyncBar.app" (the .app must
 #      already be signed with Developer ID and notarized+stapled).
 #   2. `brew install create-dmg`
 #   3. A `notarytool` keychain profile stored via:
@@ -14,24 +14,24 @@
 # dmg-assets/ to brand the DMG window. Without them a plain DMG is built.
 #
 # Usage:
-#   ./scripts/build-dmg.sh <path-to-SyncNerds.app> <version> <notarytool-profile>
+#   ./scripts/build-dmg.sh <path-to-SyncBar.app> <version> <notarytool-profile>
 #
 # Output:
-#   dist/SyncNerds-<version>.dmg            (signed, notarized, stapled)
-#   dist/SyncNerds-<version>.sparkle.txt    (edSignature + length for appcast)
+#   dist/SyncBar-<version>.dmg            (signed, notarized, stapled)
+#   dist/SyncBar-<version>.sparkle.txt    (edSignature + length for appcast)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_PATH="${1:?Usage: $0 <path-to-SyncNerds.app> <version> <notarytool-profile>}"
-VERSION="${2:?Usage: $0 <path-to-SyncNerds.app> <version> <notarytool-profile>}"
-NOTARY_PROFILE="${3:?Usage: $0 <path-to-SyncNerds.app> <version> <notarytool-profile>}"
+APP_PATH="${1:?Usage: $0 <path-to-SyncBar.app> <version> <notarytool-profile>}"
+VERSION="${2:?Usage: $0 <path-to-SyncBar.app> <version> <notarytool-profile>}"
+NOTARY_PROFILE="${3:?Usage: $0 <path-to-SyncBar.app> <version> <notarytool-profile>}"
 
-APP_NAME="SyncNerds"
+APP_NAME="SyncBar"
 SIGN_UPDATE="${SPARKLE_SIGN_UPDATE:-$HOME/bin/sparkle/sign_update}"
 # The shared Strategic Nerds Sparkle key is imported into the keychain under a
-# per-app account name. SyncNerds uses its bundle id so the lookup is explicit.
-SPARKLE_KEY_ACCOUNT="${SPARKLE_KEY_ACCOUNT:-com.strategicnerds.SyncNerdsApp}"
+# per-app account name. SyncBar uses its bundle id so the lookup is explicit.
+SPARKLE_KEY_ACCOUNT="${SPARKLE_KEY_ACCOUNT:-com.strategicnerds.SyncBar}"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Developer ID Application: Prashant Sridharan (955GSY56UT)}"
 
 BACKGROUND="$REPO_ROOT/dmg-assets/background.tiff"

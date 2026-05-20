@@ -1,12 +1,12 @@
 //
 //  SyncCoordinatorTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 /// Black-box coverage for the parallel sync cycle. The point is to lock in
 /// the contract every consumer relies on: ordering of ledger events, the
@@ -55,7 +55,7 @@ final class SyncCoordinatorTests: XCTestCase {
         // A path whose parent component is a regular file can never be created
         // as a directory, so every Markdown page write throws.
         let blocker = FileManager.default.temporaryDirectory
-            .appendingPathComponent("syncnerds-blocker-\(UUID().uuidString)")
+            .appendingPathComponent("syncbar-blocker-\(UUID().uuidString)")
         FileManager.default.createFile(atPath: blocker.path, contents: Data("x".utf8))
         defer { try? FileManager.default.removeItem(at: blocker) }
         let unwritable = blocker.appendingPathComponent("nested").path
@@ -208,7 +208,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     private func makeTempFolder() -> URL {
         let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("syncnerds-coord-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("syncbar-coord-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }

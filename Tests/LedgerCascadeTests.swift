@@ -1,12 +1,12 @@
 //
 //  LedgerCascadeTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 @MainActor
 final class LedgerCascadeTests: XCTestCase {

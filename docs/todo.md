@@ -1,8 +1,8 @@
-# SyncNerds: spec for overnight build
+# SyncBar: spec for overnight build
 
 ## Read this first
 
-This document is the single source of truth for the overnight build of SyncNerds, a macOS menu bar app that syncs reMarkable notes to Notion. Re-read the relevant section at the start of every phase. Do not deviate. If a real situation contradicts this spec, stop and write the contradiction to `/tasks/lessons.md` for resolution by the human in the morning.
+This document is the single source of truth for the overnight build of SyncBar, a macOS menu bar app that syncs reMarkable notes to Notion. Re-read the relevant section at the start of every phase. Do not deviate. If a real situation contradicts this spec, stop and write the contradiction to `/tasks/lessons.md` for resolution by the human in the morning.
 
 The agent executing this is Claude Code with the user's CLAUDE.md configuration. Apply the workflow in that file: plan mode, subagents for exploration, self-improvement loop, verification before done, simplicity first, no laziness. This spec assumes those defaults.
 
@@ -15,10 +15,10 @@ The reMarkable device is not yet in the user's possession. All reMarkable integr
 | Decision | Choice |
 |---|---|
 | Platform | macOS menu bar app, SwiftUI |
-| Bundle ID | `com.strategicnerds.syncnerds` |
-| App name | SyncNerds |
+| Bundle ID | `com.strategicnerds.syncbar` |
+| App name | SyncBar |
 | Distribution | Downloadable, signed, notarized, Sparkle for updates |
-| App auth | None. No sign-in to SyncNerds itself. |
+| App auth | None. No sign-in to SyncBar itself. |
 | Ledger storage | CloudKit private database (per Apple ID) |
 | Token storage | iCloud Keychain (per Apple ID) |
 | Settings storage | CloudKit private database |
@@ -36,7 +36,7 @@ The reMarkable device is not yet in the user's possession. All reMarkable integr
 
 ## Section 2: The very first task
 
-**Before writing any SyncNerds code:**
+**Before writing any SyncBar code:**
 
 1. Locate MailNotifier, MeetingNotifier, and LinearBar repos on this machine. Likely paths: `~/code/`, `~/Developer/`, `~/projects/`, `~/strategicnerds/`. Ask the human if they cannot be found.
 2. Read all three repos in full. Use subagents in parallel if useful.
@@ -61,7 +61,7 @@ The reMarkable device is not yet in the user's possession. All reMarkable integr
    - Window management
    - Launch at login (SMAppService usage)
 4. Identify any patterns that are inconsistent across the three apps. Choose the most recent or most refined version. Note the choice in `/tasks/conventions.md` with rationale.
-5. **Acceptance check before continuing:** `/tasks/conventions.md` must exist and cover every bullet above. Present a summary to the human in `/tasks/todo.md`'s status section before writing any SyncNerds code.
+5. **Acceptance check before continuing:** `/tasks/conventions.md` must exist and cover every bullet above. Present a summary to the human in `/tasks/todo.md`'s status section before writing any SyncBar code.
 
 **Treat `/tasks/conventions.md` as binding for all subsequent phases.** This spec describes *what* to build. `/tasks/conventions.md` describes *how* to build it in a way that matches the user's existing apps.
 
@@ -74,8 +74,8 @@ The exact directory layout will follow MailNotifier's conventions. If MailNotifi
 What the repo must contain in some form:
 
 ```
-SyncNerds/                    (or whatever name matches MailNotifier convention)
-  App/                        # @main entry point, AppDelegate, SyncNerdsApp.swift
+SyncBar/                    (or whatever name matches MailNotifier convention)
+  App/                        # @main entry point, AppDelegate, SyncBarApp.swift
   Features/                   # One folder per feature
     MenuBar/
     MainWindow/
@@ -97,7 +97,7 @@ SyncNerds/                    (or whatever name matches MailNotifier convention)
     Assets.xcassets
     Localizable.strings
   Tests/
-    SyncNerdsTests/           # App-level unit tests
+    SyncBarTests/           # App-level unit tests
     Each Package has its own Tests/ folder
   Scripts/
     build.sh                  # Or makefile, justfile
@@ -124,12 +124,12 @@ SyncNerds/                    (or whatever name matches MailNotifier convention)
 
 ## Section 4: Bundle identifiers and versioning
 
-- App bundle ID: `com.strategicnerds.syncnerds`
-- Module bundle IDs: `com.strategicnerds.syncnerds.<modulename>` (lowercase)
+- App bundle ID: `com.strategicnerds.syncbar`
+- Module bundle IDs: `com.strategicnerds.syncbar.<modulename>` (lowercase)
 - Sparkle feed: follow MailNotifier convention (likely `appcast.xml` hosted somewhere on strategicnerds.com)
 - Version scheme: follow MailNotifier convention. If MailNotifier uses semantic versioning with build numbers, do the same. Start at `0.1.0` build `1`.
-- CloudKit container ID: `iCloud.com.strategicnerds.syncnerds`
-- Keychain access group: follow MailNotifier convention. If shared across apps for some reason, document why and how SyncNerds participates. Otherwise use a per-app access group named `com.strategicnerds.syncnerds`.
+- CloudKit container ID: `iCloud.com.strategicnerds.syncbar`
+- Keychain access group: follow MailNotifier convention. If shared across apps for some reason, document why and how SyncBar participates. Otherwise use a per-app access group named `com.strategicnerds.syncbar`.
 
 ## Section 5: Architecture overview
 
@@ -198,7 +198,7 @@ SyncCoordinator.tick()
 
 ## Section 6: Data model
 
-All persistent data lives in CloudKit private database under the `iCloud.com.strategicnerds.syncnerds` container. Schema is declared in code (CKModelTypes or similar Swift wrappers).
+All persistent data lives in CloudKit private database under the `iCloud.com.strategicnerds.syncbar` container. Schema is declared in code (CKModelTypes or similar Swift wrappers).
 
 ### Record types
 
@@ -305,18 +305,18 @@ Index on `occurredAt` descending.
 
 ### Keychain layout (iCloud Keychain)
 
-Service identifier: `com.strategicnerds.syncnerds`
+Service identifier: `com.strategicnerds.syncbar`
 Accessibility: `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` for tokens that should not iCloud-sync, OR `kSecAttrAccessibleAfterFirstUnlock` with `kSecAttrSynchronizable = true` for tokens that should sync across the user's Macs.
 
 **Decision: tokens that need to sync across machines must be marked synchronizable.** All four token kinds below are synchronizable.
 
 | Account name | Service | Purpose |
 |---|---|---|
-| `remarkable.device_token` | `com.strategicnerds.syncnerds` | reMarkable long-lived device token |
-| `remarkable.user_token` | `com.strategicnerds.syncnerds` | reMarkable short-lived user token |
-| `notion.workspace.<workspaceId>.access_token` | `com.strategicnerds.syncnerds` | Per-Notion-workspace access token |
-| `ocr.openai.api_key` | `com.strategicnerds.syncnerds` | Optional |
-| `ocr.anthropic.api_key` | `com.strategicnerds.syncnerds` | Optional |
+| `remarkable.device_token` | `com.strategicnerds.syncbar` | reMarkable long-lived device token |
+| `remarkable.user_token` | `com.strategicnerds.syncbar` | reMarkable short-lived user token |
+| `notion.workspace.<workspaceId>.access_token` | `com.strategicnerds.syncbar` | Per-Notion-workspace access token |
+| `ocr.openai.api_key` | `com.strategicnerds.syncbar` | Optional |
+| `ocr.anthropic.api_key` | `com.strategicnerds.syncbar` | Optional |
 
 `KeychainKit` exposes typed accessors so callers never deal with raw service/account strings.
 
@@ -655,7 +655,7 @@ Tokens, components, modifiers. Mirror MailNotifier exactly. If MailNotifier has 
 
 - `NSStatusItem` with variable-length width
 - Icon: SF Symbol `arrow.triangle.2.circlepath` by default. Match style of MailNotifier's icon presentation (template image, tint behavior).
-- Click behavior: opens the main window if closed, brings it to front if open. Right-click or option-click reveals a menu with: "Sync now", "Open SyncNerds", "Pause syncing", "Settings", "Quit SyncNerds".
+- Click behavior: opens the main window if closed, brings it to front if open. Right-click or option-click reveals a menu with: "Sync now", "Open SyncBar", "Pause syncing", "Settings", "Quit SyncBar".
 - Status indication: when syncing, animate the icon (rotate or pulse, matching MailNotifier's loading style).
 
 ### Main window
@@ -747,7 +747,7 @@ Triggered on first launch when no reMarkable account and no Notion accounts exis
 
 Three steps:
 
-1. **Welcome to SyncNerds** — One-line tagline, "Get started" button.
+1. **Welcome to SyncBar** — One-line tagline, "Get started" button.
 2. **Connect your reMarkable** — Explainer text. "I have a one-time code" text field with a help button explaining where to generate it. "I'll do this later" button. (For pre-pairing flow.)
 3. **Connect a Notion workspace** — "Connect Notion" button launches OAuth. After return, ask "Add another?" / "Done".
 
@@ -945,7 +945,7 @@ Code signing:
 
 Sparkle setup:
 - EdDSA-signed appcast
-- Appcast hosted at the URL MailNotifier uses for its own appcast (subpath like `/syncnerds/appcast.xml`)
+- Appcast hosted at the URL MailNotifier uses for its own appcast (subpath like `/syncbar/appcast.xml`)
 - Public key embedded in app bundle
 - Private key stored in user's Keychain on release machine; `make release` reads it from there
 
@@ -986,7 +986,7 @@ The codebase must pass these custom skills described in the user's CLAUDE.md:
 
 Each phase ends with a hard Acceptance Gate. Do not proceed past a gate that doesn't pass.
 
-### Phase 0: Conventions extraction (no SyncNerds code yet)
+### Phase 0: Conventions extraction (no SyncBar code yet)
 
 Tasks:
 - [ ] Locate MailNotifier, MeetingNotifier, LinearBar repos
@@ -1008,7 +1008,7 @@ Tasks:
 - [ ] Set up SwiftLint, SwiftFormat configs from MailNotifier
 - [ ] Configure entitlements (sandbox, iCloud, network, Keychain Sharing if applicable)
 - [ ] Create CloudKit container in dev environment
-- [ ] Initialize empty `App/` with SyncNerdsApp.swift, AppDelegate.swift, scene setup
+- [ ] Initialize empty `App/` with SyncBarApp.swift, AppDelegate.swift, scene setup
 - [ ] Set up `.accessory` activation policy (no Dock icon)
 - [ ] Create the status item with placeholder icon
 - [ ] Stub each Package: `RemarkableKit`, `NotionKit`, `OcrKit`, `RulesEngine`, `SyncCore`, `LedgerKit`, `KeychainKit`, `DesignSystem`
@@ -1231,11 +1231,11 @@ When the user wakes up, the following must work:
 What the user must do themselves:
 
 1. Create a Notion internal integration at notion.so/my-integrations, copy client ID and secret
-2. Put Notion client ID and secret in `~/.syncnerds/notion.json` (path documented in README), or however the conventions file says to handle local app secrets that aren't user-facing
+2. Put Notion client ID and secret in `~/.syncbar/notion.json` (path documented in README), or however the conventions file says to handle local app secrets that aren't user-facing
 3. When reMarkable arrives:
    - Sign in to my.remarkable.com
    - Generate a one-time pairing code
-   - Open SyncNerds, click "Connect reMarkable" in sidebar, enter code
+   - Open SyncBar, click "Connect reMarkable" in sidebar, enter code
    - Wait for notebooks to populate
    - Enable the draft rule
 

@@ -1,6 +1,6 @@
 //
 //  Sidebar.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -59,7 +59,7 @@ struct Sidebar: View {
         HStack(spacing: 10) {
             BrandMark()
             VStack(alignment: .leading, spacing: 1) {
-                Text("SyncNerds")
+                Text("Sync Bar")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text(subtitle)

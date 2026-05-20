@@ -1,6 +1,6 @@
 //
 //  LoopbackOAuthServer.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -17,7 +17,7 @@ import Network
 /// All mutable state is confined to a private serial queue, so the type is a
 /// safe `@unchecked Sendable` despite the Network framework's escaping handlers.
 final class LoopbackOAuthServer: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.strategicnerds.SyncNerds.oauth-loopback")
+    private let queue = DispatchQueue(label: "com.strategicnerds.SyncBar.oauth-loopback")
     private var listener: NWListener?
     private var continuation: CheckedContinuation<[String: String], Error>?
     private var finished = false
@@ -61,7 +61,7 @@ final class LoopbackOAuthServer: @unchecked Sendable {
             guard let self else { return }
             if let data, let request = String(data: data, encoding: .utf8) {
                 let items = Self.parseQuery(fromRequestLine: request)
-                let body = "<!doctype html><html><body style=\"font-family:-apple-system,Helvetica,sans-serif;text-align:center;padding:48px;\"><h2>SyncNerds is connected.</h2><p>You can close this window and return to the app.</p></body></html>"
+                let body = "<!doctype html><html><body style=\"font-family:-apple-system,Helvetica,sans-serif;text-align:center;padding:48px;\"><h2>Sync Bar is connected.</h2><p>You can close this window and return to the app.</p></body></html>"
                 let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
                     connection.cancel()

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Build (Debug) and launch SyncNerds.app.
+# Build (Debug) and launch SyncBar.app.
 #
 
 set -euo pipefail
@@ -10,14 +10,14 @@ cd "$REPO_ROOT"
 
 "$REPO_ROOT/scripts/build.sh"
 
-APP_PATH="$REPO_ROOT/build/Build/Products/Debug/SyncNerds.app"
+APP_PATH="$REPO_ROOT/build/Build/Products/Debug/SyncBar.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "Error: build artifact not found at $APP_PATH"
   exit 1
 fi
 
 # Stop any running copies first.
-pkill -x SyncNerds 2>/dev/null || true
+pkill -x SyncBar 2>/dev/null || true
 sleep 0.2
 
 open "$APP_PATH"

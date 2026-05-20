@@ -1,12 +1,12 @@
 //
 //  DestinationBindingTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 final class DestinationBindingTests: XCTestCase {
 

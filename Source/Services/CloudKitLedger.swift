@@ -1,6 +1,6 @@
 //
 //  CloudKitLedger.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -31,7 +31,7 @@ import Combine
 
 @MainActor
 final class CloudKitLedger: ObservableObject {
-    nonisolated static let containerIdentifier = "iCloud.com.strategicnerds.syncnerds"
+    nonisolated static let containerIdentifier = "iCloud.com.strategicnerds.syncbar"
 
     enum RecordType: String {
         case syncRule          = "SyncRule"

@@ -1,6 +1,6 @@
 //
 //  AppleNotesForm.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -14,7 +14,7 @@ struct AppleNotesForm: View {
     var body: some View {
         AppCard("Apple Notes") {
             VStack(spacing: 0) {
-                AppSettingRow("Folder", description: "SyncNerds creates the folder in iCloud Notes if it doesn't exist.") {
+                AppSettingRow("Folder", description: "Sync Bar creates the folder in iCloud Notes if it doesn't exist.") {
                     TextField("Folder name", text: $binding.folderName)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 240)

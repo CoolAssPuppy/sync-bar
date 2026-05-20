@@ -1,18 +1,18 @@
 //
 //  MarkdownDestinationClientTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 final class MarkdownDestinationClientTests: XCTestCase {
 
     func test_writes_one_file_per_payload_with_frontmatter_and_mermaid() async throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("syncnerds-md-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("syncbar-md-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 

@@ -1,6 +1,6 @@
 //
 //  SyncLogView.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -63,7 +63,7 @@ struct SyncLogView: View {
             Text("No events yet")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
-            Text("Once SyncNerds starts syncing, every rule run, page write, and failure shows up here.")
+            Text("Once Sync Bar starts syncing, every rule run, page write, and failure shows up here.")
                 .font(.system(size: 12))
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)

@@ -1,6 +1,6 @@
 //
 //  BindingFormState.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -36,7 +36,7 @@ struct GoogleFormState {
 }
 
 struct AppleNotesFormState {
-    var folderName: String = "SyncNerds"
+    var folderName: String = "Sync Bar"
 }
 
 struct MarkdownFormState {

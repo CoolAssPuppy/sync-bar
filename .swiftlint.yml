@@ -1,4 +1,4 @@
-# SwiftLint configuration for SyncNerds.
+# SwiftLint configuration for SyncBar.
 #
 # Policy: enforce correctness and safety rules strictly; relax cosmetic
 # length/naming limits to match the codebase's prevailing style.

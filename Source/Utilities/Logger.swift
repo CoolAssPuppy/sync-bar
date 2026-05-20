@@ -1,6 +1,6 @@
 //
 //  Logger.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -9,7 +9,7 @@ import Foundation
 import os
 
 enum Log {
-    private static let subsystem = "com.strategicnerds.SyncNerdsApp"
+    private static let subsystem = "com.strategicnerds.SyncBar"
 
     static let app       = Logger(subsystem: subsystem, category: "app")
     static let sync      = Logger(subsystem: subsystem, category: "sync")

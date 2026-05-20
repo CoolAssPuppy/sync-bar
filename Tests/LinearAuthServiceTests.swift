@@ -1,12 +1,12 @@
 //
 //  LinearAuthServiceTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 @MainActor
 final class LinearAuthServiceTests: XCTestCase {
@@ -25,7 +25,7 @@ final class LinearAuthServiceTests: XCTestCase {
         XCTAssertEqual(url.host, "linear.app")
         let q = queryItems(url)
         XCTAssertEqual(q["client_id"], "client-123")
-        XCTAssertEqual(q["redirect_uri"], "syncnerds://oauth/linear")
+        XCTAssertEqual(q["redirect_uri"], "syncbar://oauth/linear")
         XCTAssertEqual(q["response_type"], "code")
         XCTAssertEqual(q["scope"], "read,write")
         XCTAssertEqual(q["state"], "state-xyz")

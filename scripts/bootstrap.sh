@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Bootstrap the SyncNerds dev environment.
+# Bootstrap the SyncBar dev environment.
 #
 
 set -euo pipefail
@@ -20,8 +20,8 @@ xcodegen generate
 
 echo "==> Resolving Swift package dependencies"
 xcodebuild \
-  -project SyncNerds.xcodeproj \
-  -scheme SyncNerds \
+  -project SyncBar.xcodeproj \
+  -scheme SyncBar \
   -resolvePackageDependencies >/dev/null
 
 echo "==> Done. Next steps:"

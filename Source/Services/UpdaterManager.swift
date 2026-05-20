@@ -1,6 +1,6 @@
 //
 //  UpdaterManager.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //

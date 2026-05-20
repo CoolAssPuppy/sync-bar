@@ -1,6 +1,6 @@
 //
-//  SyncNerdsApp.swift
-//  SyncNerds
+//  SyncBarApp.swift
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct SyncNerdsApp: App {
+struct SyncBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {

@@ -1,6 +1,6 @@
 //
 //  SyncLogDrawer.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -103,7 +103,7 @@ struct SyncLogDrawer: View {
         guard let data = ledger.exportSnapshot() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "syncnerds-ledger.json"
+        panel.nameFieldStringValue = "syncbar-ledger.json"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             try? data.write(to: url)

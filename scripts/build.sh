@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Local debug build for SyncNerds.
+# Local debug build for SyncBar.
 #
 #   ./scripts/build.sh                  - debug build
 #   ./scripts/build.sh release          - release build
@@ -24,10 +24,10 @@ fi
 echo "==> Regenerating Xcode project"
 xcodegen generate >/dev/null
 
-echo "==> Building SyncNerds ($CONFIG)"
+echo "==> Building SyncBar ($CONFIG)"
 xcodebuild \
-  -project SyncNerds.xcodeproj \
-  -scheme SyncNerds \
+  -project SyncBar.xcodeproj \
+  -scheme SyncBar \
   -configuration "$CONFIG" \
   -derivedDataPath build \
   -destination 'platform=macOS' \
@@ -35,8 +35,8 @@ xcodebuild \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
   build | xcbeautify --quiet 2>/dev/null || xcodebuild \
-    -project SyncNerds.xcodeproj \
-    -scheme SyncNerds \
+    -project SyncBar.xcodeproj \
+    -scheme SyncBar \
     -configuration "$CONFIG" \
     -derivedDataPath build \
     -destination 'platform=macOS' \
@@ -45,7 +45,7 @@ xcodebuild \
     CODE_SIGNING_ALLOWED=NO \
     build
 
-APP_PATH="$REPO_ROOT/build/Build/Products/$CONFIG/SyncNerds.app"
+APP_PATH="$REPO_ROOT/build/Build/Products/$CONFIG/SyncBar.app"
 if [ -d "$APP_PATH" ]; then
   echo "==> Built: $APP_PATH"
 fi

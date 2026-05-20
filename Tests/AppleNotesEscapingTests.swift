@@ -1,12 +1,12 @@
 //
 //  AppleNotesEscapingTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 /// AppleScript runs as plain text and is exposed to user-controlled note
 /// titles, folder names, and OCR'd body content. A broken escape lets the

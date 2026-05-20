@@ -1,4 +1,4 @@
-name: SyncNerds
+name: SyncBar
 options:
   bundleIdPrefix: com.strategicnerds
   deploymentTarget:
@@ -26,8 +26,8 @@ settings:
     Debug:
       # Hardened runtime breaks XCTest's runtime injection into the host app.
       ENABLE_HARDENED_RUNTIME: NO
-      # Xcode 15+ mergeable libraries split the host into "SyncNerds" +
-      # "SyncNerds.debug.dylib" in Debug, but the test bundle's rpath
+      # Xcode 15+ mergeable libraries split the host into "SyncBar" +
+      # "SyncBar.debug.dylib" in Debug, but the test bundle's rpath
       # doesn't reach the host's MacOS directory so dlopen fails. Force a
       # statically merged Debug binary so `xcodebuild test` works.
       MERGED_BINARY_TYPE: manual
@@ -36,7 +36,7 @@ settings:
       ENABLE_HARDENED_RUNTIME: YES
 
 targets:
-  SyncNerds:
+  SyncBar:
     type: application
     platform: macOS
     configFiles:
@@ -44,7 +44,7 @@ targets:
       Release: Secrets.xcconfig
     scheme:
       testTargets:
-        - SyncNerdsTests
+        - SyncBarTests
       gatherCoverageData: true
     sources:
       - path: Source
@@ -55,28 +55,28 @@ targets:
       - package: Sparkle
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncNerdsApp
-        PRODUCT_NAME: "SyncNerds"
+        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBar
+        PRODUCT_NAME: "SyncBar"
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: Info.plist
-        CODE_SIGN_ENTITLEMENTS: SyncNerds.entitlements
+        CODE_SIGN_ENTITLEMENTS: SyncBar.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         LS_MINIMUM_SYSTEM_VERSION: "14.0"
         COMBINE_HIDPI_IMAGES: YES
-  SyncNerdsTests:
+  SyncBarTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: Tests
     dependencies:
-      - target: SyncNerds
+      - target: SyncBar
     settings:
       base:
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SyncNerds.app/Contents/MacOS/SyncNerds"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SyncBar.app/Contents/MacOS/SyncBar"
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncNerdsTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBarTests
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         ENABLE_HARDENED_RUNTIME: NO

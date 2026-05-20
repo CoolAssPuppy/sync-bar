@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# One-shot release automation for SyncNerds.
+# One-shot release automation for SyncBar.
 #
 # Does the whole thing:
 #   1. Bumps MARKETING_VERSION + CURRENT_PROJECT_VERSION in project.yml
@@ -15,7 +15,7 @@
 #   - notarytool keychain profile "agent-server" (see scripts/SPARKLE.md)
 #   - Sparkle sign_update at ~/bin/sparkle/sign_update
 #   - The shared Strategic Nerds Sparkle private key imported into the keychain
-#     under account com.strategicnerds.SyncNerdsApp (see scripts/SPARKLE.md)
+#     under account com.strategicnerds.SyncBar (see scripts/SPARKLE.md)
 #   - create-dmg installed (brew install create-dmg)
 #   - doppler CLI logged in with access to the agent-server/prd config
 #     (provides CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, R2_BUCKET_NAME, R2_PUBLIC_BASE_URL)
@@ -41,9 +41,9 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-agent-server}"
 SPARKLE_SIGN_UPDATE="${SPARKLE_SIGN_UPDATE:-$HOME/bin/sparkle/sign_update}"
 SIGN_IDENTITY="Developer ID Application: Prashant Sridharan (955GSY56UT)"
 
-APP_NAME="SyncNerds"
-APP_FOLDER="syncnerds"
-DUB_SHORTLINK="https://coolasspuppy.com/syncnerds-updates"
+APP_NAME="SyncBar"
+APP_FOLDER="syncbar"
+DUB_SHORTLINK="https://coolasspuppy.com/syncbar-updates"
 
 DOPPLER_PROJECT="${DOPPLER_PROJECT:-agent-server}"
 DOPPLER_CONFIG="${DOPPLER_CONFIG:-prd}"
@@ -194,7 +194,7 @@ echo "==> Uploading $DMG_NAME to R2 ($R2_BUCKET/$R2_DMG_KEY)"
   --content-type="application/x-apple-diskimage" \
   --remote
 
-# Also upload as SyncNerds-latest.dmg so the marketing site has a stable URL
+# Also upload as SyncBar-latest.dmg so the marketing site has a stable URL
 R2_LATEST_KEY="apps/$APP_FOLDER/$APP_NAME-latest.dmg"
 echo "==> Uploading latest.dmg alias to R2 ($R2_BUCKET/$R2_LATEST_KEY)"
 "${WRANGLER[@]}" r2 object put "$R2_BUCKET/$R2_LATEST_KEY" \

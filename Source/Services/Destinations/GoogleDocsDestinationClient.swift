@@ -1,6 +1,6 @@
 //
 //  GoogleDocsDestinationClient.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -42,7 +42,7 @@ struct GoogleDocsDestinationClient: DestinationClient {
     // MARK: Append to a single doc
 
     private func appendToSingleDoc(token: String, config: GoogleDocsDestinationConfig, payload: DestinationPayload) async throws -> DestinationWriteResult {
-        let docName = "\(payload.ruleNotebookName) (SyncNerds)"
+        let docName = "\(payload.ruleNotebookName) (Sync Bar)"
         let docId: String
         if let existing = try await findDocument(token: token, name: docName) {
             docId = existing

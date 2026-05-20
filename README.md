@@ -1,4 +1,4 @@
-# SyncNerds
+# Sync Bar
 
 A macOS menu bar app that turns your reMarkable handwritten notes into clean text and pushes them to wherever you want them: Notion, Linear, Google Docs, Apple Notes, or a folder of Markdown files. Lives next to MailNotifier and LinearBar in the Strategic Nerds menu bar family.
 
@@ -72,7 +72,7 @@ When the reMarkable arrives:
 
 1. Sign in at https://my.remarkable.com.
 2. Open Connect, generate an 8-character one-time pairing code.
-3. Open SyncNerds, click the reMarkable row in the sidebar.
+3. Open Sync Bar, click the reMarkable row in the sidebar.
 4. Paste the code, hit *Pair device*.
 5. Notebooks load from your reMarkable cloud library.
 6. Click a notebook, hit "Add Notion" (or any of the other four), pick a destination, save. The first sync runs on the next timer tick.
@@ -82,8 +82,8 @@ Until then, the mock client returns six sample notebooks ("Q2 planning", "Meetin
 ## Build, run, test
 
 ```
-make bootstrap   # one-time: generates SyncNerds.xcodeproj and resolves deps
-make build       # debug build → build/Build/Products/Debug/SyncNerds.app
+make bootstrap   # one-time: generates SyncBar.xcodeproj and resolves deps
+make build       # debug build → build/Build/Products/Debug/SyncBar.app
 make run         # build + launch
 make release     # release build (no signing pipeline yet)
 make test        # unit tests (31 passing today)
@@ -122,7 +122,7 @@ sync-bar/
   Images.xcassets/                Asset catalogue (AppIcon placeholder)
   scripts/                        build.sh, run.sh, test.sh, bootstrap.sh, lint.sh
   Info.plist
-  SyncNerds.entitlements
+  SyncBar.entitlements
   project.yml                     XcodeGen spec
   Makefile
   .swiftlint.yml
@@ -160,17 +160,17 @@ The redirect URIs below are exact. Register them verbatim.
    type **Public**.
 2. Under **OAuth Domain & URIs**, add the redirect URI:
    `http://localhost:53117/oauth/notion`
-   (Notion rejects custom URL schemes, so SyncNerds captures the redirect on a
+   (Notion rejects custom URL schemes, so Sync Bar captures the redirect on a
    loopback HTTP listener at this fixed port.)
 3. Set the capabilities you want to grant (reading content is enough to
-   transcribe; add insert/update content to let SyncNerds create pages).
+   transcribe; add insert/update content to let Sync Bar create pages).
 4. Copy the **OAuth client ID** and **OAuth client secret**.
 
 ### Linear
 
 1. Go to https://linear.app/settings/api/applications/new and create an OAuth
    application.
-2. Set the redirect/callback URL to: `syncnerds://oauth/linear`
+2. Set the redirect/callback URL to: `syncbar://oauth/linear`
    (Linear allows custom URL schemes, so this uses the in-app web session.)
 3. Requested scopes are `read,write` (write is needed to create issues).
 4. Copy the **Client ID** and **Client secret**.
@@ -187,15 +187,15 @@ The redirect URIs below are exact. Register them verbatim.
    test users until it goes through Google verification).
 4. The requested scopes are `openid`, `email`,
    `https://www.googleapis.com/auth/documents`, and
-   `https://www.googleapis.com/auth/drive.file` (drive.file limits SyncNerds to
+   `https://www.googleapis.com/auth/drive.file` (drive.file limits Sync Bar to
    the docs it creates).
 5. Copy the **Client ID** and **Client secret**.
 
 ### reMarkable
 
 No developer app. Sign in at https://my.remarkable.com, open **Connect**, and
-generate an eight-character one-time code. Paste it into SyncNerds (sidebar
-reMarkable row, or onboarding). SyncNerds exchanges it for a device token and
+generate an eight-character one-time code. Paste it into Sync Bar (sidebar
+reMarkable row, or onboarding). Sync Bar exchanges it for a device token and
 walks your cloud library. The cloud walk and handwriting rasterization are
 reverse-engineered, so expect to iterate against your device.
 

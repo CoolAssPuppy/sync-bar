@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Run unit tests for SyncNerds.
+# Run unit tests for SyncBar.
 #
 
 set -euo pipefail
@@ -17,8 +17,8 @@ xcodegen generate >/dev/null
 
 echo "==> Running tests"
 xcodebuild \
-  -project SyncNerds.xcodeproj \
-  -scheme SyncNerds \
+  -project SyncBar.xcodeproj \
+  -scheme SyncBar \
   -configuration Debug \
   -derivedDataPath build \
   -destination 'platform=macOS' \

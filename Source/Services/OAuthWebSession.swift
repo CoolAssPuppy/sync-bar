@@ -1,6 +1,6 @@
 //
 //  OAuthWebSession.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -41,7 +41,7 @@ enum OAuthError: LocalizedError, Equatable {
 
 /// Thin async wrapper around `ASWebAuthenticationSession`. Opens the provider's
 /// authorize URL in a secure, app-bound web session and resolves with the
-/// redirect (`syncnerds://oauth/...`) URL once the provider sends the user back.
+/// redirect (`syncbar://oauth/...`) URL once the provider sends the user back.
 /// The session intercepts the callback scheme itself, so no AppDelegate URL
 /// handler is required.
 @MainActor
@@ -88,10 +88,10 @@ final class OAuthWebSession: NSObject, ASWebAuthenticationPresentationContextPro
 /// Stateless OAuth helpers shared by the provider auth services.
 enum OAuth {
     /// Callback scheme registered in Info.plist and used by every flow.
-    static let callbackScheme = "syncnerds"
+    static let callbackScheme = "syncbar"
 
     /// The redirect URI a provider must be configured with, e.g.
-    /// `syncnerds://oauth/linear`.
+    /// `syncbar://oauth/linear`.
     static func redirectURI(provider: String) -> String {
         "\(callbackScheme)://oauth/\(provider)"
     }

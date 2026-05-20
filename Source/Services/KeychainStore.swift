@@ -1,6 +1,6 @@
 //
 //  KeychainStore.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -45,7 +45,7 @@ final class KeychainStore: @unchecked Sendable {
     private let keychain: Keychain
 
     private init() {
-        keychain = Keychain(service: "com.strategicnerds.SyncNerdsApp")
+        keychain = Keychain(service: "com.strategicnerds.SyncBar")
             .synchronizable(true)
             .accessibility(.afterFirstUnlock)
     }

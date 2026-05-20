@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverEventMonitor: Any?
     private var subscriptions = Set<AnyCancellable>()
     private var mainWindow: NSWindow?
-    private static let spinAnimationKey = "syncnerds.spin"
+    private static let spinAnimationKey = "syncbar.spin"
 
     let coordinator = SyncCoordinator()
     private let launchAtLogin = LaunchAtLoginManager.shared
@@ -75,18 +75,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             // Fallback if assets are missing for any reason.
             let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            let fallback = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "SyncNerds")?
+            let fallback = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Sync Bar")?
                 .withSymbolConfiguration(config)
             fallback?.isTemplate = true
             button.image = fallback
         }
-        button.toolTip = syncing ? "SyncNerds — syncing…" : "SyncNerds"
+        button.toolTip = syncing ? "Sync Bar — syncing…" : "Sync Bar"
     }
 
     private func buildRightClickMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Sync now", action: #selector(syncNowMenuAction), keyEquivalent: "")
-        menu.addItem(withTitle: "Open SyncNerds", action: #selector(openMainWindowAction), keyEquivalent: "")
+        menu.addItem(withTitle: "Open Sync Bar", action: #selector(openMainWindowAction), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         let pauseItem = NSMenuItem(
             title: AppSettings.shared.pauseSyncing ? "Resume syncing" : "Pause syncing",
@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Settings", action: #selector(openSettingsDrawerAction), keyEquivalent: ",")
         menu.addItem(withTitle: "Check for updates…", action: #selector(checkForUpdatesAction), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "Quit SyncNerds", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Sync Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for item in menu.items {
             if item.action != nil {
                 item.target = self
@@ -212,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.contentView = NSHostingView(rootView: MainView(coordinator: coordinator))
-        window.title = "SyncNerds"
+        window.title = "Sync Bar"
         window.toolbar = nil
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden

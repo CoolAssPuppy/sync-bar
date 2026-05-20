@@ -1,18 +1,18 @@
 //
 //  OAuthHelpersTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 final class OAuthHelpersTests: XCTestCase {
 
     func test_redirectURI_uses_app_scheme_and_provider() {
-        XCTAssertEqual(OAuth.redirectURI(provider: "linear"), "syncnerds://oauth/linear")
-        XCTAssertEqual(OAuth.redirectURI(provider: "notion"), "syncnerds://oauth/notion")
+        XCTAssertEqual(OAuth.redirectURI(provider: "linear"), "syncbar://oauth/linear")
+        XCTAssertEqual(OAuth.redirectURI(provider: "notion"), "syncbar://oauth/notion")
     }
 
     func test_formURLEncoding_escapes_reserved_characters() {
@@ -36,7 +36,7 @@ final class OAuthHelpersTests: XCTestCase {
     }
 
     func test_queryValue_extracts_code_and_state_from_callback() {
-        let url = URL(string: "syncnerds://oauth/linear?code=abc123&state=xyz")!
+        let url = URL(string: "syncbar://oauth/linear?code=abc123&state=xyz")!
         XCTAssertEqual(OAuth.queryValue("code", from: url), "abc123")
         XCTAssertEqual(OAuth.queryValue("state", from: url), "xyz")
         XCTAssertNil(OAuth.queryValue("missing", from: url))

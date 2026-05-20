@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lint SyncNerds via SwiftLint. No-op if SwiftLint isn't installed.
+# Lint SyncBar via SwiftLint. No-op if SwiftLint isn't installed.
 
 set -euo pipefail
 

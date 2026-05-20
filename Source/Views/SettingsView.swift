@@ -1,6 +1,6 @@
 //
 //  SettingsView.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -46,12 +46,12 @@ struct SettingsView: View {
     private var generalCard: some View {
         AppCard("General") {
             VStack(spacing: 0) {
-                AppSettingRow("Launch at startup", description: "Start SyncNerds when you log in.") {
+                AppSettingRow("Launch at startup", description: "Start Sync Bar when you log in.") {
                     Toggle("", isOn: $settings.launchAtStartup)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Sync interval", description: "How often SyncNerds polls reMarkable for new pages.") {
+                AppSettingRow("Sync interval", description: "How often Sync Bar polls reMarkable for new pages.") {
                     Picker("", selection: $settings.syncIntervalSeconds) {
                         ForEach(AppSettings.intervalOptions, id: \.seconds) { option in
                             Text(option.label).tag(option.seconds)
@@ -61,7 +61,7 @@ struct SettingsView: View {
                     .fixedSize()
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Open main window on launch", description: "Otherwise SyncNerds lives in the menu bar only.") {
+                AppSettingRow("Open main window on launch", description: "Otherwise Sync Bar lives in the menu bar only.") {
                     Toggle("", isOn: $settings.openWindowOnLaunch)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
@@ -156,14 +156,14 @@ struct SettingsView: View {
     private var updatesCard: some View {
         AppCard("Updates") {
             VStack(spacing: 0) {
-                AppSettingRow("Version", description: "Installed build of SyncNerds.") {
+                AppSettingRow("Version", description: "Installed build of Sync Bar.") {
                     Text(UpdaterManager.shared.currentVersion)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(theme.muted)
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Check for updates",
-                              description: "Sparkle pulls from coolasspuppy.com/syncnerds-updates and verifies the signature.") {
+                              description: "Sparkle pulls from coolasspuppy.com/syncbar-updates and verifies the signature.") {
                     AppSecondaryButton(title: "Check now", systemImage: "arrow.down.circle") {
                         UpdaterManager.shared.checkForUpdates()
                     }
@@ -182,7 +182,7 @@ struct SettingsView: View {
                            url: "mailto:bugs@strategicnerds.com")
                 contactRow(systemName: "chevron.left.forwardslash.chevron.right",
                            title: "Contribute on GitHub",
-                           url: "https://github.com/CoolAssPuppy/syncnerds")
+                           url: "https://github.com/CoolAssPuppy/syncbar")
                 contactRow(systemName: "cup.and.saucer.fill",
                            title: "Buy me coffee",
                            url: "https://venmo.com/u/coolasspuppy")

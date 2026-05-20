@@ -1,6 +1,6 @@
 //
 //  SettingsDrawer.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -58,7 +58,7 @@ struct SettingsDrawer: View {
                 Text("Settings")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Preferences for SyncNerds · ⌘, to toggle")
+                Text("Preferences for Sync Bar · ⌘, to toggle")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
             }

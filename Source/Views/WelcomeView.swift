@@ -1,6 +1,6 @@
 //
 //  WelcomeView.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -81,7 +81,7 @@ struct WelcomeView: View {
     private var welcomeStep: some View {
         VStack(spacing: 16) {
             BrandMark().scaleEffect(2.6).padding(.bottom, 8)
-            Text("Welcome to SyncNerds")
+            Text("Welcome to Sync Bar")
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(theme.foreground)
             Text("Sync your reMarkable handwritten notes straight into Notion. Nothing leaves your machine without your say-so.")
@@ -135,7 +135,7 @@ struct WelcomeView: View {
     private var notionStep: some View {
         AppCard("Step 3 · Connect a Notion workspace") {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Authorize SyncNerds to read the pages and databases you want to sync into. You can connect more workspaces any time.")
+                Text("Authorize Sync Bar to read the pages and databases you want to sync into. You can connect more workspaces any time.")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.muted)
 
@@ -210,7 +210,7 @@ struct WelcomeView: View {
 
     private var doneSubtitle: String {
         if ledger.remarkableAccount == nil {
-            return "Once your reMarkable arrives, return to SyncNerds and tap Connect reMarkable in the sidebar."
+            return "Once your reMarkable arrives, return to Sync Bar and tap Connect reMarkable in the sidebar."
         }
         return "We'll keep syncing on the schedule you choose in Settings. You can pause from the menu bar at any time."
     }

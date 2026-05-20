@@ -1,6 +1,6 @@
 //
 //  Ledger.swift
-//  SyncNerds
+//  SyncBar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -52,7 +52,7 @@ final class Ledger: ObservableObject {
     /// so test runs never leak rules/events/accounts into the real app.
     static let defaults: UserDefaults = {
         if NSClassFromString("XCTestCase") != nil {
-            return UserDefaults(suiteName: "com.strategicnerds.SyncNerds.tests") ?? .standard
+            return UserDefaults(suiteName: "com.strategicnerds.SyncBar.tests") ?? .standard
         }
         return .standard
     }()
@@ -260,7 +260,7 @@ final class Ledger: ObservableObject {
     }
 
     /// Apple Notes rename is special: the "name" is the literal Notes folder
-    /// SyncNerds writes into. Renaming rewrites every binding pointing at
+    /// SyncBar writes into. Renaming rewrites every binding pointing at
     /// the old folder so the next sync lands in the new folder.
     func renameAppleNotesTarget(id: String, newFolderName: String) {
         guard let existing = appleNotesTargets.first(where: { $0.id == id }) else { return }

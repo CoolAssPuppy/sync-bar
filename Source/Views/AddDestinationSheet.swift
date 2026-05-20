@@ -1,6 +1,6 @@
 //
 //  AddDestinationSheet.swift
-//  SyncNerds
+//  Sync Bar
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
@@ -19,7 +19,7 @@ struct AddDestinationSheet: View {
 
     @State private var selectedKind: DestinationKind = .notion
     @State private var markdownPath: String = ""
-    @State private var appleNotesFolder: String = "SyncNerds"
+    @State private var appleNotesFolder: String = "Sync Bar"
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
@@ -105,7 +105,7 @@ struct AddDestinationSheet: View {
 
     private var notionFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Notion with OAuth. SyncNerds opens Notion in your browser, you pick the pages and databases to share, and the workspace is added here.")
+            Text("Connect Notion with OAuth. Sync Bar opens Notion in your browser, you pick the pages and databases to share, and the workspace is added here.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             if !AuthSecrets.isNotionConfigured {
@@ -119,7 +119,7 @@ struct AddDestinationSheet: View {
 
     private var linearFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Linear with OAuth. SyncNerds opens Linear in a secure window, then adds every team you can access as a destination.")
+            Text("Connect Linear with OAuth. Sync Bar opens Linear in a secure window, then adds every team you can access as a destination.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             if !AuthSecrets.isLinearConfigured {
@@ -148,7 +148,7 @@ struct AddDestinationSheet: View {
 
     private var googleFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Google with OAuth. SyncNerds opens Google in your browser, you grant access to Docs and Drive, and the account is added here.")
+            Text("Connect Google with OAuth. Sync Bar opens Google in your browser, you grant access to Docs and Drive, and the account is added here.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             if !AuthSecrets.isGoogleConfigured {
@@ -162,11 +162,11 @@ struct AddDestinationSheet: View {
 
     private var appleNotesFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Apple Notes uses your local iCloud Notes account. SyncNerds creates the folder if it doesn't exist.")
+            Text("Apple Notes uses your local iCloud Notes account. Sync Bar creates the folder if it doesn't exist.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             AppSettingRow("Folder name", description: nil) {
-                TextField("SyncNerds, Notes, …", text: $appleNotesFolder)
+                TextField("Sync Bar, Notes, …", text: $appleNotesFolder)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }

@@ -1,12 +1,12 @@
 //
 //  NotionPropertyMappingTests.swift
-//  SyncNerdsTests
+//  SyncBarTests
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 
 import XCTest
-@testable import SyncNerds
+@testable import SyncBar
 
 /// Pins the JSON shape `NotionDestinationClient.propertyValue(for:payload:)`
 /// emits per `NotionPropertyMapping` case. If the helper goes private later

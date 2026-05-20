@@ -17,6 +17,9 @@ struct SyncLogDrawer: View {
     @Environment(\.theme) private var theme
     @ObservedObject private var ledger = Ledger.shared
 
+    @State private var search: String = ""
+    @State private var selectedEventType: String = "all"
+
     var body: some View {
         ZStack(alignment: .top) {
             if isPresented {
@@ -37,7 +40,7 @@ struct SyncLogDrawer: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(theme.divider).frame(height: 1)
-            ScrollView { SyncLogView() }
+            ScrollView { SyncLogView(search: $search, selectedEventType: $selectedEventType) }
                 .frame(maxHeight: contentHeight)
             Rectangle().fill(theme.divider).frame(height: 1)
             footer
@@ -57,7 +60,7 @@ struct SyncLogDrawer: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Sync log")
                     .font(.system(size: 18, weight: .semibold))
@@ -66,12 +69,16 @@ struct SyncLogDrawer: View {
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
             }
-            Spacer()
+            Spacer(minLength: 16)
+
+            searchField
+            filterPicker
+
             Button(action: close) {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(theme.foreground)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 34, height: 34)
                     .background(Circle().fill(theme.card))
                     .overlay(Circle().strokeBorder(theme.borderStrong, lineWidth: 1))
             }
@@ -80,6 +87,42 @@ struct SyncLogDrawer: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.muted)
+            TextField("Search", text: $search)
+                .textFieldStyle(.plain)
+                .frame(width: 180)
+            if !search.isEmpty {
+                Button(action: { search = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.borderStrong, lineWidth: 1))
+    }
+
+    private var filterPicker: some View {
+        Picker("", selection: $selectedEventType) {
+            Text("All events").tag("all")
+            Text("Page synced").tag(SyncEventType.pageSynced.rawValue)
+            Text("Page failed").tag(SyncEventType.pageFailed.rawValue)
+            Text("Run completed").tag(SyncEventType.ruleRunCompleted.rawValue)
+            Text("Orphans").tag(SyncEventType.orphanDetected.rawValue)
+        }
+        .labelsHidden()
+        .controlSize(.large)
+        .fixedSize()
     }
 
     private var footer: some View {

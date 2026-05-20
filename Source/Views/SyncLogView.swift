@@ -8,15 +8,14 @@
 import SwiftUI
 
 struct SyncLogView: View {
+    @Binding var search: String
+    @Binding var selectedEventType: String
+
     @ObservedObject private var ledger = Ledger.shared
     @Environment(\.theme) private var theme
 
-    @State private var selectedEventType: String = "all"
-    @State private var search: String = ""
-
     var body: some View {
         VStack(spacing: 0) {
-            filterBar
             if filteredEvents.isEmpty {
                 emptyState
             } else {
@@ -30,28 +29,6 @@ struct SyncLogView: View {
             }
         }
         .background(theme.background)
-    }
-
-    private var filterBar: some View {
-        HStack(spacing: 12) {
-            Picker("", selection: $selectedEventType) {
-                Text("All events").tag("all")
-                Text("Page synced").tag(SyncEventType.pageSynced.rawValue)
-                Text("Page failed").tag(SyncEventType.pageFailed.rawValue)
-                Text("Run completed").tag(SyncEventType.ruleRunCompleted.rawValue)
-                Text("Orphans").tag(SyncEventType.orphanDetected.rawValue)
-            }
-            .labelsHidden()
-            .frame(width: 180)
-
-            TextField("Filter…", text: $search)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 240)
-
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
     }
 
     private var emptyState: some View {

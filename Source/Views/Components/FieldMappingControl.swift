@@ -127,6 +127,7 @@ struct FieldMappingControl: View {
             }
             addButton
                 .disabled(availableKeys.isEmpty)
+                .padding(.top, 6)
         }
     }
 

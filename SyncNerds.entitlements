@@ -22,5 +22,12 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
+	<!--
+	Lets the hardened-runtime app send Apple Events to Notes.app so the
+	Apple Notes destination can create folders and notes. macOS still gates
+	this behind a one-time TCC consent prompt (NSAppleEventsUsageDescription).
+	-->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>

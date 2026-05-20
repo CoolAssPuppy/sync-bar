@@ -41,6 +41,8 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2026 Strategic Nerds.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>SyncNerds needs permission to control Notes so it can file your transcribed reMarkable pages into the Apple Notes folder you choose.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>

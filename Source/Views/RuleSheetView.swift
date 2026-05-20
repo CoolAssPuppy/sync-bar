@@ -20,7 +20,6 @@ struct RuleSliderView: View {
     @Environment(\.theme) private var theme
 
     @State private var existingBindingIdToEdit: String?
-    @State private var selectedBindingId: String?
 
     /// Either an existing rule for this notebook, or nil. When nil we
     /// create a fresh rule the first time the user attaches a destination.
@@ -250,67 +249,22 @@ struct RuleSliderView: View {
         let ruleId = ensureRule().id
         let binding = DestinationBinding(configuration: item.makeConfiguration())
         ledger.addBinding(ruleId: ruleId, binding: binding)
-        selectedBindingId = binding.id
     }
 
     @ViewBuilder
     private func populatedDestinations(rule: SyncRule) -> some View {
-        let bindings = rule.destinations
-        let activeBindingId = selectedBindingId ?? bindings.first?.id
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Menu {
-                    ForEach(bindings) { binding in
-                        Button(action: { selectedBindingId = binding.id }) {
-                            Label(binding.configuration.summary, systemImage: binding.kind.systemImage)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        if let binding = bindings.first(where: { $0.id == activeBindingId }) {
-                            DestinationIcon(kind: binding.kind, size: 18)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(binding.configuration.summary)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(theme.foreground)
-                                    .lineLimit(1)
-                                Text(binding.kind.label)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(theme.muted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(theme.tertiary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .frame(maxWidth: .infinity)
-            }
-
-            if let activeBindingId, let binding = bindings.first(where: { $0.id == activeBindingId }) {
-                BindingInlinePanel(
+        VStack(spacing: 8) {
+            ForEach(rule.destinations) { binding in
+                RuleDestinationRow(
                     binding: binding,
                     onEdit: { existingBindingIdToEdit = binding.id },
-                    onSyncNow: { onSyncNow(rule.id, binding.id) },
+                    onSync: { onSyncNow(rule.id, binding.id) },
                     onToggle: { newValue in
                         var copy = binding
                         copy.enabled = newValue
                         ledger.updateBinding(ruleId: rule.id, binding: copy)
                     },
-                    onRemove: {
-                        ledger.removeBinding(ruleId: rule.id, bindingId: binding.id)
-                        selectedBindingId = nil
-                    }
+                    onRemove: { ledger.removeBinding(ruleId: rule.id, bindingId: binding.id) }
                 )
             }
         }
@@ -399,64 +353,68 @@ struct RuleSliderView: View {
     }
 }
 
-// MARK: - Inline panel for the selected destination binding
+// MARK: - Destination row
 
-private struct BindingInlinePanel: View {
+/// One destination in a rule: icon + name / type / last-sync status on the
+/// left, an enable toggle and minimized edit / sync / remove icons on the right.
+private struct RuleDestinationRow: View {
     let binding: DestinationBinding
     let onEdit: () -> Void
-    let onSyncNow: () -> Void
+    let onSync: () -> Void
     let onToggle: (Bool) -> Void
     let onRemove: () -> Void
 
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Divider().background(theme.divider)
+        HStack(spacing: 12) {
+            DestinationIcon(kind: binding.kind, size: 30)
 
-            HStack(spacing: 10) {
-                statusPill
-                if let error = binding.lastRunError, !error.isEmpty {
-                    Text(error)
-                        .font(.system(size: 10))
-                        .foregroundStyle(theme.destructive)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else if let lastRun = binding.lastRunAt {
-                    Text("\(Formatters.syncResultLabel(pageCount: binding.lastRunPagesSynced)) · \(Formatters.relativeLabel(for: lastRun))")
-                        .font(.system(size: 10))
-                        .foregroundStyle(theme.muted)
-                } else {
-                    Text("Never run")
-                        .font(.system(size: 10))
-                        .foregroundStyle(theme.tertiary)
-                }
-                Spacer(minLength: 8)
-                Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
-                    .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(binding.configuration.summary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                    .lineLimit(1)
+                Text(binding.kind.label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(theme.muted)
+                Text(statusLine)
+                    .font(.system(size: 10))
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 8) {
-                AppSecondaryButton(title: "Edit", systemImage: "pencil") { onEdit() }
-                AppSecondaryButton(title: "Sync now", systemImage: "arrow.triangle.2.circlepath") { onSyncNow() }
-                Spacer()
-                AppSecondaryButton(title: "Remove", systemImage: "trash", tint: .destructive) { onRemove() }
-            }
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: Binding(get: { binding.enabled }, set: { onToggle($0) }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+            AppIconButton(systemName: "pencil", help: "Edit", action: onEdit)
+            AppIconButton(systemName: "arrow.triangle.2.circlepath", help: "Sync now", spinOnTap: true, action: onSync)
+            AppIconButton(systemName: "trash", help: "Remove", tint: .destructive, action: onRemove)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset))
+        .overlay(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        .opacity(binding.enabled ? 1 : 0.6)
     }
 
-    @ViewBuilder
-    private var statusPill: some View {
-        if !binding.enabled {
-            StatusPill(label: "Off", kind: .neutral)
-        } else {
-            switch binding.lastRunStatus {
-            case .success:  StatusPill(label: "Synced", kind: .success)
-            case .partial:  StatusPill(label: "Partial", kind: .warning)
-            case .error:    StatusPill(label: "Failed", kind: .destructive)
-            case .running:  StatusPill(label: "Running", kind: .info)
-            case .neverRun: StatusPill(label: "New", kind: .neutral)
-            }
+    private var statusLine: String {
+        if !binding.enabled { return "Off" }
+        if let error = binding.lastRunError, !error.isEmpty { return error }
+        if let lastRun = binding.lastRunAt {
+            return "\(Formatters.syncResultLabel(pageCount: binding.lastRunPagesSynced)) · \(Formatters.relativeLabel(for: lastRun))"
+        }
+        return "Never synced"
+    }
+
+    private var statusColor: Color {
+        if !binding.enabled { return theme.tertiary }
+        switch binding.lastRunStatus {
+        case .error:   return theme.destructive
+        case .partial: return theme.warning
+        case .success: return theme.success
+        default:       return theme.muted
         }
     }
 }

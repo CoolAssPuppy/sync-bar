@@ -47,7 +47,117 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    func test_failing_writes_mark_binding_error_and_record_pageFailed_events() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+
+        // A path whose parent component is a regular file can never be created
+        // as a directory, so every Markdown page write throws.
+        let blocker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("syncnerds-blocker-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: blocker.path, contents: Data("x".utf8))
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        let unwritable = blocker.appendingPathComponent("nested").path
+
+        var rule = SyncRule.new(notebookId: "nb-fail", notebookName: "Test")
+        rule.destinations = [markdownBinding(folderPath: unwritable)]
+        ledger.upsertRule(rule)
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        XCTAssertEqual(binding?.lastRunStatus, .error)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 0)
+
+        let pageFailed = ledger.events.filter { $0.ruleId == rule.id && $0.eventType == .pageFailed }
+        XCTAssertEqual(pageFailed.count, 3)
+        XCTAssertTrue(pageFailed.allSatisfy { $0.errorMessage?.isEmpty == false })
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_one_failing_page_among_successes_marks_binding_partial() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // Occupy the slot for page 2's file with a non-empty directory so only
+        // that page's write throws; pages 1 and 3 still succeed.
+        let blocked = folder.appendingPathComponent("Test-page-2.md", isDirectory: true)
+        try? FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: blocked.appendingPathComponent("keep.txt").path,
+                                       contents: Data("x".utf8))
+
+        var rule = SyncRule.new(notebookId: "nb-partial", notebookName: "Test")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        let binding = ledger.rules.first(where: { $0.id == rule.id })?.destinations.first
+        XCTAssertEqual(binding?.lastRunStatus, .partial)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 2)
+
+        let synced = ledger.events.filter { $0.ruleId == rule.id && $0.eventType == .pageSynced }
+        let failed = ledger.events.filter { $0.ruleId == rule.id && $0.eventType == .pageFailed }
+        XCTAssertEqual(synced.count, 2)
+        XCTAssertEqual(failed.count, 1)
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    /// Pins CURRENT behavior: the coordinator passes `previouslySyncedHash:
+    /// nil` (SyncCoordinator.runBinding) and the Ledger keeps no per-page
+    /// synced-hash store, so an unchanged page is synced again on every
+    /// cycle. When version-hash idempotency is wired up, this test should be
+    /// flipped to assert the second cycle syncs 0 pages.
+    func test_second_cycle_resyncs_unchanged_pages_no_hash_dedup() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule.new(notebookId: "nb-idem", notebookName: "Test")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+
+        // The scripted client returns identical pages (same versionHash) every
+        // call, so the only thing that could skip page 2 on cycle two is hash
+        // dedup — which isn't implemented.
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(pages: 3))
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+
+        coordinator.syncNow(ruleId: rule.id)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        XCTAssertEqual(ledger.rules.first(where: { $0.id == rule.id })?.destinations.first?.lastRunPagesSynced, 3)
+
+        let synced = ledger.events.filter { $0.ruleId == rule.id && $0.eventType == .pageSynced }
+        XCTAssertEqual(synced.count, 6)
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     // MARK: helpers
+
+    private func markdownBinding(folderPath: String) -> DestinationBinding {
+        DestinationBinding(configuration: .markdownFolder(
+            MarkdownFolderDestinationConfig(
+                folderPath: folderPath,
+                fileNameTemplate: "{notebook}-page-{page_n}",
+                includeFrontmatter: false
+            )
+        ))
+    }
 
     private func prepare(ledger: Ledger) async {
         // Ensure the coordinator has a paired account to act on. The mock

@@ -99,7 +99,14 @@ struct MenuBarPopover: View {
 
     @ViewBuilder
     private var content: some View {
-        let visibleRules = ledger.rules.filter { !$0.destinations.isEmpty }
+        // Cap the dropdown at the 10 most recently synced rules so it never
+        // grows unwieldy; the full list lives in the main window.
+        let visibleRules = Array(
+            ledger.rules
+                .filter { !$0.destinations.isEmpty }
+                .sorted { ($0.aggregateLastRunAt ?? .distantPast) > ($1.aggregateLastRunAt ?? .distantPast) }
+                .prefix(10)
+        )
         if visibleRules.isEmpty {
             EmptyRulesState(onOpen: actions.openMainWindow)
                 .frame(maxWidth: .infinity)

@@ -48,12 +48,14 @@ enum RemarkableClientFactory {
 /// a fixed list so the UI looks lived-in before the real device is paired.
 struct MockRemarkableClient: RemarkableClient {
     private static let sampleNotebooks: [RmNotebook] = [
-        RmNotebook(id: "nb-quarterly", name: "Q2 planning", parentFolder: "Strategy", lastModified: Date().addingTimeInterval(-3_600 * 6), pageCount: 7),
-        RmNotebook(id: "nb-meetings",  name: "Meeting notes", parentFolder: nil, lastModified: Date().addingTimeInterval(-3_600 * 18), pageCount: 24),
-        RmNotebook(id: "nb-journal",   name: "Daily journal", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 30), pageCount: 41),
-        RmNotebook(id: "nb-book",      name: "Book sketches", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 48), pageCount: 12),
-        RmNotebook(id: "nb-research",  name: "Customer research", parentFolder: "Strategy", lastModified: Date().addingTimeInterval(-3_600 * 96), pageCount: 18),
-        RmNotebook(id: "nb-onboard",   name: "Onboarding ideas", parentFolder: "Strategy", lastModified: Date().addingTimeInterval(-3_600 * 120), pageCount: 9)
+        RmNotebook(id: "nb-journal",   name: "Daily journal", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 5), pageCount: 52),
+        RmNotebook(id: "nb-meetings",  name: "Weekly 1:1s", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 9), pageCount: 14),
+        RmNotebook(id: "nb-standup",   name: "Standup notes", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 26), pageCount: 31),
+        RmNotebook(id: "nb-quarterly", name: "Q3 planning", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 48), pageCount: 8),
+        RmNotebook(id: "nb-research",  name: "Customer interviews", parentFolder: "Work", lastModified: Date().addingTimeInterval(-3_600 * 72), pageCount: 17),
+        RmNotebook(id: "nb-book",      name: "Architecture sketches", parentFolder: "Projects", lastModified: Date().addingTimeInterval(-3_600 * 96), pageCount: 13),
+        RmNotebook(id: "nb-onboard",   name: "Reading notes", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 120), pageCount: 26),
+        RmNotebook(id: "nb-travel",    name: "Japan trip planning", parentFolder: "Personal", lastModified: Date().addingTimeInterval(-3_600 * 168), pageCount: 9)
     ]
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {

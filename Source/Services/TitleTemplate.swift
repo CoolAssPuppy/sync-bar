@@ -14,6 +14,7 @@ enum TitleToken: String, CaseIterable {
     case notebook
     case pageNumber  = "page_n"
     case date
+    case today
     case title
 
     var placeholder: String { "{\(rawValue)}" }
@@ -23,6 +24,7 @@ enum TitleToken: String, CaseIterable {
         case .notebook:   return "Source reMarkable notebook"
         case .pageNumber: return "1-indexed page number"
         case .date:       return "Page creation date (yyyy-MM-dd)"
+        case .today:      return "Today's date when synced (yyyy-MM-dd)"
         case .title:      return "Resolved page title"
         }
     }
@@ -35,6 +37,8 @@ struct TitleTemplateContext {
     var pageNumber: Int
     var date: Date
     var title: String
+    /// "Today" at resolution time. Defaults to now; injectable for tests.
+    var today: Date = Date()
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -47,6 +51,7 @@ struct TitleTemplateContext {
         case .notebook:   return notebook
         case .pageNumber: return "\(pageNumber)"
         case .date:       return Self.dateFormatter.string(from: date)
+        case .today:      return Self.dateFormatter.string(from: today)
         case .title:      return title
         }
     }

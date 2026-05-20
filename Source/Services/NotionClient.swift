@@ -21,6 +21,28 @@ enum NotionError: LocalizedError, Sendable {
         case .network(let msg):    return msg
         }
     }
+
+    /// Maps a non-2xx Notion response to a typed error, extracting the human
+    /// `message` from Notion's error JSON ({"object":"error","code":…,
+    /// "message":…}) instead of surfacing the raw body. Logs the full body for
+    /// diagnosis. `context` labels the operation (e.g. "create page").
+    static func from(status: Int, data: Data, context: String) -> NotionError {
+        let body = String(data: data, encoding: .utf8) ?? ""
+        Log.notion.error("\(context, privacy: .public) failed: HTTP \(status, privacy: .public) — \(body, privacy: .public)")
+        switch status {
+        case 401, 403: return .authorizationFailed
+        case 429:      return .rateLimited
+        default:       break
+        }
+        struct APIError: Decodable { let code: String?; let message: String? }
+        if let parsed = try? JSONDecoder().decode(APIError.self, from: data),
+           let message = parsed.message, !message.isEmpty {
+            let code = parsed.code.map { " [\($0)]" } ?? ""
+            return .validationFailed("Notion: \(message)\(code)")
+        }
+        let snippet = body.isEmpty ? "HTTP \(status)" : String(body.prefix(300))
+        return .validationFailed("Notion HTTP \(status): \(snippet)")
+    }
 }
 
 struct NotionPageWriteResult: Sendable {

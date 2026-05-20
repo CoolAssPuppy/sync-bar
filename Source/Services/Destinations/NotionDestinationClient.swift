@@ -45,12 +45,18 @@ struct NotionDestinationClient: DestinationClient {
             properties = ["title": ["title": [["text": ["content": payload.title]]]]]
         case .database:
             parent = ["database_id": config.destinationId]
-            // Database rows need a title property. Notion's API requires it to
-            // be named "Name" unless the user has renamed it; we honor that
-            // convention here and surface the rename via the mapping below.
-            properties = ["Name": ["title": [["text": ["content": payload.title]]]]]
-            for (columnName, mapping) in config.propertyMappings {
-                if let value = Self.propertyValue(for: mapping, payload: payload) {
+            // Look up the live schema so we can (a) write the title under its
+            // real property name and (b) shape each mapped value to the column's
+            // actual type. Notion rejects a value whose shape doesn't match the
+            // column (e.g. a select payload for a multi_select column).
+            let schema = try await RealNotionClient(token: token)
+                .databaseSchema(destinationId: config.destinationId, workspaceId: config.workspaceId)
+            let typeByName = Dictionary(schema.map { ($0.name, $0.type) }, uniquingKeysWith: { first, _ in first })
+            let titleName = schema.first(where: { $0.type == "title" })?.name ?? "Name"
+            properties[titleName] = ["title": [["text": ["content": payload.title]]]]
+            for (columnName, mapping) in config.propertyMappings where columnName != titleName {
+                guard let columnType = typeByName[columnName] else { continue }
+                if let value = Self.propertyValue(for: mapping, columnType: columnType, payload: payload) {
                     properties[columnName] = value
                 }
             }
@@ -81,15 +87,8 @@ struct NotionDestinationClient: DestinationClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse {
-            switch http.statusCode {
-            case 200..<300: break
-            case 401, 403: throw NotionError.authorizationFailed
-            case 429:      throw NotionError.rateLimited
-            default:
-                let snippet = String(data: data, encoding: .utf8)?.prefix(200).description ?? "HTTP \(http.statusCode)"
-                throw NotionError.validationFailed(snippet)
-            }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw NotionError.from(status: http.statusCode, data: data, context: "create \(config.destinationType == .database ? "database row" : "page")")
         }
 
         struct Page: Decodable { let id: String; let url: String }
@@ -100,47 +99,97 @@ struct NotionDestinationClient: DestinationClient {
     // MARK: Property mapping → Notion JSON
 
     /// Translates one `NotionPropertyMapping` into the Notion v2022-06-28
-    /// `properties[name] = …` payload shape. Returns nil for `.leaveBlank`
-    /// so callers can skip writing that column.
+    /// `properties[name] = …` payload, shaped to the *column's actual type*
+    /// (`columnType` from the live schema). The mapping supplies the value; the
+    /// column type decides the wrapper. Returns nil to leave the column blank
+    /// (e.g. `.leaveBlank`, an unsupported column type, or an empty value).
     private static func propertyValue(for mapping: NotionPropertyMapping,
+                                      columnType: String,
                                       payload: DestinationPayload) -> [String: Any]? {
-        switch mapping {
-        case .leaveBlank:
-            return nil
-        case .text(let template):
-            let context = TitleTemplateContext(
-                notebook: payload.ruleNotebookName,
-                pageNumber: payload.pageNumber,
-                date: payload.sourceDate,
-                title: payload.title
-            )
-            let resolved = context.apply(to: template)
-            return ["rich_text": [["type": "text", "text": ["content": resolved]]]]
-        case .selectOption(let name):
-            // Notion accepts the same shape for both `select` and `status`;
-            // the column's declared type tells the server which to use.
-            return ["select": ["name": name], "status": ["name": name]]
-        case .multiSelectOptions(let names):
-            return ["multi_select": names.map { ["name": $0] }]
-        case .dateSource(let source):
-            let iso = ISO8601DateFormatter()
-            let date: Date
-            switch source {
-            case .pageCreated:  date = payload.sourceDate
-            case .pageModified: date = payload.sourceDate
-            case .syncedAt:     date = Date()
+        if case .leaveBlank = mapping { return nil }
+
+        // A single text value derived from whatever the mapping carries.
+        func resolvedString() -> String {
+            switch mapping {
+            case .text(let template):
+                let context = TitleTemplateContext(
+                    notebook: payload.ruleNotebookName,
+                    pageNumber: payload.pageNumber,
+                    date: payload.sourceDate,
+                    title: payload.title
+                )
+                return context.apply(to: template)
+            case .literal(let value):            return value
+            case .selectOption(let name):        return name
+            case .multiSelectOptions(let names): return names.joined(separator: ", ")
+            case .number(let value):             return String(value)
+            case .checkbox(let value):           return value ? "true" : "false"
+            case .dateSource, .leaveBlank:       return ""
             }
-            return ["date": ["start": iso.string(from: date)]]
-        case .checkbox(let value):
-            return ["checkbox": value]
-        case .number(let value):
-            return ["number": value]
-        case .literal(let value):
-            // Notion validates these per column type on the server; we send
-            // the value under every plausible key and let Notion pick the
-            // matching one.
-            return ["url": value, "email": value, "phone_number": value,
-                    "rich_text": [["type": "text", "text": ["content": value]]]]
+        }
+
+        // Option name(s) for select / multi_select / status columns.
+        func optionNames() -> [String] {
+            switch mapping {
+            case .selectOption(let name):        return name.isEmpty ? [] : [name]
+            case .multiSelectOptions(let names): return names.filter { !$0.isEmpty }
+            case .text, .literal:
+                let value = resolvedString()
+                return value.isEmpty ? [] : [value]
+            default:                             return []
+            }
+        }
+
+        // A date for date columns: "today" maps to the sync date, otherwise the
+        // page's own date. (Idempotency only re-creates a row when the page
+        // changes, so a "today" value is captured once and never rewritten.)
+        func resolvedDate() -> Date {
+            if case .dateSource(let source) = mapping {
+                switch source {
+                case .pageCreated, .pageModified: return payload.sourceDate
+                case .syncedAt:                   return Date()
+                }
+            }
+            if case .text(let template) = mapping, template.contains("{today}") {
+                return Date()
+            }
+            return payload.sourceDate
+        }
+
+        switch columnType {
+        case "title":
+            return nil  // written by the caller under the real title property
+        case "rich_text":
+            let value = resolvedString()
+            return value.isEmpty ? nil : ["rich_text": [["type": "text", "text": ["content": value]]]]
+        case "select":
+            guard let name = optionNames().first else { return nil }
+            return ["select": ["name": name]]
+        case "status":
+            guard let name = optionNames().first else { return nil }
+            return ["status": ["name": name]]
+        case "multi_select":
+            let names = optionNames()
+            return names.isEmpty ? nil : ["multi_select": names.map { ["name": $0] }]
+        case "date":
+            return ["date": ["start": ISO8601DateFormatter().string(from: resolvedDate())]]
+        case "checkbox":
+            if case .checkbox(let value) = mapping { return ["checkbox": value] }
+            return ["checkbox": resolvedString().lowercased() == "true"]
+        case "number":
+            if case .number(let value) = mapping { return ["number": value] }
+            guard let parsed = Double(resolvedString()) else { return nil }
+            return ["number": parsed]
+        case "url":
+            let value = resolvedString(); return value.isEmpty ? nil : ["url": value]
+        case "email":
+            let value = resolvedString(); return value.isEmpty ? nil : ["email": value]
+        case "phone_number":
+            let value = resolvedString(); return value.isEmpty ? nil : ["phone_number": value]
+        default:
+            // people, relation, files, formula, rollup, created_time, … can't
+            // be populated from a transcribed page; leave them untouched.
+            return nil
         }
     }
 

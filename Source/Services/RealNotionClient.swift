@@ -139,14 +139,8 @@ struct RealNotionClient: NotionClient {
 
     private static func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
-        switch http.statusCode {
-        case 200..<300: return
-        case 401, 403: throw NotionError.authorizationFailed
-        case 429:      throw NotionError.rateLimited
-        default:
-            let snippet = String(data: data, encoding: .utf8)?.prefix(200).description ?? "HTTP \(http.statusCode)"
-            throw NotionError.validationFailed(snippet)
-        }
+        if (200..<300).contains(http.statusCode) { return }
+        throw NotionError.from(status: http.statusCode, data: data, context: "catalog request")
     }
 }
 

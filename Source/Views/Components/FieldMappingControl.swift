@@ -15,6 +15,7 @@ enum NoteFieldValue: Equatable, Hashable {
     case notebookName
     case pageNumber
     case pageDate
+    case todaysDate
     case custom(String)
 
     var kind: NoteFieldKind {
@@ -23,6 +24,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .notebookName: return .notebookName
         case .pageNumber:   return .pageNumber
         case .pageDate:     return .pageDate
+        case .todaysDate:   return .todaysDate
         case .custom:       return .custom
         }
     }
@@ -39,6 +41,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .notebookName:     return "{notebook}"
         case .pageNumber:       return "{page_n}"
         case .pageDate:         return "{date}"
+        case .todaysDate:       return "{today}"
         case .custom(let text): return text
         }
     }
@@ -49,6 +52,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case "{notebook}": self = .notebookName
         case "{page_n}":   self = .pageNumber
         case "{date}":     self = .pageDate
+        case "{today}":    self = .todaysDate
         default:           self = .custom(token)
         }
     }
@@ -59,6 +63,7 @@ enum NoteFieldValue: Equatable, Hashable {
         case .notebookName: return .notebookName
         case .pageNumber:   return .pageNumber
         case .pageDate:     return .pageDate
+        case .todaysDate:   return .todaysDate
         case .custom:       return .custom(custom)
         }
     }
@@ -69,6 +74,7 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
     case notebookName
     case pageNumber
     case pageDate
+    case todaysDate
     case custom
 
     var id: String { rawValue }
@@ -79,6 +85,7 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
         case .notebookName: return "Notebook name"
         case .pageNumber:   return "Page number"
         case .pageDate:     return "Page date"
+        case .todaysDate:   return "Today's date"
         case .custom:       return "Custom text"
         }
     }

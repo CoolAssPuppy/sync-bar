@@ -27,6 +27,21 @@ protocol RemarkableClient: Sendable {
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount
     func listNotebooks() async throws -> [RmNotebook]
     func listPages(notebookId: String) async throws -> [RmPage]
+    /// A rasterized PNG of the page, used as the OCR input. Returns nil when no
+    /// rendering is available (e.g. the mock client), in which case the sync
+    /// engine treats the page as blank rather than uploading empty bytes.
+    func pageImage(for page: RmPage) async throws -> Data?
+}
+
+/// Returns the live reMarkable client once a device is paired (a device token
+/// is in the keychain), otherwise the mock so the UI stays explorable.
+enum RemarkableClientFactory {
+    static func make(keychain: KeychainStore = .shared) -> RemarkableClient {
+        if let token = keychain.value(for: .remarkableDeviceToken), !token.isEmpty {
+            return RealRemarkableClient(keychain: keychain)
+        }
+        return MockRemarkableClient()
+    }
 }
 
 /// Deterministic mock client. Returns sample notebooks and pages drawn from
@@ -76,4 +91,5 @@ struct MockRemarkableClient: RemarkableClient {
         }
     }
 
+    func pageImage(for page: RmPage) async throws -> Data? { nil }
 }

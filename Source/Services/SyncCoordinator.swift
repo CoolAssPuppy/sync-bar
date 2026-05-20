@@ -31,7 +31,7 @@ final class SyncCoordinator: ObservableObject {
     init(ledger: Ledger? = nil,
          settings: AppSettings? = nil,
          keychain: KeychainStore = .shared,
-         remarkable: RemarkableClient = MockRemarkableClient(),
+         remarkable: RemarkableClient = RemarkableClientFactory.make(),
          engine: RulesEngine = RulesEngine()) {
         self.ledger = ledger ?? Ledger.shared
         self.settings = settings ?? AppSettings.shared
@@ -314,9 +314,10 @@ final class SyncCoordinator: ObservableObject {
     /// rasterises pages. Returning nil short-circuits the OCR call so we
     /// don't ship zero-byte uploads to the LLM providers.
     private func imageData(for page: RmPage) async -> Data? {
-        // TODO(remarkable-cloud): replace with the rasterized PNG once the
-        // sync/v3 index walker lands.
-        return nil
+        // The real client downloads the page's .rm blob and rasterizes it; the
+        // mock returns nil so a blank page is synthesized instead of uploading
+        // empty bytes to an OCR provider.
+        return try? await remarkable.pageImage(for: page)
     }
 
     private func postNotification(title: String, body: String) {

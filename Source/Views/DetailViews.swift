@@ -151,7 +151,7 @@ struct RemarkableDetailView: View {
     @State private var isPairing: Bool = false
     @State private var errorMessage: String?
 
-    private let remarkable = MockRemarkableClient()
+    private let remarkable = RealRemarkableClient()
 
     var body: some View {
         if let account = ledger.remarkableAccount {

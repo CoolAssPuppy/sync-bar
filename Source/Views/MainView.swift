@@ -97,7 +97,7 @@ struct MainView: View {
 
     private func refreshNotebooks() {
         Task {
-            let client = MockRemarkableClient()
+            let client = RemarkableClientFactory.make()
             do {
                 let notebooks = try await client.listNotebooks()
                 await MainActor.run { ledger.setNotebooks(notebooks) }

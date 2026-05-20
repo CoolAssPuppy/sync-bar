@@ -239,4 +239,6 @@ private struct ScriptedRemarkableClient: RemarkableClient {
             )
         }
     }
+
+    func pageImage(for page: RmPage) async throws -> Data? { nil }
 }

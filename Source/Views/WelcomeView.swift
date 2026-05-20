@@ -19,7 +19,7 @@ struct WelcomeView: View {
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
-    private let remarkable = MockRemarkableClient()
+    private let remarkable = RealRemarkableClient()
 
     enum Step {
         case welcome

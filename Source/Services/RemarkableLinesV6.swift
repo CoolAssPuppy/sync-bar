@@ -5,11 +5,11 @@
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 //  Parser for the reMarkable ".lines" v6 page format. A file is a 43-byte
-//  ASCII header followed by length-prefixed blocks; line (stroke) blocks carry
-//  the points we rasterize for OCR. The low-level reader and block-envelope
-//  walking are unit-tested; the per-field stroke extraction follows the
-//  reverse-engineered v6 layout and is expected to need refinement against
-//  real device files (we cannot validate it without hardware).
+//  ASCII header followed by length-prefixed blocks; SceneLineItem blocks (type
+//  0x05) carry the strokes we rasterize for OCR. Each block uses a tagged
+//  field encoding (index + wire type); a stroke's points live in a subblock as
+//  14-byte (v2) or 24-byte (v1) records of which we keep x and y. Validated
+//  against real device files.
 //
 
 import Foundation
@@ -122,56 +122,94 @@ enum RemarkableLinesV6 {
         try reader.skip(headerLength)
 
         var strokes: [[CGPoint]] = []
-        // Walk the length-prefixed block envelope. Each block:
-        //   uint32 payloadLength | u8 unknown | u8 minVersion | u8 currentVersion
-        //   | u8 blockType | <payload>
-        while reader.remaining > 5 {
-            let payloadLength: Int
-            do { payloadLength = Int(try reader.readUInt32LE()) } catch { break }
-            guard payloadLength >= 0, payloadLength <= reader.remaining - 4 else { break }
-            _ = try? reader.readUInt8()                 // unknown
-            _ = try? reader.readUInt8()                 // min version
-            _ = try? reader.readUInt8()                 // current version
-            let blockType = (try? reader.readUInt8()) ?? 0xFF
-            let payload = (try? reader.readBytes(payloadLength)) ?? []
+        // The body is a sequence of blocks. Each block:
+        //   uint32 contentLength | u8 unknown | u8 minVersion | u8 currentVersion
+        //   | u8 blockType | <contentLength bytes of content>
+        // Block type 0x05 is a SceneLineItemBlock carrying one stroke.
+        while reader.remaining >= 5 {
+            let contentLength: Int
+            do { contentLength = Int(try reader.readUInt32LE()) } catch { break }
+            guard (try? reader.readUInt8()) != nil,            // unknown
+                  (try? reader.readUInt8()) != nil,            // min version
+                  let currentVersion = try? reader.readUInt8(),
+                  let blockType = try? reader.readUInt8() else { break }
+            guard contentLength >= 0, contentLength <= reader.remaining else { break }
+            let content = (try? reader.readBytes(contentLength)) ?? []
+            guard content.count == contentLength else { break }
 
-            // 0x05 == SceneLineItemBlock in the v6 layout.
-            if blockType == 0x05, let points = try? extractPoints(fromLineBlock: payload), points.count >= 2 {
+            if blockType == 0x05,
+               let points = try? linePoints(in: content, currentVersion: Int(currentVersion)),
+               points.count >= 2 {
                 strokes.append(points)
             }
         }
         return RemarkableDrawing(strokes: strokes)
     }
 
-    /// Best-effort extraction of a stroke's points from a line block payload.
-    /// v6 stores each point as six little-endian float32s
-    /// (x, y, speed, direction, width, pressure); we keep x and y. The block
-    /// header fields before the point run vary, so we locate the densest
-    /// 24-byte-aligned float run and treat it as the point list. This heuristic
-    /// is the piece most likely to need adjustment once real files are available.
-    static func extractPoints(fromLineBlock payload: [UInt8]) throws -> [CGPoint] {
-        let pointStride = 24  // 6 float32s
-        guard payload.count >= pointStride else { return [] }
+    /// Reads a v6 tag: a varint whose high bits are the field index and whose
+    /// low nibble is the wire type (0x1 = 1 byte, 0x4 = 4 bytes, 0x8 = 8 bytes,
+    /// 0xC = length-prefixed subblock, 0xF = CRDT id).
+    private static func readTag(_ reader: inout BinaryReader) throws -> (index: UInt64, type: UInt8) {
+        let raw = try reader.readVarUInt()
+        return (raw >> 4, UInt8(raw & 0xF))
+    }
 
-        var best: [CGPoint] = []
-        // Try each alignment offset; pick the longest plausible run of points
-        // whose coordinates fall inside the (generous) canvas bounds.
-        for start in 0..<pointStride {
-            var reader = BinaryReader(bytes: Array(payload[start...]))
-            var run: [CGPoint] = []
-            while reader.remaining >= pointStride {
-                guard let x = try? reader.readFloat32LE(),
-                      let y = try? reader.readFloat32LE() else { break }
-                _ = try? reader.skip(16)  // speed, direction, width, pressure
-                if x.isFinite, y.isFinite, abs(x) <= 2200, abs(y) <= 2200 {
-                    run.append(CGPoint(x: CGFloat(x), y: CGFloat(y)))
-                } else {
-                    if run.count > best.count { best = run }
-                    run = []
-                }
-            }
-            if run.count > best.count { best = run }
+    /// A CRDT id is a single author byte followed by a varint counter.
+    private static func skipCrdtId(_ reader: inout BinaryReader) throws {
+        _ = try reader.readUInt8()
+        _ = try reader.readVarUInt()
+    }
+
+    /// Extracts a stroke's (x, y) points from a SceneLineItemBlock's content.
+    /// Layout: parent/item/left/right CRDT ids, a deleted-length int, then a
+    /// value subblock holding the line — tool, color, thickness, starting
+    /// length, and a points subblock. Points are 14 bytes in the v2 layout
+    /// (x f32, y f32, then speed/width/direction/pressure) or 24 bytes in the
+    /// older v1 layout; only x and y are needed for rasterization. Validated
+    /// against real device files.
+    private static func linePoints(in content: [UInt8], currentVersion: Int) throws -> [CGPoint] {
+        var reader = BinaryReader(bytes: content)
+
+        for _ in 0..<4 {                          // parent, item, left, right ids
+            _ = try readTag(&reader)
+            try skipCrdtId(&reader)
         }
-        return best
+        _ = try readTag(&reader)                  // deleted-length tag
+        _ = try reader.readUInt32LE()
+
+        let valueTag = try readTag(&reader)       // value subblock (the line)
+        guard valueTag.type == 0xC else { return [] }
+        let subLength = Int(try reader.readUInt32LE())
+        let subEnd = reader.offset + subLength
+        _ = try reader.readUInt8()                // item type (0x03 == line)
+
+        var points: [CGPoint] = []
+        while reader.offset < subEnd {
+            let field = try readTag(&reader)
+            switch field.type {
+            case 0xC:                             // the points subblock
+                let length = Int(try reader.readUInt32LE())
+                let pointsEnd = min(reader.offset + length, subEnd)
+                let preferred = currentVersion == 1 ? 24 : 14
+                let stride = (length % preferred == 0) ? preferred : (length % 24 == 0 ? 24 : 14)
+                while reader.offset + 8 <= pointsEnd {
+                    let x = try reader.readFloat32LE()
+                    let y = try reader.readFloat32LE()
+                    points.append(CGPoint(x: CGFloat(x), y: CGFloat(y)))
+                    let tail = stride - 8
+                    if tail > 0 {
+                        guard reader.offset + tail <= pointsEnd else { break }
+                        try reader.skip(tail)
+                    }
+                }
+                return points                     // points are the only field we keep
+            case 0x8: try reader.skip(8)
+            case 0x4: try reader.skip(4)
+            case 0x1: try reader.skip(1)
+            case 0xF: try skipCrdtId(&reader)
+            default:  return points               // unknown tag — stop to stay aligned
+            }
+        }
+        return points
     }
 }

@@ -60,22 +60,65 @@ final class RemarkableLinesV6Tests: XCTestCase {
         XCTAssertThrowsError(try RemarkableLinesV6.parse(Data("not a lines file".utf8)))
     }
 
-    // MARK: Point extraction
+    // MARK: Stroke extraction (v6 tagged blocks)
 
-    func test_extractPoints_recovers_clean_point_run() throws {
-        // Three points; the 16 trailing bytes per point are 0xFF so that any
-        // misaligned read lands on NaN and is rejected, leaving the aligned run.
-        var payload: [UInt8] = []
-        let coords: [(Float, Float)] = [(100, 200), (101, 201), (102, 202)]
-        for (x, y) in coords {
-            payload += float32LE(x)
-            payload += float32LE(y)
-            payload += [UInt8](repeating: 0xFF, count: 16)
+    private func u32LE(_ value: UInt32) -> [UInt8] {
+        withUnsafeBytes(of: value.littleEndian) { Array($0) }
+    }
+
+    private func f64LE(_ value: Double) -> [UInt8] {
+        withUnsafeBytes(of: value.bitPattern.littleEndian) { Array($0) }
+    }
+
+    /// Builds one SceneLineItemBlock (type 0x05) with the v2 14-byte point
+    /// layout, matching the structure of real device files.
+    private func v6LineBlock(points: [(Float, Float)]) -> [UInt8] {
+        var pointBytes: [UInt8] = []
+        for (x, y) in points {
+            pointBytes += float32LE(x)
+            pointBytes += float32LE(y)
+            pointBytes += [0, 0, 0, 0, 0, 0]   // speed u16, width u16, direction u8, pressure u8
         }
-        let points = try RemarkableLinesV6.extractPoints(fromLineBlock: payload)
-        XCTAssertEqual(points.count, 3)
-        XCTAssertEqual(Float(points[0].x), 100)
-        XCTAssertEqual(Float(points[0].y), 200)
-        XCTAssertEqual(Float(points[2].x), 102)
+        var line: [UInt8] = [0x03]                                  // item type = line
+        line += [0x14] + u32LE(15)                                  // tool (Byte4)
+        line += [0x24] + u32LE(0)                                   // color (Byte4)
+        line += [0x38] + f64LE(2.0)                                 // thickness (Byte8)
+        line += [0x44] + float32LE(0)                               // starting length (Byte4)
+        line += [0x5C] + u32LE(UInt32(pointBytes.count)) + pointBytes  // points (Length4)
+
+        var content: [UInt8] = []
+        content += [0x1F, 0x00, 0x01]                               // parent id
+        content += [0x2F, 0x01, 0x02]                               // item id
+        content += [0x3F, 0x00, 0x00]                               // left id
+        content += [0x4F, 0x00, 0x00]                               // right id
+        content += [0x54] + u32LE(0)                                // deleted length (Byte4)
+        content += [0x6C] + u32LE(UInt32(line.count)) + line        // value subblock (Length4)
+
+        var block: [UInt8] = u32LE(UInt32(content.count))
+        block += [0x00, 0x01, 0x02, 0x05]                          // unknown, minVer, curVer=2, type=line
+        block += content
+        return block
+    }
+
+    func test_parse_extracts_points_from_line_block() throws {
+        var bytes = v6Header()
+        bytes += v6LineBlock(points: [(10, 20), (30, 40), (50, 60)])
+        let drawing = try RemarkableLinesV6.parse(Data(bytes))
+
+        XCTAssertEqual(drawing.strokes.count, 1)
+        XCTAssertEqual(drawing.strokes.first?.count, 3)
+        XCTAssertEqual(Float(drawing.strokes[0][0].x), 10)
+        XCTAssertEqual(Float(drawing.strokes[0][0].y), 20)
+        XCTAssertEqual(Float(drawing.strokes[0][2].x), 50)
+        XCTAssertEqual(Float(drawing.strokes[0][2].y), 60)
+        XCTAssertFalse(drawing.isEmpty)
+    }
+
+    func test_parse_collects_multiple_strokes() throws {
+        var bytes = v6Header()
+        bytes += v6LineBlock(points: [(1, 2), (3, 4)])
+        bytes += v6LineBlock(points: [(5, 6), (7, 8)])
+        let drawing = try RemarkableLinesV6.parse(Data(bytes))
+        XCTAssertEqual(drawing.strokes.count, 2)
     }
 }

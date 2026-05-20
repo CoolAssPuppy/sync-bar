@@ -55,13 +55,14 @@ enum GoogleTokens {
         return try await post(body: body, context: "Google token exchange", session: session)
     }
 
-    /// Lists the account's Drive folders so a destination can target one.
-    /// Requires the drive.metadata.readonly scope.
-    static func listFolders(email: String, session: URLSession = .shared) async throws -> [GoogleDriveFolder] {
+    /// Lists the folders directly inside `parentId` ("root" for My Drive) so the
+    /// destination picker can show a lazy, expandable folder tree. Requires the
+    /// drive.metadata.readonly scope.
+    static func listFolders(email: String, parentId: String = "root", session: URLSession = .shared) async throws -> [GoogleDriveFolder] {
         let token = try await validAccessToken(email: email, session: session)
         var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
         components.queryItems = [
-            URLQueryItem(name: "q", value: "mimeType = 'application/vnd.google-apps.folder' and trashed = false"),
+            URLQueryItem(name: "q", value: "mimeType = 'application/vnd.google-apps.folder' and trashed = false and '\(parentId)' in parents"),
             URLQueryItem(name: "fields", value: "files(id,name)"),
             URLQueryItem(name: "pageSize", value: "200"),
             URLQueryItem(name: "orderBy", value: "name")
@@ -70,11 +71,14 @@ enum GoogleTokens {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? "HTTP \(http.statusCode)"
+            let snippet = String(data: data, encoding: .utf8)?.prefix(400) ?? "HTTP \(http.statusCode)"
+            Log.google.error("Drive folder list failed (parent \(parentId, privacy: .public), HTTP \(http.statusCode, privacy: .public)): \(snippet, privacy: .public)")
             throw OAuthError.invalidResponse("Drive folder list failed (HTTP \(http.statusCode)): \(snippet)")
         }
         struct FolderList: Decodable { let files: [GoogleDriveFolder] }
-        return (try? JSONDecoder().decode(FolderList.self, from: data))?.files ?? []
+        let folders = (try? JSONDecoder().decode(FolderList.self, from: data))?.files ?? []
+        Log.google.info("Drive folder list ok (parent \(parentId, privacy: .public)): \(folders.count, privacy: .public) folders")
+        return folders
     }
 
     static func fetchEmail(accessToken: String, session: URLSession = .shared) async throws -> String {

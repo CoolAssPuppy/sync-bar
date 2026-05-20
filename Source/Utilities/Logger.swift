@@ -18,4 +18,5 @@ enum Log {
     static let ocr       = Logger(subsystem: subsystem, category: "ocr")
     static let ledger    = Logger(subsystem: subsystem, category: "ledger")
     static let ui        = Logger(subsystem: subsystem, category: "ui")
+    static let google    = Logger(subsystem: subsystem, category: "google")
 }

@@ -45,10 +45,6 @@ final class Ledger: ObservableObject {
         load()
     }
 
-    deinit {
-        pendingPersistTasks.values.forEach { $0.cancel() }
-    }
-
     // MARK: Public API
 
     func setRemarkableAccount(_ account: RemarkableAccount?) {

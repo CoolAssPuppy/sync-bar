@@ -255,12 +255,12 @@ struct RuleSliderView: View {
             })
         }
         for target in ledger.appleNotesTargets {
-            items.append(ConfiguredDestination(id: "an-\(target.id)", kind: .appleNotes, label: "Apple Notes · \(target.folderName)") {
+            items.append(ConfiguredDestination(id: "an-\(target.id)", kind: .appleNotes, label: "Apple Notes") {
                 .appleNotes(AppleNotesDestinationConfig(folderName: target.folderName))
             })
         }
         for target in ledger.markdownTargets {
-            items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown · \(target.displayName)") {
+            items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown Files") {
                 .markdownFolder(MarkdownFolderDestinationConfig(folderPath: target.folderPath,
                     fileNameTemplate: "{notebook}-page-{page_n}", includeFrontmatter: true))
             })

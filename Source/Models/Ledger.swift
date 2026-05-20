@@ -263,36 +263,6 @@ final class Ledger: ObservableObject {
         upsertGoogleAccount(account)
     }
 
-    func renameMarkdownTarget(id: String, newName: String) {
-        guard var target = markdownTargets.first(where: { $0.id == id }) else { return }
-        target.displayName = newName
-        upsertMarkdownTarget(target)
-    }
-
-    /// Apple Notes rename is special: the "name" is the literal Notes folder
-    /// SyncBar writes into. Renaming rewrites every binding pointing at
-    /// the old folder so the next sync lands in the new folder.
-    func renameAppleNotesTarget(id: String, newFolderName: String) {
-        guard let existing = appleNotesTargets.first(where: { $0.id == id }) else { return }
-        let oldName = existing.folderName
-        guard oldName != newFolderName else { return }
-        var updated = existing
-        updated.folderName = newFolderName
-        upsertAppleNotesTarget(updated)
-
-        for ruleIndex in rules.indices {
-            for bindingIndex in rules[ruleIndex].destinations.indices {
-                if case .appleNotes(var cfg) = rules[ruleIndex].destinations[bindingIndex].configuration,
-                   cfg.folderName == oldName {
-                    cfg.folderName = newFolderName
-                    rules[ruleIndex].destinations[bindingIndex].configuration = .appleNotes(cfg)
-                }
-            }
-        }
-        persistRules()
-        NotificationCenter.default.post(name: .rulesChanged, object: nil)
-    }
-
     /// Pairs of (rule, binding) where the binding points at the given
     /// destination predicate. Used by the per-destination "Active syncs"
     /// list to enumerate which notebooks fan out to this destination.

@@ -145,8 +145,8 @@ struct Sidebar: View {
             }
             ForEach(ledger.markdownTargets) { target in
                 AccountRow(
-                    title: target.displayName,
-                    subtitle: "Markdown · \((target.folderPath as NSString).lastPathComponent)",
+                    title: "Markdown Files",
+                    subtitle: "Local files",
                     icon: .destination(.markdownFolder),
                     isSelected: selection == .markdownTarget(target.id)
                 )
@@ -154,8 +154,8 @@ struct Sidebar: View {
             }
             ForEach(ledger.appleNotesTargets) { target in
                 AccountRow(
-                    title: target.folderName,
-                    subtitle: "Apple Notes",
+                    title: "Apple Notes",
+                    subtitle: "iCloud Notes",
                     icon: .destination(.appleNotes),
                     isSelected: selection == .appleNotesTarget(target.id)
                 )

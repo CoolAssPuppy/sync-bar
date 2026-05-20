@@ -31,11 +31,18 @@ struct DestinationDetailScaffold: View {
     var body: some View {
         VStack(spacing: 0) {
             titleBar
-            if isHeaderDrawerOpen {
-                Divider().background(theme.divider)
-                headerDrawer
+            // Clip the drawer to this slot so its open/close slide stays below
+            // the title bar instead of sliding up over/under the header.
+            VStack(spacing: 0) {
+                if isHeaderDrawerOpen {
+                    VStack(spacing: 0) {
+                        Divider().background(theme.divider)
+                        headerDrawer
+                    }
                     .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
+            .clipped()
             Divider().background(theme.divider)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -102,27 +109,29 @@ struct DestinationDetailScaffold: View {
 
     private var headerDrawer: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 10) {
-                Text("RENAME")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(theme.tertiary)
-                    .frame(width: 92, alignment: .leading)
-                TextField("Name", text: $renameValue)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($renameFocused)
-                    .onSubmit(submitRename)
-                Button(action: submitRename) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .frame(width: 22, height: 22)
-                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.cardInset))
-                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(theme.borderStrong, lineWidth: 1))
+            if rename != nil {
+                HStack(alignment: .center, spacing: 10) {
+                    Text("RENAME")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.6)
+                        .foregroundStyle(theme.tertiary)
+                        .frame(width: 92, alignment: .leading)
+                    TextField("Name", text: $renameValue)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($renameFocused)
+                        .onSubmit(submitRename)
+                    Button(action: submitRename) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(theme.primary)
+                            .frame(width: 22, height: 22)
+                            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.cardInset))
+                            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(theme.borderStrong, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Save name")
+                    .disabled(renameValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.plain)
-                .help("Save name")
-                .disabled(renameValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || rename == nil)
             }
 
             if case .keychainToken = authorization {

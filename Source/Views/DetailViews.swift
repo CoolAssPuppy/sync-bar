@@ -97,14 +97,15 @@ struct MarkdownTargetDetailView: View {
     var body: some View {
         DestinationDetailScaffold(
             kind: .markdownFolder,
-            title: target?.displayName ?? "Markdown Folder",
-            subtitle: target?.folderPath,
+            title: "Markdown Files",
+            subtitle: nil,
             connectedAt: target?.connectedAt,
+            // The folder is per binding now, so this destination represents every
+            // Markdown sync rather than one folder.
             activeBindings: ledger.bindings(matching: { config in
-                if case .markdownFolder(let cfg) = config { return cfg.folderPath == target?.folderPath }
+                if case .markdownFolder = config { return true }
                 return false
             }),
-            rename: { newName in ledger.renameMarkdownTarget(id: targetId, newName: newName) },
             disconnect: { ledger.removeMarkdownTarget(id: targetId) }
         )
     }
@@ -123,14 +124,15 @@ struct AppleNotesTargetDetailView: View {
     var body: some View {
         DestinationDetailScaffold(
             kind: .appleNotes,
-            title: target?.folderName ?? "Apple Notes",
-            subtitle: "iCloud Notes folder",
+            title: "Apple Notes",
+            subtitle: "iCloud Notes",
             connectedAt: target?.connectedAt,
+            // The folder is per binding now, so this destination represents every
+            // Apple Notes sync rather than one folder.
             activeBindings: ledger.bindings(matching: { config in
-                if case .appleNotes(let cfg) = config { return cfg.folderName == target?.folderName }
+                if case .appleNotes = config { return true }
                 return false
             }),
-            rename: { newName in ledger.renameAppleNotesTarget(id: targetId, newFolderName: newName) },
             disconnect: { ledger.removeAppleNotesTarget(id: targetId) }
         )
     }

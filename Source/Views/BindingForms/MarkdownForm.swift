@@ -28,11 +28,12 @@ struct MarkdownForm: View {
                         }
                     }
                 }
-                if !targets.isEmpty {
+                let foldered = targets.filter { !$0.folderPath.isEmpty }
+                if !foldered.isEmpty {
                     AppRowDivider().padding(.vertical, 10)
                     AppSettingRow("Pick an existing target", description: nil) {
                         Picker("", selection: $binding.folderPath) {
-                            ForEach(targets) { target in
+                            ForEach(foldered) { target in
                                 Text(target.displayName).tag(target.folderPath)
                             }
                         }

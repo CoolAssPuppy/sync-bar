@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 /// Modal sheet shown from the sidebar's "+ Add destination" button. Lets
 /// the user pick a destination kind and walks them through the minimal
@@ -18,8 +17,6 @@ struct AddDestinationSheet: View {
     @ObservedObject private var themeStore = ThemeStore.shared
 
     @State private var selectedKind: DestinationKind = .notion
-    @State private var markdownPath: String = ""
-    @State private var appleNotesFolder: String = "Sync Bar"
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
@@ -162,35 +159,17 @@ struct AddDestinationSheet: View {
 
     private var appleNotesFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Apple Notes uses your local iCloud Notes account. Sync Bar creates the folder if it doesn't exist.")
+            Text("Apple Notes uses your local iCloud Notes account. You'll choose which folder to use when you set up a sync for a reMarkable folder.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            AppSettingRow("Folder name", description: nil) {
-                TextField("Sync Bar, Notes, …", text: $appleNotesFolder)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-            }
         }
     }
 
     private var markdownFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Writes one Markdown file per synced page into a folder you choose. Works with Obsidian, Bear, iA Writer, anything.")
+            Text("Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, anything. You'll choose the destination folder when you set up a sync for a reMarkable folder.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            AppSettingRow("Folder", description: nil) {
-                HStack(spacing: 6) {
-                    Text(markdownPath.isEmpty ? "Not chosen" : markdownPath)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 200, alignment: .leading)
-                    AppSecondaryButton(title: "Choose…", systemImage: "folder") {
-                        chooseFolder()
-                    }
-                }
-            }
         }
     }
 
@@ -215,10 +194,11 @@ struct AddDestinationSheet: View {
 
     private var primaryTitle: LocalizedStringKey {
         switch selectedKind {
-        case .linear:     return isConnecting ? "Connecting…" : "Connect Linear"
-        case .notion:     return isConnecting ? "Connecting…" : "Connect Notion"
-        case .googleDocs: return isConnecting ? "Connecting…" : "Connect Google"
-        default:          return "Add destination"
+        case .linear:         return isConnecting ? "Connecting…" : "Connect Linear"
+        case .notion:         return isConnecting ? "Connecting…" : "Connect Notion"
+        case .googleDocs:     return isConnecting ? "Connecting…" : "Connect Google"
+        case .appleNotes:     return "Connect Notes"
+        case .markdownFolder: return "Connect Markdown"
         }
     }
 
@@ -240,8 +220,8 @@ struct AddDestinationSheet: View {
         case .notion:         return AuthSecrets.isNotionConfigured && !isConnecting
         case .linear:         return AuthSecrets.isLinearConfigured && !isConnecting
         case .googleDocs:     return AuthSecrets.isGoogleConfigured && !isConnecting
-        case .appleNotes:     return !appleNotesFolder.trimmingCharacters(in: .whitespaces).isEmpty
-        case .markdownFolder: return !markdownPath.isEmpty
+        case .appleNotes:     return true
+        case .markdownFolder: return true
         }
     }
 
@@ -301,34 +281,31 @@ struct AddDestinationSheet: View {
         case .notion, .linear, .googleDocs:
             break  // handled by connect{Notion,Linear,Google}() via primaryAction()
         case .appleNotes:
-            ledger.upsertAppleNotesTarget(AppleNotesTarget(
-                id: "an-" + UUID().uuidString.prefix(8).lowercased(),
-                folderName: appleNotesFolder,
-                connectedAt: Date()
-            ))
-            Telemetry.capture("destination.connected", properties: ["provider": "appleNotes"])
+            // The folder is chosen per reMarkable-folder binding, so the target
+            // is just a marker that Apple Notes is available. "Sync Bar" seeds
+            // the binding's default folder. One marker is enough.
+            if ledger.appleNotesTargets.isEmpty {
+                ledger.upsertAppleNotesTarget(AppleNotesTarget(
+                    id: "an-" + UUID().uuidString.prefix(8).lowercased(),
+                    folderName: "Sync Bar",
+                    connectedAt: Date()
+                ))
+                Telemetry.capture("destination.connected", properties: ["provider": "appleNotes"])
+            }
             isPresented = false
         case .markdownFolder:
-            let url = URL(fileURLWithPath: markdownPath, isDirectory: true)
-            ledger.upsertMarkdownTarget(MarkdownTarget(
-                id: "md-" + UUID().uuidString.prefix(8).lowercased(),
-                displayName: url.lastPathComponent,
-                folderPath: markdownPath,
-                connectedAt: Date()
-            ))
-            Telemetry.capture("destination.connected", properties: ["provider": "markdownFolder"])
+            // The destination folder is chosen per reMarkable-folder binding, so
+            // the target is just a marker that Markdown output is available.
+            if ledger.markdownTargets.isEmpty {
+                ledger.upsertMarkdownTarget(MarkdownTarget(
+                    id: "md-" + UUID().uuidString.prefix(8).lowercased(),
+                    displayName: "Markdown Files",
+                    folderPath: "",
+                    connectedAt: Date()
+                ))
+                Telemetry.capture("destination.connected", properties: ["provider": "markdownFolder"])
+            }
             isPresented = false
-        }
-    }
-
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.title = "Pick a folder for Markdown notes"
-        if panel.runModal() == .OK, let url = panel.url {
-            markdownPath = url.path
         }
     }
 }

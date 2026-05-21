@@ -27,6 +27,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
 
                 VStack(spacing: 14) {
+                    folderVisibilityCard
                     notificationsCard
                     updatesCard
                     contactCard
@@ -164,6 +165,20 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: Folder visibility
+
+    private var folderVisibilityCard: some View {
+        AppCard("Folder visibility") {
+            VStack(spacing: 0) {
+                AppSettingRow("Ignore Unfiled notes",
+                              description: "Notes that are not in a folder show up in Unfiled.") {
+                    Toggle("", isOn: $settings.ignoreUnfiledNotes)
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                }
+            }
+        }
+    }
+
     // MARK: Notifications
 
     private var notificationsCard: some View {
@@ -226,15 +241,52 @@ struct SettingsView: View {
                            url: "mailto:bugs@strategicnerds.com")
                 contactRow(systemName: "chevron.left.forwardslash.chevron.right",
                            title: "Contribute on GitHub",
-                           url: "https://github.com/CoolAssPuppy/syncbar")
-                contactRow(systemName: "cup.and.saucer.fill",
-                           title: "Buy me coffee",
-                           url: "https://venmo.com/u/coolasspuppy")
+                           url: "https://github.com/CoolAssPuppy/sync-bar")
+                contactRow(systemName: "square.grid.2x2.fill",
+                           title: "See all my apps",
+                           url: "https://www.strategicnerds.com/apps")
+                coffeeRow
                 contactRow(systemName: "book.closed.fill",
                            title: "Buy my book",
                            url: "https://www.strategicnerds.com/picksandshovels")
             }
         }
+    }
+
+    /// "Buy me coffee" with two payment links so there's a single coffee entry.
+    private var coffeeRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.muted)
+                .frame(width: 16, alignment: .center)
+            HStack(spacing: 0) {
+                Text("Buy me coffee ")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.foreground)
+                Text("(")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
+                coffeeLink(title: "Venmo", url: "https://venmo.com/u/coolasspuppy")
+                Text(", ")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
+                coffeeLink(title: "Revolut", url: "https://revolut.me/coolasspuppy")
+                Text(")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func coffeeLink(title: String, url: String) -> some View {
+        Link(destination: URL(string: url) ?? URL(staticString: "https://strategicnerds.com")) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.primary)
+        }
+        .buttonStyle(.plain)
     }
 
     private func contactRow(systemName: String, title: String, url: String) -> some View {

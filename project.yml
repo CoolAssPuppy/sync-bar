@@ -61,7 +61,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBar
         PRODUCT_NAME: "SyncBar"
-        MARKETING_VERSION: "0.1.1"
+        MARKETING_VERSION: "0.1.2"
         CURRENT_PROJECT_VERSION: "3"
         INFOPLIST_FILE: Info.plist
         CODE_SIGN_ENTITLEMENTS: SyncBar.entitlements

@@ -13,7 +13,16 @@ struct NotebookListView: View {
     var onRefresh: () -> Void
 
     @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.theme) private var theme
+
+    /// Folders to render. Hides the synthetic "Unfiled" folder when the user has
+    /// chosen to ignore loose notes. Display-only: sync runs off rules, not this
+    /// list, so an ignored Unfiled folder with a rule keeps syncing.
+    private var visibleNotebooks: [RmNotebook] {
+        guard settings.ignoreUnfiledNotes else { return ledger.notebooks }
+        return ledger.notebooks.filter { $0.id != unfiledFolderId }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +31,7 @@ struct NotebookListView: View {
 
             if ledger.remarkableAccount == nil {
                 pairPrompt
-            } else if ledger.notebooks.isEmpty {
+            } else if visibleNotebooks.isEmpty {
                 emptyState
             } else {
                 listAndSheet
@@ -30,7 +39,7 @@ struct NotebookListView: View {
         }
         .background(theme.background)
         .onAppear {
-            if let id = selectedNotebookId, !ledger.notebooks.contains(where: { $0.id == id }) {
+            if let id = selectedNotebookId, !visibleNotebooks.contains(where: { $0.id == id }) {
                 selectedNotebookId = nil
             }
         }
@@ -68,7 +77,7 @@ struct NotebookListView: View {
         if ledger.remarkableAccount == nil {
             return "Pair your reMarkable to see folders"
         }
-        let total = ledger.notebooks.count
+        let total = visibleNotebooks.count
         let synced = ledger.rules.count
         return "\(total) folder\(total == 1 ? "" : "s") · \(synced) rule\(synced == 1 ? "" : "s")"
     }
@@ -139,11 +148,17 @@ struct NotebookListView: View {
         ZStack(alignment: .trailing) {
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(ledger.notebooks) { notebook in
+                    ForEach(visibleNotebooks) { notebook in
                         NotebookRow(
                             notebook: notebook,
                             rule: ledger.rule(forNotebookId: notebook.id),
-                            isSelected: selectedNotebookId == notebook.id
+                            isSelected: selectedNotebookId == notebook.id,
+                            onIgnore: notebook.id == unfiledFolderId
+                                ? {
+                                    settings.ignoreUnfiledNotes = true
+                                    if selectedNotebookId == unfiledFolderId { selectedNotebookId = nil }
+                                }
+                                : nil
                         )
                         .onTapGesture { selectNotebook(notebook) }
                     }
@@ -154,7 +169,7 @@ struct NotebookListView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let notebookId = selectedNotebookId,
-               let notebook = ledger.notebooks.first(where: { $0.id == notebookId }) {
+               let notebook = visibleNotebooks.first(where: { $0.id == notebookId }) {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()
                     .onTapGesture { closeSheet() }
@@ -188,6 +203,9 @@ private struct NotebookRow: View {
     let notebook: RmNotebook
     let rule: SyncRule?
     let isSelected: Bool
+    /// Provided only for the synthetic "Unfiled" folder, surfacing a faint "x"
+    /// that hides it from the list (re-enable in Settings → Folder visibility).
+    var onIgnore: (() -> Void)?
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
@@ -235,6 +253,10 @@ private struct NotebookRow: View {
             Spacer(minLength: 12)
 
             statusPill
+
+            if let onIgnore {
+                ignoreButton(onIgnore)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -248,6 +270,20 @@ private struct NotebookRow: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+    }
+
+    /// Faint dismiss control shown only on the Unfiled folder row.
+    private func ignoreButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(theme.tertiary)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(isHovered ? 0.9 : 0.4)
+        .help("Ignore Unfiled notes (turn back on in Settings)")
     }
 
     private var rowBackgroundColor: Color {

@@ -23,6 +23,7 @@ final class AppSettings: ObservableObject {
     static let notifyOnSuccessKey       = "settings.notifyOnSuccess"
     static let openWindowOnLaunchKey    = "settings.openWindowOnLaunch"
     static let pauseSyncingKey          = "settings.pauseSyncing"
+    static let ignoreUnfiledNotesKey    = "settings.ignoreUnfiledNotes"
 
     /// Backing store. Under XCTest we use a throwaway suite so test runs never
     /// overwrite the real app's settings (tests flip ocrProvider, etc.).
@@ -72,6 +73,13 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Hides the synthetic "Unfiled" folder (loose notes at the cloud root) from
+    /// the Notebooks list. Off by default so Unfiled is visible and can be
+    /// dismissed from the list; turning it on hides it everywhere.
+    @Published var ignoreUnfiledNotes: Bool {
+        didSet { Self.defaults.set(ignoreUnfiledNotes, forKey: Self.ignoreUnfiledNotesKey) }
+    }
+
     /// Available sync interval presets. Surface from the Settings picker.
     static let intervalOptions: [(label: String, seconds: Int)] = [
         ("5 minutes", 300),
@@ -94,7 +102,8 @@ final class AppSettings: ObservableObject {
             Self.notifyOnFailureKey: true,
             Self.notifyOnSuccessKey: false,
             Self.openWindowOnLaunchKey: false,
-            Self.pauseSyncingKey: false
+            Self.pauseSyncingKey: false,
+            Self.ignoreUnfiledNotesKey: false
         ])
 
         self.launchAtStartup = defaults.bool(forKey: Self.launchAtStartupKey)
@@ -106,6 +115,7 @@ final class AppSettings: ObservableObject {
         self.notifyOnSuccess = defaults.bool(forKey: Self.notifyOnSuccessKey)
         self.openWindowOnLaunch = defaults.bool(forKey: Self.openWindowOnLaunchKey)
         self.pauseSyncing = defaults.bool(forKey: Self.pauseSyncingKey)
+        self.ignoreUnfiledNotes = defaults.bool(forKey: Self.ignoreUnfiledNotesKey)
     }
 
     func resetToDefaults() {
@@ -117,5 +127,6 @@ final class AppSettings: ObservableObject {
         notifyOnSuccess = false
         openWindowOnLaunch = false
         pauseSyncing = false
+        ignoreUnfiledNotes = false
     }
 }

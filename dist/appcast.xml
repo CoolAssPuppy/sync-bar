@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 0.1.2</title>
+      <pubDate>Thu, 21 May 2026 15:38:06 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>0.1.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>You can now hide notes that are not in any folder.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.1.2.dmg"
+        sparkle:edSignature="/qIH/9SY9NB64JThpdEbe1qqnem75dTyLnDlbldcm6UeLm9/ex3dACXreYOPuGlNUpNN/Leh/OKd4bOqYFELDA=="
+        length="4528144"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 0.1.1</title>
       <pubDate>Wed, 20 May 2026 22:52:27 +0000</pubDate>
       <sparkle:version>3</sparkle:version>

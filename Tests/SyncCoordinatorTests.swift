@@ -276,8 +276,8 @@ private struct ScriptedRemarkableClient: RemarkableClient {
         RemarkableAccount(pairedAt: Date(), userIdentifier: "test", lastSyncedAt: nil)
     }
 
-    func listNotebooks() async throws -> [RmNotebook] {
-        [RmNotebook(id: "folder-test", name: "Test", parentFolder: nil, lastModified: Date(), pageCount: files)]
+    func listFolders() async throws -> [RmFolder] {
+        [RmFolder(id: "folder-test", name: "Test", parentFolder: nil, lastModified: Date(), pageCount: files)]
     }
 
     func listFiles(inFolderId folderId: String) async throws -> [RmFile] {

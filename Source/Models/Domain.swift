@@ -15,7 +15,11 @@ struct RemarkableAccount: Codable, Equatable {
     var lastSyncedAt: Date?
 }
 
-struct RmNotebook: Codable, Equatable, Identifiable, Hashable {
+/// A reMarkable folder. This is the unit a sync rule targets today: every
+/// `RmFile` document inside the folder is synced together. The synthetic
+/// "Unfiled" folder (`unfiledFolderId`) groups root-level documents.
+/// Note: `pageCount` here is the number of documents in the folder, not pages.
+struct RmFolder: Codable, Equatable, Identifiable, Hashable {
     var id: String
     var name: String
     var parentFolder: String?
@@ -148,9 +152,12 @@ enum OcrProviderChoice: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// A sync rule binds one reMarkable notebook to zero or more destinations.
+/// A sync rule binds one reMarkable folder to zero or more destinations.
 /// Adding the first destination turns the rule "active"; removing all of
 /// them leaves the rule as a saved shell the user can re-attach later.
+/// The `rmNotebookId`/`rmNotebookName` fields hold a *folder* id and name;
+/// they keep their legacy persisted names until the v0.3 `SourceScope`
+/// migration replaces them with folder-or-notebook scoping.
 struct SyncRule: Codable, Equatable, Identifiable, Hashable {
     var id: String
     var enabled: Bool

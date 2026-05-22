@@ -27,7 +27,7 @@ protocol RemarkableClient: Sendable {
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount
     /// Top-level folders (the rule targets). A synthetic "Unfiled" folder is
     /// included only when files exist at the cloud root.
-    func listNotebooks() async throws -> [RmNotebook]
+    func listFolders() async throws -> [RmFolder]
     /// The files (notes) inside a folder. Each becomes one destination note.
     /// Each file carries its document-level reMarkable tags.
     func listFiles(inFolderId folderId: String) async throws -> [RmFile]
@@ -72,10 +72,10 @@ enum RemarkableClientFactory {
 struct MockRemarkableClient: RemarkableClient {
     private static func ago(_ hours: Double) -> Date { Date().addingTimeInterval(-3_600 * hours) }
 
-    private static let folders: [RmNotebook] = [
-        RmNotebook(id: "f-work",     name: "Work",     parentFolder: nil, lastModified: ago(5),  pageCount: 3),
-        RmNotebook(id: "f-personal", name: "Personal", parentFolder: nil, lastModified: ago(9),  pageCount: 2),
-        RmNotebook(id: "f-projects", name: "Projects", parentFolder: nil, lastModified: ago(96), pageCount: 2)
+    private static let folders: [RmFolder] = [
+        RmFolder(id: "f-work",     name: "Work",     parentFolder: nil, lastModified: ago(5),  pageCount: 3),
+        RmFolder(id: "f-personal", name: "Personal", parentFolder: nil, lastModified: ago(9),  pageCount: 2),
+        RmFolder(id: "f-projects", name: "Projects", parentFolder: nil, lastModified: ago(96), pageCount: 2)
     ]
 
     // Column-aligned sample fixtures read better on one line each.
@@ -98,7 +98,7 @@ struct MockRemarkableClient: RemarkableClient {
         return RemarkableAccount(pairedAt: Date(), userIdentifier: "rm-\(trimmed.prefix(6))", lastSyncedAt: nil)
     }
 
-    func listNotebooks() async throws -> [RmNotebook] {
+    func listFolders() async throws -> [RmFolder] {
         try await Task.sleep(nanoseconds: 300_000_000)
         return Self.folders
     }

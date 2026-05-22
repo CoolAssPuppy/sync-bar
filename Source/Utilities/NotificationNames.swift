@@ -14,7 +14,7 @@ extension Notification.Name {
     static let destinationsChanged      = Notification.Name("syncbar.destinationsChanged")
     static let rulesChanged             = Notification.Name("syncbar.rulesChanged")
     static let eventsChanged            = Notification.Name("syncbar.eventsChanged")
-    static let notebooksChanged         = Notification.Name("syncbar.notebooksChanged")
+    static let foldersChanged         = Notification.Name("syncbar.foldersChanged")
 
     // Sync runtime
     static let syncStarted              = Notification.Name("syncbar.syncStarted")

@@ -12,7 +12,7 @@ import AppKit
 /// destination-specific config UIs based on `kind`.
 struct BindingEditorSheet: View {
     let kind: DestinationKind
-    let notebook: RmNotebook
+    let notebook: RmFolder
     let existingBinding: DestinationBinding?
     var onSave: (DestinationBinding) -> Void
     var onCancel: () -> Void
@@ -99,7 +99,7 @@ struct BindingEditorSheet: View {
     @State private var localAppleNotes = AppleNotesFormState()
     @State private var localMarkdown = MarkdownFormState()
 
-    init(kind: DestinationKind, notebook: RmNotebook, existingBinding: DestinationBinding?, onSave: @escaping (DestinationBinding) -> Void, onCancel: @escaping () -> Void) {
+    init(kind: DestinationKind, notebook: RmFolder, existingBinding: DestinationBinding?, onSave: @escaping (DestinationBinding) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
         self.notebook = notebook
         self.existingBinding = existingBinding

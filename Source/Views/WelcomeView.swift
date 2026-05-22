@@ -221,8 +221,8 @@ struct WelcomeView: View {
         do {
             let account = try await remarkable.pairDevice(oneTimeCode: oneTimeCode)
             ledger.setRemarkableAccount(account)
-            let notebooks = try await remarkable.listNotebooks()
-            ledger.setNotebooks(notebooks)
+            let folders = try await remarkable.listFolders()
+            ledger.setFolders(folders)
             Telemetry.capture("remarkable.paired")
             step = .connectNotion
         } catch {

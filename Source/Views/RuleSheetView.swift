@@ -12,7 +12,7 @@ import AppKit
 /// attach zero or more destinations to that notebook and tweak the
 /// rule-level sync defaults.
 struct RuleSliderView: View {
-    let notebook: RmNotebook
+    let notebook: RmFolder
     var onClose: () -> Void
     var onSyncNow: (String, String?) -> Void   // (ruleId, optional bindingId)
 

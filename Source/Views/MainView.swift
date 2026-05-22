@@ -54,19 +54,19 @@ struct MainView: View {
         .onAppear {
             // The device token is the source of truth for "paired". If an
             // account lingers without a token (e.g. the token was lost), the app
-            // would otherwise show the mock client's sample notebooks as if they
+            // would otherwise show the mock client's sample folders as if they
             // were real. Reset that half-paired state so the pairing screen
             // returns and the user can re-pair.
             let hasToken = KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
             if ledger.remarkableAccount != nil && !hasToken {
                 Log.ui.info("reMarkable account present but no device token — resetting to unpaired")
                 ledger.setRemarkableAccount(nil)
-                ledger.setNotebooks([])
+                ledger.setFolders([])
             }
             // Always pull from reMarkable when genuinely paired so the live
-            // library is authoritative (and stale notebooks can't mask it).
+            // library is authoritative (and stale folders can't mask it).
             if ledger.remarkableAccount != nil {
-                refreshNotebooks()
+                refreshFolders()
             }
             if ledger.remarkableAccount == nil && ledger.notionWorkspaces.isEmpty {
                 selection = .welcome
@@ -100,7 +100,7 @@ struct MainView: View {
                 NotebookListView(
                     selectedNotebookId: $selectedNotebookId,
                     coordinator: coordinator,
-                    onRefresh: refreshNotebooks
+                    onRefresh: refreshFolders
                 )
             } else {
                 RemarkableDetailView()
@@ -108,17 +108,17 @@ struct MainView: View {
         }
     }
 
-    private func refreshNotebooks() {
+    private func refreshFolders() {
         Task {
             let client = RemarkableClientFactory.make()
             do {
-                let notebooks = try await client.listNotebooks()
+                let folders = try await client.listFolders()
                 await MainActor.run {
-                    ledger.setNotebooks(notebooks)
+                    ledger.setFolders(folders)
                     // Clean up rules left pointing at folders that no longer
                     // exist (e.g. orphaned by the folder/file model change).
-                    if !notebooks.isEmpty {
-                        ledger.pruneRules(keepingFolderIds: Set(notebooks.map(\.id)))
+                    if !folders.isEmpty {
+                        ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id)))
                     }
                 }
             } catch {

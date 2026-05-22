@@ -8,7 +8,7 @@
 import Foundation
 
 /// Seeds the ledger with a realistic, fully-populated dataset so the whole UI
-/// (notebooks, connected destinations, rules with varied sync status, and a
+/// (folders, connected destinations, rules with varied sync status, and a
 /// sync-event history) can be explored or screenshotted without a real device
 /// or live cloud content. Loaded into the isolated demo store by
 /// `Ledger.setDemoMode(true)`; the real data lives in a separate store and is
@@ -24,18 +24,18 @@ enum DemoData {
     private static let markdownId = "demo-markdown"
     private static let ruleIds = (1...5).map { "demo-rule-\($0)" }
 
-    private static let notebooks: [RmNotebook] = [
-        RmNotebook(id: "nb-journal",  name: "Daily journal",         parentFolder: "Personal", lastModified: ago(hours: 5),  pageCount: 52),
-        RmNotebook(id: "nb-meetings", name: "Weekly 1:1s",           parentFolder: "Work",     lastModified: ago(hours: 9),  pageCount: 14),
-        RmNotebook(id: "nb-standup",  name: "Standup notes",         parentFolder: "Work",     lastModified: ago(hours: 26), pageCount: 31),
-        RmNotebook(id: "nb-research", name: "Customer interviews",   parentFolder: "Work",     lastModified: ago(hours: 72), pageCount: 17),
-        RmNotebook(id: "nb-book",     name: "Architecture sketches", parentFolder: "Projects", lastModified: ago(hours: 96), pageCount: 13)
+    private static let folders: [RmFolder] = [
+        RmFolder(id: "nb-journal",  name: "Daily journal",         parentFolder: "Personal", lastModified: ago(hours: 5),  pageCount: 52),
+        RmFolder(id: "nb-meetings", name: "Weekly 1:1s",           parentFolder: "Work",     lastModified: ago(hours: 9),  pageCount: 14),
+        RmFolder(id: "nb-standup",  name: "Standup notes",         parentFolder: "Work",     lastModified: ago(hours: 26), pageCount: 31),
+        RmFolder(id: "nb-research", name: "Customer interviews",   parentFolder: "Work",     lastModified: ago(hours: 72), pageCount: 17),
+        RmFolder(id: "nb-book",     name: "Architecture sketches", parentFolder: "Projects", lastModified: ago(hours: 96), pageCount: 13)
     ]
 
     // MARK: Load
 
     static func load(into ledger: Ledger = .shared) {
-        ledger.setNotebooks(notebooks)
+        ledger.setFolders(folders)
 
         ledger.upsertNotionWorkspace(NotionWorkspace(
             id: notionId, workspaceName: "Strategic Nerds", workspaceIcon: "🪐",

@@ -124,12 +124,12 @@ struct RealRemarkableClient: RemarkableClient {
         return result
     }
 
-    func listNotebooks() async throws -> [RmNotebook] {
+    func listFolders() async throws -> [RmFolder] {
         let all = try await entries()
         let folders = all.filter { $0.metadata.isFolder }
         let files = all.filter { $0.metadata.isNotebook }
         var result = folders.map { folder in
-            RmNotebook(
+            RmFolder(
                 id: folder.id,
                 name: folder.metadata.visibleName,
                 parentFolder: folder.metadata.parent.isEmpty ? nil : folder.metadata.parent,
@@ -141,9 +141,9 @@ struct RealRemarkableClient: RemarkableClient {
 
         let rootFiles = files.filter { $0.metadata.parent.isEmpty }
         if !rootFiles.isEmpty {
-            result.insert(RmNotebook(id: unfiledFolderId, name: "Unfiled", parentFolder: nil, lastModified: Date(), pageCount: rootFiles.count), at: 0)
+            result.insert(RmFolder(id: unfiledFolderId, name: "Unfiled", parentFolder: nil, lastModified: Date(), pageCount: rootFiles.count), at: 0)
         }
-        Log.remarkable.info("listNotebooks: \(folders.count, privacy: .public) folders, \(files.count, privacy: .public) files")
+        Log.remarkable.info("listFolders: \(folders.count, privacy: .public) folders, \(files.count, privacy: .public) files")
         return result
     }
 

@@ -19,9 +19,9 @@ struct NotebookListView: View {
     /// Folders to render. Hides the synthetic "Unfiled" folder when the user has
     /// chosen to ignore loose notes. Display-only: sync runs off rules, not this
     /// list, so an ignored Unfiled folder with a rule keeps syncing.
-    private var visibleNotebooks: [RmNotebook] {
-        guard settings.ignoreUnfiledNotes else { return ledger.notebooks }
-        return ledger.notebooks.filter { $0.id != unfiledFolderId }
+    private var visibleNotebooks: [RmFolder] {
+        guard settings.ignoreUnfiledNotes else { return ledger.folders }
+        return ledger.folders.filter { $0.id != unfiledFolderId }
     }
 
     var body: some View {
@@ -188,7 +188,7 @@ struct NotebookListView: View {
         .animation(.easeOut(duration: 0.22), value: selectedNotebookId)
     }
 
-    private func selectNotebook(_ notebook: RmNotebook) {
+    private func selectNotebook(_ notebook: RmFolder) {
         selectedNotebookId = notebook.id
     }
 
@@ -200,7 +200,7 @@ struct NotebookListView: View {
 // MARK: - Notebook row
 
 private struct NotebookRow: View {
-    let notebook: RmNotebook
+    let notebook: RmFolder
     let rule: SyncRule?
     let isSelected: Bool
     /// Provided only for the synthetic "Unfiled" folder, surfacing a faint "x"

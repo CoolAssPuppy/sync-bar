@@ -63,9 +63,9 @@ final class SyncCoordinator: ObservableObject {
         guard !ledger.isDemoMode else { return }
         guard keychain.value(for: .remarkableDeviceToken)?.isEmpty == false else { return }
         do {
-            let folders = try await remarkable.listNotebooks()
+            let folders = try await remarkable.listFolders()
             guard !folders.isEmpty else { return }
-            ledger.setNotebooks(folders)
+            ledger.setFolders(folders)
             ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id)))
         } catch {
             Log.sync.error("Folder refresh failed: \(Formatters.userMessage(for: error), privacy: .public)")

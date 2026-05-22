@@ -25,7 +25,7 @@ final class Ledger: ObservableObject {
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
     private static let rulesKey             = "ledger.rules"
     private static let eventsKey            = "ledger.events"
-    private static let notebooksKey         = "ledger.notebooks"
+    private static let foldersKey         = "ledger.notebooks"
     private static let syncedPageHashesKey  = "ledger.syncedPageHashes"
     private static let syncedExternalIdsKey = "ledger.syncedExternalIds"
 
@@ -37,7 +37,7 @@ final class Ledger: ObservableObject {
     @Published private(set) var appleNotesTargets: [AppleNotesTarget] = []
     @Published private(set) var rules: [SyncRule] = []
     @Published private(set) var events: [SyncEvent] = []
-    @Published private(set) var notebooks: [RmNotebook] = []
+    @Published private(set) var folders: [RmFolder] = []
 
     /// Version hash of the last page successfully written to a binding, keyed
     /// by `"<bindingId>|<pageId>"`. The sync engine consults this so a page
@@ -124,7 +124,7 @@ final class Ledger: ObservableObject {
         persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
         persist(value: rules, key: Self.rulesKey)
         persist(value: events, key: Self.eventsKey)
-        persist(value: notebooks, key: Self.notebooksKey)
+        persist(value: folders, key: Self.foldersKey)
         persist(value: syncedPageHashes, key: Self.syncedPageHashesKey)
         persist(value: syncedExternalIds, key: Self.syncedExternalIdsKey)
     }
@@ -133,7 +133,7 @@ final class Ledger: ObservableObject {
     /// (rather than the @Published arrays) refresh after a wholesale store swap.
     private func broadcastChanged() {
         for name: Notification.Name in [.remarkableAccountChanged, .notionWorkspacesChanged,
-                                        .destinationsChanged, .rulesChanged, .eventsChanged, .notebooksChanged] {
+                                        .destinationsChanged, .rulesChanged, .eventsChanged, .foldersChanged] {
             NotificationCenter.default.post(name: name, object: nil)
         }
     }
@@ -342,7 +342,7 @@ final class Ledger: ObservableObject {
 
     /// Pairs of (rule, binding) where the binding points at the given
     /// destination predicate. Used by the per-destination "Active syncs"
-    /// list to enumerate which notebooks fan out to this destination.
+    /// list to enumerate which folders fan out to this destination.
     func bindings(matching predicate: (DestinationConfiguration) -> Bool) -> [(SyncRule, DestinationBinding)] {
         var output: [(SyncRule, DestinationBinding)] = []
         for rule in rules {
@@ -492,11 +492,11 @@ final class Ledger: ObservableObject {
         NotificationCenter.default.post(name: .eventsChanged, object: nil)
     }
 
-    func setNotebooks(_ notebooks: [RmNotebook]) {
-        guard self.notebooks != notebooks else { return }
-        self.notebooks = notebooks
-        persistNotebooks()
-        NotificationCenter.default.post(name: .notebooksChanged, object: nil)
+    func setFolders(_ folders: [RmFolder]) {
+        guard self.folders != folders else { return }
+        self.folders = folders
+        persistFolders()
+        NotificationCenter.default.post(name: .foldersChanged, object: nil)
     }
 
     func exportSnapshot() -> Data? {
@@ -510,7 +510,7 @@ final class Ledger: ObservableObject {
             let appleNotesTargets: [AppleNotesTarget]
             let rules: [SyncRule]
             let events: [SyncEvent]
-            let notebooks: [RmNotebook]
+            let folders: [RmFolder]
         }
         let snapshot = Snapshot(
             exportedAt: Date(),
@@ -522,7 +522,7 @@ final class Ledger: ObservableObject {
             appleNotesTargets: appleNotesTargets,
             rules: rules,
             events: events,
-            notebooks: notebooks
+            folders: folders
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -546,7 +546,7 @@ final class Ledger: ObservableObject {
         appleNotesTargets = decodeArray([AppleNotesTarget].self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
         events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
-        notebooks         = decodeArray([RmNotebook].self,      key: Self.notebooksKey,        defaults: defaults, decoder: decoder)
+        folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)
 
         if let data = defaults.data(forKey: Self.syncedPageHashesKey),
            let value = try? decoder.decode([String: String].self, from: data) {
@@ -617,7 +617,7 @@ final class Ledger: ObservableObject {
     private func persistRemarkable()    { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
     private func persistRules()         { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
     private func persistEvents()        { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
-    private func persistNotebooks()     { persist(value: notebooks, key: Self.notebooksKey) }
+    private func persistFolders()     { persist(value: folders, key: Self.foldersKey) }
     private func persistSyncedHashes()  { persistDebounced({ [weak self] in self?.syncedPageHashes ?? [:] }, key: Self.syncedPageHashesKey) }
     private func persistSyncedExternalIds() { persistDebounced({ [weak self] in self?.syncedExternalIds ?? [:] }, key: Self.syncedExternalIdsKey) }
 }

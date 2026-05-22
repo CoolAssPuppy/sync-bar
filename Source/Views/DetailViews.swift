@@ -27,6 +27,12 @@ struct NotionWorkspaceDetailView: View {
                 return false
             }),
             rename: { newName in ledger.renameNotionWorkspace(id: workspaceId, newName: newName) },
+            connectableFolders: ledger.folders,
+            connectSource: workspace.map { w in { folder in
+                ledger.connect(folder: folder, configuration: .notion(NotionDestinationConfig(
+                    workspaceId: w.id, destinationId: "", destinationType: .page,
+                    destinationTitle: w.workspaceName, propertyMappings: [:])))
+            } },
             disconnect: { ledger.removeNotionWorkspace(id: workspaceId) }
         )
     }
@@ -53,6 +59,12 @@ struct LinearAccountDetailView: View {
                 return false
             }),
             rename: { newName in ledger.renameLinearAccount(id: accountId, newName: newName) },
+            connectableFolders: ledger.folders,
+            connectSource: account.map { a in { folder in
+                ledger.connect(folder: folder, configuration: .linear(LinearDestinationConfig(
+                    workspaceId: a.id, workspaceName: a.name, projectId: nil,
+                    projectName: nil, defaultLabel: nil, requiredTags: nil)))
+            } },
             disconnect: { ledger.removeLinearAccount(id: accountId) }
         )
     }
@@ -79,6 +91,11 @@ struct GoogleAccountDetailView: View {
                 return false
             }),
             rename: { newName in ledger.renameGoogleAccount(id: accountId, newName: newName) },
+            connectableFolders: ledger.folders,
+            connectSource: account.map { a in { folder in
+                ledger.connect(folder: folder, configuration: .googleDocs(GoogleDocsDestinationConfig(
+                    accountEmail: a.id, folderId: nil, folderName: nil, appendMode: .onePerPage)))
+            } },
             disconnect: { ledger.removeGoogleAccount(id: accountId) }
         )
     }
@@ -106,6 +123,10 @@ struct MarkdownTargetDetailView: View {
                 guard case .markdownFolder(let cfg) = config, let target else { return false }
                 return cfg.folderPath == target.folderPath
             }),
+            connectableFolders: ledger.folders,
+            connectSource: target.map { t in { folder in
+                ledger.connect(folder: folder, configuration: .markdownFolder(t.defaultConfiguration))
+            } },
             disconnect: { ledger.removeMarkdownTarget(id: targetId) }
         )
     }
@@ -133,6 +154,10 @@ struct AppleNotesTargetDetailView: View {
                 if case .appleNotes = config { return true }
                 return false
             }),
+            connectableFolders: ledger.folders,
+            connectSource: target.map { t in { folder in
+                ledger.connect(folder: folder, configuration: .appleNotes(AppleNotesDestinationConfig(folderName: t.folderName)))
+            } },
             disconnect: { ledger.removeAppleNotesTarget(id: targetId) }
         )
     }

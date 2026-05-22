@@ -21,12 +21,20 @@ struct DestinationDetailScaffold: View {
     var authorization: DestinationAuthorization = .none
     /// Called when the user submits a rename via the header drawer.
     var rename: ((String) -> Void)? = nil
+    /// reMarkable folders offered in the destination-first "Connect a folder" flow.
+    var connectableFolders: [RmFolder] = []
+    /// Routes the chosen folder to this destination. When nil, the connect action
+    /// is hidden (the destination doesn't support destination-first connect yet).
+    var connectSource: ((RmFolder) -> Void)? = nil
     let disconnect: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var isHeaderDrawerOpen = false
     @State private var renameValue: String = ""
     @FocusState private var renameFocused: Bool
+    @State private var isPickingFolder = false
+
+    private var canConnectFolder: Bool { connectSource != nil && !connectableFolders.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,6 +72,16 @@ struct DestinationDetailScaffold: View {
                     renameFocused = true
                 }
             }
+        }
+        .sheet(isPresented: $isPickingFolder) {
+            FolderPickerSheet(
+                folders: connectableFolders,
+                onPick: { folder in
+                    connectSource?(folder)
+                    isPickingFolder = false
+                },
+                onCancel: { isPickingFolder = false }
+            )
         }
     }
 
@@ -201,32 +219,60 @@ struct DestinationDetailScaffold: View {
 
     // MARK: Active syncs card
 
+    @ViewBuilder
     private var activeSyncsCard: some View {
-        AppCard("Active Syncs") {
-            if activeBindings.isEmpty {
-                emptyActiveSyncs
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(Array(activeBindings.enumerated()), id: \.offset) { _, pair in
-                        ActiveSyncRow(rule: pair.0, binding: pair.1)
-                    }
+        if canConnectFolder {
+            AppCard("Active Syncs", trailing: { connectFolderButton }) {
+                activeSyncsContent
+            }
+        } else {
+            AppCard("Active Syncs") { activeSyncsContent }
+        }
+    }
+
+    @ViewBuilder
+    private var activeSyncsContent: some View {
+        if activeBindings.isEmpty {
+            emptyActiveSyncs
+        } else {
+            VStack(spacing: 8) {
+                ForEach(Array(activeBindings.enumerated()), id: \.offset) { _, pair in
+                    ActiveSyncRow(rule: pair.0, binding: pair.1)
                 }
             }
         }
     }
 
+    private var connectFolderButton: some View {
+        AppSecondaryButton(title: "Connect a folder", systemImage: "plus") {
+            isPickingFolder = true
+        }
+    }
+
+    @ViewBuilder
     private var emptyActiveSyncs: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Image(systemName: "tray")
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(theme.tertiary)
-            Text("No syncs use this destination yet")
+            Text("Nothing flows here yet")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.foregroundSoft)
-            Text("Pick a reMarkable notebook and add this destination from the slider.")
-                .font(.system(size: 11))
-                .foregroundStyle(theme.muted)
-                .multilineTextAlignment(.center)
+            if canConnectFolder {
+                Text("Connect a reMarkable folder to start sending notes here.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+                AppPrimaryButton(title: "Connect a reMarkable folder", systemImage: "plus") {
+                    isPickingFolder = true
+                }
+                .padding(.top, 2)
+            } else {
+                Text("Pick a reMarkable folder and add this destination from the slider.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)

@@ -453,6 +453,21 @@ final class Ledger: ObservableObject {
         NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
 
+    /// Destination-first connect: finds or creates the folder's rule and attaches
+    /// a destination binding, skipping an exact duplicate. This is the mirror of
+    /// attaching a destination from the folder's rule sheet, so the source-first
+    /// and destination-first flows converge on the same rule.
+    func connect(folder: RmFolder, configuration: DestinationConfiguration) {
+        if let existing = rule(forNotebookId: folder.id) {
+            guard !existing.destinations.contains(where: { $0.configuration == configuration }) else { return }
+            addBinding(ruleId: existing.id, binding: DestinationBinding(configuration: configuration))
+        } else {
+            var new = SyncRule.new(notebookId: folder.id, notebookName: folder.name)
+            new.destinations = [DestinationBinding(configuration: configuration)]
+            upsertRule(new)
+        }
+    }
+
     func updateBinding(ruleId: String, binding: DestinationBinding) {
         guard let ruleIndex = rules.firstIndex(where: { $0.id == ruleId }),
               let bindingIndex = rules[ruleIndex].destinations.firstIndex(where: { $0.id == binding.id }) else { return }

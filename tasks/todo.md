@@ -79,11 +79,13 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
       "Sync Bar" folder. Revisit only if these prove confusing.
 
 ### Phase 2 — source scope in data + engine
-- [ ] 4. Introduce `SourceScope` + backward-compatible `SyncRule` decoding; migrate
-      reads/writes (`rule(forNotebookId:)`, `pruneRules`, idempotency keys).
-- [ ] 5. Coordinator resolves `SourceScope` -> files (folder: `listFiles`; notebooks:
-      fetch by id). Tests: notebook-scoped rule syncs only those docs; folder-scoped
-      syncs all + future. (Fixes #3 at the engine level.)
+- [x] 4 & 5. DONE via a lower-risk design than the SourceScope rewrite: added an
+      optional `SyncRule.selectedFileIds` (nil/[] = whole folder + future docs; a set
+      = only those documents) with `includes(fileId:)`/`syncsEntireFolder`. No data
+      migration; decode-safe. Coordinator narrows each folder's files by the scope and
+      adds a `selectedNotesMissing` skip reason. Commits dce8f0c + 3aa8b4c; 136 green.
+      Carry to Phase 3: the folder note-count label still shows the whole-folder count;
+      reflect the scoped count once the picker can set selectedFileIds.
 
 ### Phase 3 — source tree UI
 - [ ] 6. Notebook list renders folders that expand to their `RmFile` documents.

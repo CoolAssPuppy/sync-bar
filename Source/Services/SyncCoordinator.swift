@@ -342,7 +342,7 @@ final class SyncCoordinator: ObservableObject {
 
     /// Why a manual cycle or rule produced no work. The message is what the user
     /// sees in the log, so it names the folder and the fix where it can.
-    enum SyncSkipReason: Equatable {
+    enum SyncSkipReason {
         case noAccountPaired
         case syncingPaused
         case noConnectedFolders

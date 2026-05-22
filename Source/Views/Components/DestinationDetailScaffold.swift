@@ -34,7 +34,14 @@ struct DestinationDetailScaffold: View {
     @FocusState private var renameFocused: Bool
     @State private var isPickingFolder = false
 
-    private var canConnectFolder: Bool { connectSource != nil && !connectableFolders.isEmpty }
+    /// Folders not already routed to this destination, so picking one always adds
+    /// a real connection (rather than silently hitting the duplicate guard).
+    private var availableFolders: [RmFolder] {
+        let connected = Set(activeBindings.map { $0.0.rmNotebookId })
+        return connectableFolders.filter { !connected.contains($0.id) }
+    }
+
+    private var canConnectFolder: Bool { connectSource != nil && !availableFolders.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -75,7 +82,7 @@ struct DestinationDetailScaffold: View {
         }
         .sheet(isPresented: $isPickingFolder) {
             FolderPickerSheet(
-                folders: connectableFolders,
+                folders: availableFolders,
                 onPick: { folder in
                     connectSource?(folder)
                     isPickingFolder = false
@@ -268,7 +275,7 @@ struct DestinationDetailScaffold: View {
                 }
                 .padding(.top, 2)
             } else {
-                Text("Pick a reMarkable folder and add this destination from the slider.")
+                Text("No reMarkable folders to connect yet. Pair and sync your reMarkable, then connect a folder here.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
                     .multilineTextAlignment(.center)

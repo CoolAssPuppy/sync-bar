@@ -44,7 +44,7 @@ struct AppleNotesFormState {
 
 struct MarkdownFormState {
     var folderPath: String = ""
-    var fileNameTemplate: String = "{notebook}-page-{page_n}"
+    var fileNameTemplate: String = MarkdownTarget.defaultFileNameTemplate
     var includeFrontmatter: Bool = true
 }
 

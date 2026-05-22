@@ -42,7 +42,7 @@ struct MarkdownForm: View {
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("File name template", description: "Tokens: {notebook}, {page_n}, {date}, {title}") {
-                    TextField("{notebook}-page-{page_n}", text: $binding.fileNameTemplate)
+                    TextField(MarkdownTarget.defaultFileNameTemplate, text: $binding.fileNameTemplate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
                 }

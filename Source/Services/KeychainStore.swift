@@ -44,6 +44,14 @@ final class KeychainStore: @unchecked Sendable {
 
     private let keychain: Keychain
 
+    private let lock = NSLock()
+    /// In-memory memo of reads. A file-based keychain read can be slow and, on a
+    /// code-signature mismatch, shows the access prompt; caching means each item
+    /// is fetched at most once per launch (so repeated reads don't re-prompt or
+    /// re-block). The outer optional is "is it cached"; the inner is the value
+    /// (a cached `nil` means known-absent). Writes keep the cache in step.
+    private var cache: [String: String?] = [:]
+
     private init() {
         // Device-local keychain item (not synchronizable). iCloud Keychain sync
         // needs an entitlement the Developer ID distribution can't carry; a
@@ -54,7 +62,20 @@ final class KeychainStore: @unchecked Sendable {
     }
 
     func value(for key: Key) -> String? {
-        try? keychain.get(key.account)
+        let account = key.account
+        lock.lock()
+        if let cached = cache[account] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let value = try? keychain.get(account)
+
+        lock.lock()
+        cache.updateValue(value, forKey: account)   // caches a nil result too
+        lock.unlock()
+        return value
     }
 
     func set(value: String, for key: Key) {
@@ -64,6 +85,9 @@ final class KeychainStore: @unchecked Sendable {
         }
         do {
             try keychain.set(value, key: key.account)
+            lock.lock()
+            cache.updateValue(value, forKey: key.account)
+            lock.unlock()
         } catch {
             Log.app.error("Failed to write Keychain key \(key.account, privacy: .public): \(String(describing: error), privacy: .public)")
         }
@@ -71,5 +95,8 @@ final class KeychainStore: @unchecked Sendable {
 
     func delete(key: Key) {
         try? keychain.remove(key.account)
+        lock.lock()
+        cache.updateValue(nil, forKey: key.account)   // cache as known-absent
+        lock.unlock()
     }
 }

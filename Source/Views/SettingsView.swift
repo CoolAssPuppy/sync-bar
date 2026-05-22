@@ -39,8 +39,16 @@ struct SettingsView: View {
             .padding(.bottom, 14)
         }
         .onAppear {
-            openaiKey = KeychainStore.shared.value(for: .openaiApiKey) ?? ""
-            anthropicKey = KeychainStore.shared.value(for: .anthropicApiKey) ?? ""
+            // Load the stored keys off the main thread so the Settings drawer
+            // opens instantly instead of blocking on keychain reads.
+            Task {
+                let keys = await Task.detached {
+                    (KeychainStore.shared.value(for: .openaiApiKey) ?? "",
+                     KeychainStore.shared.value(for: .anthropicApiKey) ?? "")
+                }.value
+                openaiKey = keys.0
+                anthropicKey = keys.1
+            }
         }
     }
 

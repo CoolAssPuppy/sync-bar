@@ -52,25 +52,13 @@ struct MainView: View {
         .environment(\.theme, theme)
         .environment(\.colorScheme, theme.isDark ? .dark : .light)
         .onAppear {
-            // The device token is the source of truth for "paired". If an
-            // account lingers without a token (e.g. the token was lost), the app
-            // would otherwise show the mock client's sample folders as if they
-            // were real. Reset that half-paired state so the pairing screen
-            // returns and the user can re-pair.
-            let hasToken = KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
-            if ledger.remarkableAccount != nil && !hasToken {
-                Log.ui.info("reMarkable account present but no device token — resetting to unpaired")
-                ledger.setRemarkableAccount(nil)
-                ledger.setFolders([])
-            }
-            // Always pull from reMarkable when genuinely paired so the live
-            // library is authoritative (and stale folders can't mask it).
-            if ledger.remarkableAccount != nil {
-                refreshFolders()
-            }
             if ledger.remarkableAccount == nil && ledger.notionWorkspaces.isEmpty {
                 selection = .welcome
             }
+            // Reconcile pairing + refresh off the main thread. The keychain read
+            // can be slow and may surface the access prompt; doing it here would
+            // block the window from appearing.
+            Task { await reconcilePairingThenRefresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSettingsDrawer)) { _ in
             isSettingsOpen = true
@@ -106,6 +94,23 @@ struct MainView: View {
                 RemarkableDetailView()
             }
         }
+    }
+
+    /// Resolves the half-paired edge (an account record but no device token, e.g.
+    /// the token was lost) and, when genuinely paired, refreshes the live folder
+    /// list. The token is read off the main thread so window open never blocks.
+    private func reconcilePairingThenRefresh() async {
+        guard ledger.remarkableAccount != nil else { return }
+        let hasToken = await Task.detached {
+            KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
+        }.value
+        if !hasToken {
+            Log.ui.info("reMarkable account present but no device token — resetting to unpaired")
+            ledger.setRemarkableAccount(nil)
+            ledger.setFolders([])
+            return
+        }
+        refreshFolders()
     }
 
     private func refreshFolders() {

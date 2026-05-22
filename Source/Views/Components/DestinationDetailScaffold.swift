@@ -228,7 +228,10 @@ struct DestinationDetailScaffold: View {
 
     @ViewBuilder
     private var activeSyncsCard: some View {
-        if canConnectFolder {
+        // The trailing "Connect a folder" button is only for adding more once
+        // syncs exist; when there are none, the empty state's own CTA covers it
+        // (so we don't show two connect buttons).
+        if canConnectFolder && !activeBindings.isEmpty {
             AppCard("Active Syncs", trailing: { connectFolderButton }) {
                 activeSyncsContent
             }

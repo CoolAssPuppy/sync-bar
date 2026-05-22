@@ -118,8 +118,10 @@ struct RuleSliderView: View {
         let total = notebook.pageCount
         let totalLabel = "\(total) notebook\(total == 1 ? "" : "s")"
         if let rule, !rule.syncsEntireFolder {
+            // Count only the selection; pairing it with the folder's cached total
+            // could mismatch across snapshots (e.g. "3 of 2").
             let selected = rule.selectedFileIds?.count ?? 0
-            return "\(notebook.name) · syncing \(selected) of \(totalLabel)"
+            return "\(notebook.name) · syncing \(selected) notebook\(selected == 1 ? "" : "s")"
         }
         return "\(notebook.name) · \(totalLabel)"
     }
@@ -194,6 +196,9 @@ struct RuleSliderView: View {
                               : "Only the notebooks you check below sync.") {
                     Toggle("", isOn: syncAllBinding)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                        // Hand-picking needs the loaded document list; until then the
+                        // toggle would write an empty (whole-folder) selection.
+                        .disabled(isLoadingFiles)
                 }
                 if !syncsEntireFolder {
                     AppRowDivider().padding(.vertical, 10)
@@ -244,7 +249,9 @@ struct RuleSliderView: View {
             get: { syncsEntireFolder },
             set: { all in
                 var copy = ensureRule()
-                copy.selectedFileIds = all ? nil : folderFiles.map(\.id)
+                // Switching to hand-pick needs a loaded list; with none, stay on
+                // "whole folder" (nil) rather than writing an empty selection.
+                copy.selectedFileIds = (all || folderFiles.isEmpty) ? nil : folderFiles.map(\.id)
                 ledger.upsertRule(copy)
             }
         )

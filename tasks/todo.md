@@ -51,10 +51,19 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
 ## Commit sequence
 
 ### Phase 0 — make sync honest (independent, ship first)
-- [ ] 0. Coordinator writes a visible event at every silent early-return (no enabled
-      rules with destinations, no files, tag filter excluded all, paused, no account).
-      Add `SyncEventType.cycleSkipped` with a human reason. Tests: each empty-work
-      condition yields exactly one skip event. (Addresses #2's invisibility.)
+- [x] 0. Coordinator writes a visible `cycleSkipped` event at every silent early-return
+      on the MANUAL path (no account, paused, no connected folders, rule disabled, no
+      destinations, empty folder, tag filter excluded all), naming the folder. Scheduled
+      ticks stay quiet (gated on trigger) so an idle account doesn't flood the log.
+      Commits a0d7057 + 0f4e092 + 3fb6d49; 6 tests added; 128 green.
+      Deferred review findings (not blocking, revisit later):
+        - "Already up to date" case still writes only ruleRunStarted/Completed (logged,
+          not silent) — could add a friendly "nothing changed" signal.
+        - SyncEvent array decode is all-or-nothing; an unknown future event type would
+          wipe the cached log on a downgrade. Make decode element-resilient someday.
+        - No dedup/rate-limit on repeated identical manual skips (mashing Sync now).
+        - `recordSkip` stores the reason in `ruleName` (visible as the row title); fine
+          for skips, but a dedicated message field would be cleaner.
 
 ### Phase 1 — destinations carry a default config
 - [ ] 1. Markdown destination creation captures the folder (NSOpenPanel up front) +

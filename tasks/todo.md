@@ -66,15 +66,17 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
           for skips, but a dedicated message field would be cleaner.
 
 ### Phase 1 — destinations carry a default config
-- [ ] 1. Markdown destination creation captures the folder (NSOpenPanel up front) +
+- [x] 1. Markdown destination creation captures the folder (NSOpenPanel up front) +
       filename template + frontmatter as the destination default; cannot finish
-      without a folder. `MarkdownTarget` holds the full config.
-- [ ] 2. Connection-creation (rule-sheet quick-add AND binding editor) inherits the
-      destination default instead of empty. Remove the empty-path quick-add path.
-      Tests: connecting a folder yields a binding with the chosen folder. (Fixes #1.)
-- [ ] 3. Default-config capture for the other types (Notion default db/page, Linear
-      default team/project, Google default folder, Apple Notes folder). One destination
-      type per sub-step if it grows large.
+      without a folder. `MarkdownTarget` holds the full config (decode-safe optionals).
+      Multiple Markdown folders now allowed, distinguished in sidebar/detail by name+path.
+- [x] 2. Quick-add inherits `MarkdownTarget.defaultConfiguration` instead of a blank
+      path; binding editor already had the picker. Re-adding a folder updates (not
+      duplicates) the destination. Commits 4ed4694 + c2c913c + 0a464a2; 131 green.
+- [~] 3. Default-config capture for other types: SKIPPED for now. Notion/Linear/Google
+      already create sensible defaults at quick-add and refine in the binding editor;
+      they were never broken like Markdown's empty path. Apple Notes defaults to a
+      "Sync Bar" folder. Revisit only if these prove confusing.
 
 ### Phase 2 — source scope in data + engine
 - [ ] 4. Introduce `SourceScope` + backward-compatible `SyncRule` decoding; migrate

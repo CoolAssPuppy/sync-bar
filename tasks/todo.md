@@ -88,9 +88,13 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
       reflect the scoped count once the picker can set selectedFileIds.
 
 ### Phase 3 — source tree UI
-- [ ] 6. Notebook list renders folders that expand to their `RmFile` documents.
-- [ ] 7. Connection creation lets you pick a folder or check specific notebooks ->
-      builds a `SourceScope`. (Completes "sync only my Journal".)
+- [x] 6 & 7. The rule sheet gained a Notebooks card (NotebookScopePicker): "Sync every
+      notebook" or uncheck to hand-pick from the folder's documents, writing
+      selectedFileIds. Loads the folder's documents via SyncCoordinator.files(inFolder:);
+      header shows the scoped count. "Sync only my journal" now works end to end.
+      Commits 0b839d6 + 162add7 + 2813186; 136 green.
+      Note: hand-pick is folder-scoped (pick within one folder), matching the
+      folder-anchored rule model; cross-folder selection is out of scope.
 
 ### Phase 4 — both-as-peers + guided empty states
 - [ ] 8. Destination-first: destination detail shows "connect a source" empty state ->

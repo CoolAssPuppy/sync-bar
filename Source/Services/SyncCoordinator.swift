@@ -89,6 +89,18 @@ final class SyncCoordinator: ObservableObject {
         await runCycle(ruleId: nil, bindingId: nil, trigger: .scheduled)
     }
 
+    /// The documents in a folder, for the rule sheet's "choose notebooks" picker.
+    /// Returns an empty list (rather than throwing) so the UI can show its own
+    /// empty/failed state without a do/catch at the call site.
+    func files(inFolder folderId: String) async -> [RmFile] {
+        do {
+            return try await remarkable.listFiles(inFolderId: folderId)
+        } catch {
+            Log.sync.error("Listing notebooks failed: \(Formatters.userMessage(for: error), privacy: .public)")
+            return []
+        }
+    }
+
     private func restartTimer() {
         timerTask?.cancel()
         guard self.settings.syncIntervalSeconds > 0,

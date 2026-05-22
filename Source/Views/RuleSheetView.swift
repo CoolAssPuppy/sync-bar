@@ -13,6 +13,7 @@ import AppKit
 /// rule-level sync defaults.
 struct RuleSliderView: View {
     let notebook: RmFolder
+    let coordinator: SyncCoordinator
     var onClose: () -> Void
     var onSyncNow: (String, String?) -> Void   // (ruleId, optional bindingId)
 
@@ -20,6 +21,9 @@ struct RuleSliderView: View {
     @Environment(\.theme) private var theme
 
     @State private var existingBindingIdToEdit: String?
+    /// The folder's documents, loaded for the "choose notebooks" picker.
+    @State private var folderFiles: [RmFile] = []
+    @State private var isLoadingFiles = false
 
     /// Either an existing rule for this notebook, or nil. When nil we
     /// create a fresh rule the first time the user attaches a destination.
@@ -34,6 +38,7 @@ struct RuleSliderView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ruleSettingsCard
+                    notebooksCard
                     destinationsCard
                 }
                 .padding(.horizontal, 20)
@@ -65,6 +70,11 @@ struct RuleSliderView: View {
                 )
             }
         }
+        .task(id: notebook.id) {
+            isLoadingFiles = true
+            folderFiles = await coordinator.files(inFolder: notebook.id)
+            isLoadingFiles = false
+        }
     }
 
     // MARK: Header
@@ -75,7 +85,7 @@ struct RuleSliderView: View {
                 Text(rule == nil ? "Set Up Sync for This Folder" : "Edit Sync Rule")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("\(notebook.name) · \(notebook.pageCount) note\(notebook.pageCount == 1 ? "" : "s")")
+                Text(headerSubtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
             }
@@ -101,6 +111,17 @@ struct RuleSliderView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    /// Header line: the folder name plus how many of its notebooks the rule syncs.
+    private var headerSubtitle: String {
+        let total = notebook.pageCount
+        let totalLabel = "\(total) notebook\(total == 1 ? "" : "s")"
+        if let rule, !rule.syncsEntireFolder {
+            let selected = rule.selectedFileIds?.count ?? 0
+            return "\(notebook.name) · syncing \(selected) of \(totalLabel)"
+        }
+        return "\(notebook.name) · \(totalLabel)"
     }
 
     private struct RuleStatusGlyph {
@@ -158,6 +179,88 @@ struct RuleSliderView: View {
                 // path must exist before attachment can be offered per destination.
             }
         }
+    }
+
+    // MARK: Notebooks card
+
+    /// Sync the whole folder, or hand-pick notebooks (e.g. "only my journal").
+    /// "Sync every notebook" maps to a nil scope; checking notebooks sets the
+    /// rule's `selectedFileIds`.
+    private var notebooksCard: some View {
+        AppCard("Notebooks") {
+            VStack(spacing: 0) {
+                AppSettingRow("Sync every notebook", description: syncsEntireFolder
+                              ? "Every notebook in this folder syncs, including new ones."
+                              : "Only the notebooks you check below sync.") {
+                    Toggle("", isOn: syncAllBinding)
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                }
+                if !syncsEntireFolder {
+                    AppRowDivider().padding(.vertical, 10)
+                    notebookChecklist
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var notebookChecklist: some View {
+        if isLoadingFiles {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Loading notebooks…").font(.system(size: 11)).foregroundStyle(theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if folderFiles.isEmpty {
+            Text("No notebooks in this folder.")
+                .font(.system(size: 11)).foregroundStyle(theme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(spacing: 4) {
+                ForEach(folderFiles) { file in
+                    Button(action: { toggleFile(file, on: !isSelected(file)) }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: isSelected(file) ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 13))
+                                .foregroundStyle(isSelected(file) ? theme.primary : theme.tertiary)
+                            Text(file.name).font(.system(size: 12)).foregroundStyle(theme.foreground).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text("\(file.pageCount) page\(file.pageCount == 1 ? "" : "s")")
+                                .font(.system(size: 10)).foregroundStyle(theme.muted)
+                        }
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var syncsEntireFolder: Bool { rule?.syncsEntireFolder ?? true }
+
+    private var syncAllBinding: Binding<Bool> {
+        Binding(
+            get: { syncsEntireFolder },
+            set: { all in
+                var copy = ensureRule()
+                copy.selectedFileIds = all ? nil : folderFiles.map(\.id)
+                ledger.upsertRule(copy)
+            }
+        )
+    }
+
+    private func isSelected(_ file: RmFile) -> Bool {
+        rule?.includes(fileId: file.id) ?? true
+    }
+
+    private func toggleFile(_ file: RmFile, on: Bool) {
+        var copy = ensureRule()
+        var ids = Set(copy.selectedFileIds ?? folderFiles.map(\.id))
+        if on { ids.insert(file.id) } else { ids.remove(file.id) }
+        // Persist in folder order so the stored list is stable and readable.
+        copy.selectedFileIds = folderFiles.map(\.id).filter { ids.contains($0) }
+        ledger.upsertRule(copy)
     }
 
     // MARK: Destinations card

@@ -176,6 +176,7 @@ struct NotebookListView: View {
                     .transition(.opacity)
                 RuleSliderView(
                     notebook: notebook,
+                    coordinator: coordinator,
                     onClose: { closeSheet() },
                     onSyncNow: { ruleId, bindingId in
                         coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)

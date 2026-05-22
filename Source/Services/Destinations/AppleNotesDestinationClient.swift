@@ -135,16 +135,57 @@ struct AppleNotesDestinationClient: DestinationClient {
     }
 
     static func buildHtml(payload: DestinationPayload) -> String {
-        let escapedTitle = htmlEscape(payload.title)
-        let escapedBody = htmlEscape(payload.body)
-        let mermaidBlock = payload.mermaidSource.map {
-            "<pre>\(htmlEscape($0))</pre>"
-        } ?? ""
-        return """
-        <h1>\(escapedTitle)</h1>
-        <p>\(escapedBody.replacingOccurrences(of: "\n", with: "<br>"))</p>
-        \(mermaidBlock)
-        """
+        let title = "<h1>\(htmlEscape(payload.title))</h1>"
+        let body = payload.blocks.isEmpty ? bodyHtml(payload: payload) : blocksHtml(payload.blocks)
+        return title + "\n" + body
+    }
+
+    /// Renders structured blocks to Notes-flavored HTML. Notes' AppleScript
+    /// `body` can't create native tappable checklists, so checkbox items use
+    /// ballot-box glyphs (☐ / ☑) and strike completed items, mirroring how
+    /// reMarkable itself shows a ticked box.
+    private static func blocksHtml(_ blocks: [NoteBlock]) -> String {
+        var html: [String] = []
+        var listOpen = false
+        func closeList() {
+            if listOpen { html.append("</ul>"); listOpen = false }
+        }
+        func openList() {
+            if !listOpen { html.append("<ul>"); listOpen = true }
+        }
+        for block in blocks {
+            switch block {
+            case .heading(let text):
+                closeList(); html.append("<h2>\(htmlEscape(text))</h2>")
+            case .paragraph(let text):
+                closeList(); html.append("<p>\(lineBreaks(htmlEscape(text)))</p>")
+            case .bullet(let text):
+                openList(); html.append("<li>\(htmlEscape(text))</li>")
+            case .checkbox(let text, let checked):
+                openList()
+                let mark = checked ? "&#9745;" : "&#9744;"               // ☑ / ☐
+                let label = checked ? "<s>\(htmlEscape(text))</s>" : htmlEscape(text)
+                html.append("<li>\(mark) \(label)</li>")
+            case .mermaid(let source):
+                closeList(); html.append("<pre>\(htmlEscape(source))</pre>")
+            }
+        }
+        closeList()
+        return html.joined(separator: "\n")
+    }
+
+    /// Legacy path for payloads without structured blocks: the flattened body
+    /// as a paragraph, plus any Mermaid diagram as a `<pre>` block.
+    private static func bodyHtml(payload: DestinationPayload) -> String {
+        var html = "<p>\(lineBreaks(htmlEscape(payload.body)))</p>"
+        if let mermaid = payload.mermaidSource {
+            html += "\n<pre>\(htmlEscape(mermaid))</pre>"
+        }
+        return html
+    }
+
+    private static func lineBreaks(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: "<br>")
     }
 
     static func htmlEscape(_ raw: String) -> String {

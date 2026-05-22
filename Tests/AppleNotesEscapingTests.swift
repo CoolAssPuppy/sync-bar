@@ -68,4 +68,26 @@ final class AppleNotesEscapingTests: XCTestCase {
         XCTAssertTrue(html.contains("a &amp; b &lt; c &gt; d"))
         XCTAssertTrue(html.contains("<h1>Title &lt;b&gt;</h1>"))
     }
+
+    func test_html_renders_blocks_as_a_checklist() {
+        let payload = DestinationPayload(
+            title: "Groceries",
+            body: "ignored when blocks are present",
+            blocks: [
+                .heading("Shopping"),
+                .checkbox(text: "Milk", checked: false),
+                .checkbox(text: "Eggs", checked: true),
+                .bullet("a note")
+            ],
+            mermaidSource: nil, sourceDate: Date(), pdfData: nil, ocrProvider: nil,
+            ruleNotebookName: "NB", pageNumber: 1
+        )
+        let html = AppleNotesDestinationClient.buildHtml(payload: payload)
+        XCTAssertTrue(html.contains("<h2>Shopping</h2>"))
+        XCTAssertTrue(html.contains("<ul>"))
+        XCTAssertTrue(html.contains("&#9744; Milk"), "expected an empty ballot box, got: \(html)")
+        XCTAssertTrue(html.contains("&#9745; <s>Eggs</s>"), "expected a ticked, struck item, got: \(html)")
+        XCTAssertTrue(html.contains("<li>a note</li>"))
+        XCTAssertFalse(html.contains("ignored when blocks are present"))
+    }
 }

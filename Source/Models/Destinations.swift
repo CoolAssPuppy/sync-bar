@@ -310,3 +310,40 @@ struct AppleNotesTarget: Codable, Equatable, Identifiable, Hashable {
     var folderName: String
     var connectedAt: Date
 }
+
+// MARK: - Default configuration for a connected destination
+//
+// The configuration a new connection inherits, shared by both the source-first
+// flow (the folder's rule sheet) and the destination-first flow (connect a
+// folder from the destination's detail view) so the two never drift. OAuth
+// destinations start at a sensible default the user refines per connection.
+// (MarkdownTarget defines its own `defaultConfiguration` above.)
+
+extension NotionWorkspace {
+    var defaultConfiguration: DestinationConfiguration {
+        .notion(NotionDestinationConfig(
+            workspaceId: id, destinationId: "", destinationType: .page,
+            destinationTitle: workspaceName, propertyMappings: [:]))
+    }
+}
+
+extension LinearAccount {
+    var defaultConfiguration: DestinationConfiguration {
+        .linear(LinearDestinationConfig(
+            workspaceId: id, workspaceName: name, projectId: nil,
+            projectName: nil, defaultLabel: nil, requiredTags: nil))
+    }
+}
+
+extension GoogleAccount {
+    var defaultConfiguration: DestinationConfiguration {
+        .googleDocs(GoogleDocsDestinationConfig(
+            accountEmail: id, folderId: nil, folderName: nil, appendMode: .onePerPage))
+    }
+}
+
+extension AppleNotesTarget {
+    var defaultConfiguration: DestinationConfiguration {
+        .appleNotes(AppleNotesDestinationConfig(folderName: folderName))
+    }
+}

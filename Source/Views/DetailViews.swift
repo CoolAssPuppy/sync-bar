@@ -29,9 +29,7 @@ struct NotionWorkspaceDetailView: View {
             rename: { newName in ledger.renameNotionWorkspace(id: workspaceId, newName: newName) },
             connectableFolders: ledger.folders,
             connectSource: workspace.map { w in { folder in
-                ledger.connect(folder: folder, configuration: .notion(NotionDestinationConfig(
-                    workspaceId: w.id, destinationId: "", destinationType: .page,
-                    destinationTitle: w.workspaceName, propertyMappings: [:])))
+                ledger.connect(folder: folder, configuration: w.defaultConfiguration)
             } },
             disconnect: { ledger.removeNotionWorkspace(id: workspaceId) }
         )
@@ -61,9 +59,7 @@ struct LinearAccountDetailView: View {
             rename: { newName in ledger.renameLinearAccount(id: accountId, newName: newName) },
             connectableFolders: ledger.folders,
             connectSource: account.map { a in { folder in
-                ledger.connect(folder: folder, configuration: .linear(LinearDestinationConfig(
-                    workspaceId: a.id, workspaceName: a.name, projectId: nil,
-                    projectName: nil, defaultLabel: nil, requiredTags: nil)))
+                ledger.connect(folder: folder, configuration: a.defaultConfiguration)
             } },
             disconnect: { ledger.removeLinearAccount(id: accountId) }
         )
@@ -93,8 +89,7 @@ struct GoogleAccountDetailView: View {
             rename: { newName in ledger.renameGoogleAccount(id: accountId, newName: newName) },
             connectableFolders: ledger.folders,
             connectSource: account.map { a in { folder in
-                ledger.connect(folder: folder, configuration: .googleDocs(GoogleDocsDestinationConfig(
-                    accountEmail: a.id, folderId: nil, folderName: nil, appendMode: .onePerPage)))
+                ledger.connect(folder: folder, configuration: a.defaultConfiguration)
             } },
             disconnect: { ledger.removeGoogleAccount(id: accountId) }
         )
@@ -156,7 +151,7 @@ struct AppleNotesTargetDetailView: View {
             }),
             connectableFolders: ledger.folders,
             connectSource: target.map { t in { folder in
-                ledger.connect(folder: folder, configuration: .appleNotes(AppleNotesDestinationConfig(folderName: t.folderName)))
+                ledger.connect(folder: folder, configuration: t.defaultConfiguration)
             } },
             disconnect: { ledger.removeAppleNotesTarget(id: targetId) }
         )

@@ -269,32 +269,30 @@ struct RuleSliderView: View {
     }
 
     private func configuredDestinations() -> [ConfiguredDestination] {
+        // Each connection inherits the destination's shared default configuration
+        // (see Destinations.swift), so source-first and destination-first agree.
         var items: [ConfiguredDestination] = []
         for workspace in ledger.notionWorkspaces {
             items.append(ConfiguredDestination(id: "notion-\(workspace.id)", kind: .notion, label: "Notion · \(workspace.workspaceName)") {
-                .notion(NotionDestinationConfig(workspaceId: workspace.id, destinationId: "",
-                    destinationType: .page, destinationTitle: workspace.workspaceName, propertyMappings: [:]))
+                workspace.defaultConfiguration
             })
         }
         for account in ledger.linearAccounts {
             items.append(ConfiguredDestination(id: "linear-\(account.id)", kind: .linear, label: "Linear · \(account.name)") {
-                .linear(LinearDestinationConfig(workspaceId: account.id, workspaceName: account.name,
-                    projectId: nil, projectName: nil, defaultLabel: nil))
+                account.defaultConfiguration
             })
         }
         for account in ledger.googleAccounts {
             items.append(ConfiguredDestination(id: "google-\(account.id)", kind: .googleDocs, label: "Google Docs · \(account.displayName)") {
-                .googleDocs(GoogleDocsDestinationConfig(accountEmail: account.id, folderId: nil, folderName: nil, appendMode: .onePerPage))
+                account.defaultConfiguration
             })
         }
         for target in ledger.appleNotesTargets {
             items.append(ConfiguredDestination(id: "an-\(target.id)", kind: .appleNotes, label: "Apple Notes") {
-                .appleNotes(AppleNotesDestinationConfig(folderName: target.folderName))
+                target.defaultConfiguration
             })
         }
         for target in ledger.markdownTargets {
-            // Inherit the destination's default config (folder + template +
-            // frontmatter), chosen when the destination was created.
             items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown · \(target.displayName)") {
                 .markdownFolder(target.defaultConfiguration)
             })

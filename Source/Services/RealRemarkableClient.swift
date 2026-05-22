@@ -210,11 +210,15 @@ struct RealRemarkableClient: RemarkableClient {
         }
     }
 
-    func pageImage(for page: RmPage) async throws -> Data? {
-        // A page blob is named "<documentUUID>/<pageUUID>.rm".
+    func pageContent(for page: RmPage) async throws -> RemarkablePageContent {
+        // A page blob is named "<documentUUID>/<pageUUID>.rm". One download and
+        // one parse yield both the rasterized strokes and the typed text.
         let data = try await blob(hash: page.versionHash, filename: "\(page.notebookId)/\(page.pageId).rm")
-        guard let parsed = try? RemarkableLinesV6.parse(data), !parsed.drawing.isEmpty else { return nil }
-        return RemarkableRenderer.pngData(for: parsed.drawing)
+        guard let parsed = try? RemarkableLinesV6.parse(data) else {
+            return RemarkablePageContent(imageData: nil, typedText: [])
+        }
+        let imageData = parsed.drawing.isEmpty ? nil : RemarkableRenderer.pngData(for: parsed.drawing)
+        return RemarkablePageContent(imageData: imageData, typedText: parsed.typedText)
     }
 
     // MARK: Blob store

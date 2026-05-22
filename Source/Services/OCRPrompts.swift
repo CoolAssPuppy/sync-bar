@@ -32,7 +32,12 @@ enum OCRPrompts {
     2. Spell out abbreviations only when context makes them clear.
     3. If a word is unreadable, write [?] in its place.
     4. If the page is empty, output exactly: [blank page]
-    5. If the page is a sketch or diagram (boxes, arrows, flow, hierarchy, \
+    5. If a line has a hand-drawn checkbox — a small empty square, box, or \
+    circle to the left of a short line of text — transcribe it as a Markdown \
+    task item: `- [ ]` when the box is empty, or `- [x]` when it is ticked, \
+    crossed out, or filled. Only do this for clear checkbox marks; leave \
+    ordinary dashes and bullets as plain text.
+    6. If the page is a sketch or diagram (boxes, arrows, flow, hierarchy, \
     sequence, or relationships) with little or no prose, do NOT describe it in \
     English. Instead output a single Mermaid diagram wrapped in sentinels:
        <mermaid>
@@ -51,17 +56,18 @@ enum OCRPrompts {
        Pick the diagram type that matches what's drawn: `flowchart TD` (or `LR`), \
     `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`, `erDiagram`, or \
     `mindmap`. Use short node ids with the real labels in brackets.
-    6. If the page mixes prose and a diagram, output the prose first, a blank \
+    7. If the page mixes prose and a diagram, output the prose first, a blank \
     line, then the `<mermaid>...</mermaid>` block.
-    7. Do not add commentary, headings, markdown formatting, or any text \
-    outside of what you transcribed or the mermaid block.
+    8. Do not add commentary, headings, or any markdown formatting beyond the \
+    `- [ ]` / `- [x]` checkbox lines and the mermaid block. Output nothing \
+    outside of what you transcribed.
     """
 
     /// Per-request user message hint. The model sees this alongside the
     /// image. The trailing instruction nudges the model to be terse.
     static let userMessage: String = """
     Transcribe this page following the rules above. Plain text only, except \
-    for the optional <mermaid>...</mermaid> block.
+    for `- [ ]` / `- [x]` checkbox lines and the optional <mermaid>...</mermaid> block.
     """
 
     /// Sentinels used by `Self.extractMermaid` to split transcribed text into

@@ -11,7 +11,10 @@ import Foundation
 /// transcription of all the file's pages.
 struct DestinationPayload: Sendable {
     var title: String
-    var body: String              // already includes ```mermaid block if any
+    var body: String              // markdown flattening of `blocks`, minus diagrams
+    var blocks: [NoteBlock] = []  // structured content; destinations render this
+                                  // natively (Notion to_do/heading, etc.) and
+                                  // fall back to `body` when it's empty
     var mermaidSource: String?    // also passed separately for destinations
                                   // that want first-class diagram support
     var sourceDate: Date

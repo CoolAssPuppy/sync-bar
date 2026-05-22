@@ -169,9 +169,9 @@ final class SyncCoordinator: ObservableObject {
             provider: rule.ocrProviderOverride ?? self.settings.ocrProvider,
             model: self.settings.ocrModel
         )
-        var transcripts: [(file: RmFile, result: OcrResult)] = []
+        var transcripts: [(file: RmFile, content: NoteContent)] = []
         for file in neededFiles {
-            transcripts.append((file, await transcribeFile(file, using: ocr)))
+            transcripts.append((file, await buildNoteContent(file, using: ocr)))
         }
 
         for binding in bindings {
@@ -181,32 +181,31 @@ final class SyncCoordinator: ObservableObject {
         activeBindingId = nil
     }
 
-    /// Transcribes every page of one file and combines them into a single
-    /// note-worth of text (and any Mermaid diagrams).
-    private func transcribeFile(_ file: RmFile, using ocr: OcrProvider) async -> OcrResult {
+    /// Builds one note-worth of structured content from a file: typed text
+    /// parsed straight from each page (exact paragraph styles, no OCR cost) plus
+    /// OCR of any handwriting, combined across pages into one ordered block list.
+    private func buildNoteContent(_ file: RmFile, using ocr: OcrProvider) async -> NoteContent {
         let pages = (try? await remarkable.listPages(notebookId: file.id)) ?? []
-        var texts: [String] = []
-        var mermaids: [String] = []
+        var blocks: [NoteBlock] = []
         for page in pages {
-            guard let imageData = await imageData(for: page), !imageData.isEmpty else { continue }
+            let content = (try? await remarkable.pageContent(for: page))
+                ?? RemarkablePageContent(imageData: nil, typedText: [])
+            // Typed text first (exact, free); then OCR of any strokes on the page.
+            blocks.append(contentsOf: content.typedText.map(NoteContentBuilder.block(from:)))
+            guard let imageData = content.imageData, !imageData.isEmpty else { continue }
             do {
                 let result = try await ocr.transcribe(imageData: imageData)
-                let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty && trimmed != "[blank page]" { texts.append(trimmed) }
-                if let mermaid = result.mermaidSource { mermaids.append(mermaid) }
+                blocks.append(contentsOf: NoteContentBuilder.blocks(fromOCRText: result.text))
+                if let mermaid = result.mermaidSource { blocks.append(.mermaid(mermaid)) }
             } catch {
                 Log.ocr.error("OCR failed for file \(file.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
             }
         }
-        return OcrResult(
-            text: texts.isEmpty ? "[blank page]" : texts.joined(separator: "\n\n"),
-            mermaidSource: mermaids.isEmpty ? nil : mermaids.joined(separator: "\n\n"),
-            provider: ocr.name, model: nil, tokensIn: nil, tokensOut: nil
-        )
+        return NoteContent(blocks: blocks, provider: ocr.name, model: nil)
     }
 
     private func runBinding(rule: SyncRule, folderName: String, binding: DestinationBinding,
-                            transcripts: [(file: RmFile, result: OcrResult)], ocrName: String) async {
+                            transcripts: [(file: RmFile, content: NoteContent)], ocrName: String) async {
         let client = DestinationRouter.client(for: binding.kind)
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunStarted))
 
@@ -219,18 +218,19 @@ final class SyncCoordinator: ObservableObject {
         var firstError: String?
         let runStart = Date()
 
-        for (file, ocrResult) in transcripts where binding.configuration.accepts(fileTags: file.tags) {
+        for (file, content) in transcripts where binding.configuration.accepts(fileTags: file.tags) {
             let directive = engine.evaluate(
                 rule: effectiveRule, file: file, folderName: folderName,
-                ocrText: ocrResult.text,
+                ocrText: content.plainText,
                 previouslySyncedHash: ledger.syncedHash(bindingId: binding.id, pageId: file.id)
             )
             guard case .create(let title) = directive else { continue }
 
             let payload = DestinationPayload(
                 title: title,
-                body: ocrResult.text,
-                mermaidSource: ocrResult.mermaidSource,
+                body: content.markdownBody,
+                blocks: content.blocks,
+                mermaidSource: content.firstMermaid,
                 sourceDate: file.createdAt,
                 pdfData: nil,
                 ocrProvider: ocrName,
@@ -316,16 +316,6 @@ final class SyncCoordinator: ObservableObject {
 
     private func ruleHeader(_ rule: SyncRule, binding: DestinationBinding) -> String {
         "\(rule.rmNotebookName) → \(binding.configuration.summary)"
-    }
-
-    /// Page-image fetch is a placeholder until the real reMarkable client
-    /// rasterises pages. Returning nil short-circuits the OCR call so we
-    /// don't ship zero-byte uploads to the LLM providers.
-    private func imageData(for page: RmPage) async -> Data? {
-        // The real client downloads the page's .rm blob and rasterizes it; the
-        // mock returns nil so a blank page is synthesized instead of uploading
-        // empty bytes to an OCR provider.
-        return try? await remarkable.pageImage(for: page)
     }
 
     private func postNotification(title: String, body: String) {

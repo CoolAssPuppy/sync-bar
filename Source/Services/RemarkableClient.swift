@@ -37,10 +37,18 @@ protocol RemarkableClient: Sendable {
     /// Pages of a single file (`notebookId` is a file id). Their transcriptions
     /// are combined into one note.
     func listPages(notebookId: String) async throws -> [RmPage]
-    /// A rasterized PNG of the page, used as the OCR input. Returns nil when no
-    /// rendering is available (e.g. the mock client), in which case the sync
-    /// engine treats the page as blank rather than uploading empty bytes.
-    func pageImage(for page: RmPage) async throws -> Data?
+    /// The renderable + typed content of one page: a rasterized PNG of the
+    /// handwriting (nil when there are no strokes or no rendering is available,
+    /// e.g. the mock client) plus the page's typed text decoded structurally.
+    /// One call downloads and parses the page once for both.
+    func pageContent(for page: RmPage) async throws -> RemarkablePageContent
+}
+
+/// One page's content, split by source: rasterized strokes for OCR and typed
+/// text parsed straight from the file (where reMarkable checkboxes live).
+struct RemarkablePageContent: Sendable {
+    var imageData: Data?
+    var typedText: [TypedParagraph]
 }
 
 /// Returns the live reMarkable client once a device is paired (a device token
@@ -117,5 +125,7 @@ struct MockRemarkableClient: RemarkableClient {
         }
     }
 
-    func pageImage(for page: RmPage) async throws -> Data? { nil }
+    func pageContent(for page: RmPage) async throws -> RemarkablePageContent {
+        RemarkablePageContent(imageData: nil, typedText: [])
+    }
 }

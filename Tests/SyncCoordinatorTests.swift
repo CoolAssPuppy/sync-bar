@@ -175,6 +175,40 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    /// A page of reMarkable typed text (a heading and two checkboxes) flows
+    /// through the parser, block model, and markdown flattening into a written
+    /// file with native task-list markdown — no image, no OCR involved.
+    func test_typed_checklist_page_writes_task_markdown() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule.new(notebookId: "nb-checklist", notebookName: "Test")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let typed: [TypedParagraph] = [
+            TypedParagraph(style: .heading, text: "Groceries"),
+            TypedParagraph(style: .checkbox, text: "Milk"),
+            TypedParagraph(style: .checkboxChecked, text: "Eggs")
+        ]
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 1, typedText: typed))
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 1)
+
+        let written = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let markdown = written.first { $0.pathExtension == "md" }
+            .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+        XCTAssertTrue(markdown.contains("## Groceries"), "expected heading, got: \(markdown)")
+        XCTAssertTrue(markdown.contains("- [ ] Milk"), "expected unchecked task, got: \(markdown)")
+        XCTAssertTrue(markdown.contains("- [x] Eggs"), "expected checked task, got: \(markdown)")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     // MARK: helpers
 
     /// Triggers a sync and waits until the binding records a *new* run result and
@@ -234,6 +268,9 @@ private struct ScriptedRemarkableClient: RemarkableClient {
     /// Number of files (notes) in the folder; each has a single page so one
     /// note is produced per file.
     let files: Int
+    /// Typed text returned for every page, letting a test exercise the
+    /// structural checklist path without a rasterized image.
+    var typedText: [TypedParagraph] = []
 
     func pairDevice(oneTimeCode: String) async throws -> RemarkableAccount {
         RemarkableAccount(pairedAt: Date(), userIdentifier: "test", lastSyncedAt: nil)
@@ -271,5 +308,7 @@ private struct ScriptedRemarkableClient: RemarkableClient {
         )]
     }
 
-    func pageImage(for page: RmPage) async throws -> Data? { nil }
+    func pageContent(for page: RmPage) async throws -> RemarkablePageContent {
+        RemarkablePageContent(imageData: nil, typedText: typedText)
+    }
 }

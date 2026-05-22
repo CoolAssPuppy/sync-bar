@@ -211,7 +211,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     // MARK: skip reasons (a manual "Sync now" must never be a silent no-op)
 
-    func test_manual_sync_with_no_connected_destinations_records_skip_reason() async {
+    func test_manual_sync_of_rule_with_no_destinations_names_the_folder() async {
         let ledger = Ledger.shared
         await prepare(ledger: ledger)
         var rule = SyncRule.new(notebookId: "nb-skip-empty", notebookName: "Journal")
@@ -223,7 +223,44 @@ final class SyncCoordinatorTests: XCTestCase {
         coordinator.syncNow(ruleId: rule.id)
 
         let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(skip?.ruleName, "Nothing to sync: Journal has no enabled destinations.")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_manual_sync_with_no_setup_says_nothing_is_connected() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        ledger.clearEvents()
+
+        // Targeting a rule that doesn't exist (nothing set up) gives the generic
+        // "no folders are connected" guidance.
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        coordinator.syncNow(ruleId: "rule-that-does-not-exist")
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
         XCTAssertEqual(skip?.ruleName, "Nothing to sync: no folders are connected to a destination.")
+    }
+
+    func test_manual_sync_of_disabled_but_connected_rule_says_it_is_turned_off() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // Connected to a destination, but the rule is switched off. The skip must
+        // name the real cause, not claim there's no destination.
+        var rule = SyncRule.new(notebookId: "nb-skip-off", notebookName: "Journal")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        rule.enabled = false
+        ledger.upsertRule(rule)
+        ledger.clearEvents()
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        coordinator.syncNow(ruleId: rule.id)
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(skip?.ruleName, "Skipped: syncing for Journal is turned off.")
 
         ledger.deleteRule(id: rule.id)
     }

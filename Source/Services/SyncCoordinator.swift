@@ -132,7 +132,7 @@ final class SyncCoordinator: ObservableObject {
             rule.enabled && (ruleId == nil || rule.id == ruleId) && !rule.destinations.isEmpty
         }
         guard !rules.isEmpty else {
-            if explainSkips { recordSkip(.noConnectedFolders, ruleId: ruleId) }
+            if explainSkips { recordSkip(noWorkReason(forTargetedRuleId: ruleId), ruleId: ruleId) }
             return
         }
 
@@ -346,6 +346,7 @@ final class SyncCoordinator: ObservableObject {
         case noAccountPaired
         case syncingPaused
         case noConnectedFolders
+        case ruleDisabled(folder: String)
         case folderEmpty(folder: String)
         case noEnabledDestinations(folder: String)
         case allNotesFilteredOut(folder: String)
@@ -358,6 +359,8 @@ final class SyncCoordinator: ObservableObject {
                 return "Skipped: syncing is paused."
             case .noConnectedFolders:
                 return "Nothing to sync: no folders are connected to a destination."
+            case .ruleDisabled(let folder):
+                return "Skipped: syncing for \(folder) is turned off."
             case .folderEmpty(let folder):
                 return "Nothing to sync: \(folder) has no documents."
             case .noEnabledDestinations(let folder):
@@ -370,7 +373,8 @@ final class SyncCoordinator: ObservableObject {
         /// The reMarkable folder this skip concerns, when it is rule-specific.
         var folderName: String? {
             switch self {
-            case .folderEmpty(let folder),
+            case .ruleDisabled(let folder),
+                 .folderEmpty(let folder),
                  .noEnabledDestinations(let folder),
                  .allNotesFilteredOut(let folder):
                 return folder
@@ -380,10 +384,24 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
+    /// Picks the most accurate "nothing happened" reason when the cycle's rule
+    /// filter came up empty. For a targeted manual sync (`ruleId` set) the rule
+    /// may exist but be disabled or have no destinations, which is more useful to
+    /// say than the generic "no folders are connected".
+    private func noWorkReason(forTargetedRuleId ruleId: String?) -> SyncSkipReason {
+        guard let ruleId, let rule = ledger.rules.first(where: { $0.id == ruleId }) else {
+            return .noConnectedFolders
+        }
+        if rule.destinations.isEmpty { return .noEnabledDestinations(folder: rule.rmNotebookName) }
+        if !rule.enabled { return .ruleDisabled(folder: rule.rmNotebookName) }
+        return .noConnectedFolders
+    }
+
     /// Writes a visible "Nothing to sync" event explaining why a manual cycle did
-    /// no work, so "Sync now" is never a silent no-op.
+    /// no work, so "Sync now" is never a silent no-op. The folder name stays out
+    /// of the system log (it is the user's content); the in-app event carries it.
     private func recordSkip(_ reason: SyncSkipReason, ruleId: String? = nil) {
-        Log.sync.info("Cycle skipped: \(reason.message, privacy: .public)")
+        Log.sync.info("Cycle skipped: \(reason.message, privacy: .private)")
         ledger.appendEvent(SyncEvent(
             id: UUID().uuidString, occurredAt: Date(),
             ruleId: ruleId, ruleName: reason.message,

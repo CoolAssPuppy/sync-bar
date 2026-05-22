@@ -145,8 +145,8 @@ struct Sidebar: View {
             }
             ForEach(ledger.markdownTargets) { target in
                 AccountRow(
-                    title: "Markdown Files",
-                    subtitle: "Local files",
+                    title: target.displayName,
+                    subtitle: target.folderPath.isEmpty ? "Local files" : (target.folderPath as NSString).abbreviatingWithTildeInPath,
                     icon: .destination(.markdownFolder),
                     isSelected: selection == .markdownTarget(target.id)
                 )

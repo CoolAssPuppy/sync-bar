@@ -317,14 +317,18 @@ struct AddDestinationSheet: View {
         case .markdownFolder:
             // The folder (and its default write settings) are chosen here, so a
             // connection to this destination starts from a real folder, never
-            // blank. Multiple Markdown folders are allowed (e.g. journal vs work).
+            // blank. Multiple Markdown folders are allowed (e.g. journal vs work);
+            // re-adding the same folder updates that destination instead of
+            // creating a confusing duplicate.
             let folderName = (markdownFolderPath as NSString).lastPathComponent
+            let trimmedTemplate = markdownTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+            let existing = ledger.markdownTargets.first { $0.folderPath == markdownFolderPath }
             ledger.upsertMarkdownTarget(MarkdownTarget(
-                id: "md-" + UUID().uuidString.prefix(8).lowercased(),
+                id: existing?.id ?? "md-" + UUID().uuidString.prefix(8).lowercased(),
                 displayName: folderName.isEmpty ? "Markdown Files" : folderName,
                 folderPath: markdownFolderPath,
-                connectedAt: Date(),
-                fileNameTemplate: markdownTemplate,
+                connectedAt: existing?.connectedAt ?? Date(),
+                fileNameTemplate: trimmedTemplate.isEmpty ? nil : trimmedTemplate,
                 includeFrontmatter: markdownFrontmatter
             ))
             Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])

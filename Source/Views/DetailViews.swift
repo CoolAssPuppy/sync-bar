@@ -95,16 +95,16 @@ struct MarkdownTargetDetailView: View {
     }
 
     var body: some View {
+        let target = self.target
         DestinationDetailScaffold(
             kind: .markdownFolder,
-            title: "Markdown Files",
-            subtitle: nil,
+            title: target?.displayName ?? "Markdown Files",
+            subtitle: target.map { ($0.folderPath as NSString).abbreviatingWithTildeInPath },
             connectedAt: target?.connectedAt,
-            // The folder is per binding now, so this destination represents every
-            // Markdown sync rather than one folder.
+            // Show only the syncs writing to THIS destination's folder.
             activeBindings: ledger.bindings(matching: { config in
-                if case .markdownFolder = config { return true }
-                return false
+                guard case .markdownFolder(let cfg) = config, let target else { return false }
+                return cfg.folderPath == target.folderPath
             }),
             disconnect: { ledger.removeMarkdownTarget(id: targetId) }
         )

@@ -83,6 +83,12 @@ final class SyncCoordinator: ObservableObject {
         Task { await runCycle(ruleId: ruleId, bindingId: bindingId, trigger: .manual) }
     }
 
+    /// One scheduled sync pass. Separate from `syncNow` so the timer and tests
+    /// share the exact scheduled-trigger path (which stays quiet when idle).
+    func scheduledTick() async {
+        await runCycle(ruleId: nil, bindingId: nil, trigger: .scheduled)
+    }
+
     private func restartTimer() {
         timerTask?.cancel()
         guard self.settings.syncIntervalSeconds > 0,
@@ -100,7 +106,7 @@ final class SyncCoordinator: ObservableObject {
                 guard seconds > 0, !self.settings.pauseSyncing else { return }
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
-                await self.runCycle(ruleId: nil, bindingId: nil, trigger: .scheduled)
+                await self.scheduledTick()
                 self.nextTickAt = Date().addingTimeInterval(TimeInterval(seconds))
             }
         }
@@ -108,16 +114,27 @@ final class SyncCoordinator: ObservableObject {
 
     private func runCycle(ruleId: String?, bindingId: String?, trigger: SyncTrigger) async {
         guard !ledger.isDemoMode else { return }
+        // A manual "Sync now" always explains itself in the visible log; scheduled
+        // ticks stay quiet so an idle account doesn't flood the log every interval.
+        let explainSkips = (trigger == .manual)
+
         guard ledger.remarkableAccount != nil else {
-            Log.sync.info("Skipping cycle: no reMarkable account paired.")
+            if explainSkips { recordSkip(.noAccountPaired) }
+            else { Log.sync.info("Skipping scheduled cycle: no reMarkable account paired.") }
             return
         }
-        guard !self.settings.pauseSyncing else { return }
+        guard !self.settings.pauseSyncing else {
+            if explainSkips { recordSkip(.syncingPaused) }
+            return
+        }
 
         let rules = ledger.rules.filter { rule in
             rule.enabled && (ruleId == nil || rule.id == ruleId) && !rule.destinations.isEmpty
         }
-        guard !rules.isEmpty else { return }
+        guard !rules.isEmpty else {
+            if explainSkips { recordSkip(.noConnectedFolders, ruleId: ruleId) }
+            return
+        }
 
         isSyncing = true
         NotificationCenter.default.post(name: .syncStarted, object: nil)
@@ -125,7 +142,7 @@ final class SyncCoordinator: ObservableObject {
 
         for rule in rules {
             activeRuleId = rule.id
-            await runRule(rule, restrictedToBindingId: bindingId)
+            await runRule(rule, restrictedToBindingId: bindingId, explainSkips: explainSkips)
         }
 
         activeRuleId = nil
@@ -141,7 +158,7 @@ final class SyncCoordinator: ObservableObject {
         ])
     }
 
-    private func runRule(_ rule: SyncRule, restrictedToBindingId: String?) async {
+    private func runRule(_ rule: SyncRule, restrictedToBindingId: String?, explainSkips: Bool) async {
         let folderName = rule.rmNotebookName
         var files: [RmFile] = []
         do {
@@ -154,13 +171,23 @@ final class SyncCoordinator: ObservableObject {
         let bindings = rule.destinations.filter { binding in
             binding.enabled && (restrictedToBindingId == nil || binding.id == restrictedToBindingId)
         }
-        guard !bindings.isEmpty, !files.isEmpty else { return }
+        guard !bindings.isEmpty else {
+            if explainSkips { recordSkip(.noEnabledDestinations(folder: folderName), ruleId: rule.id) }
+            return
+        }
+        guard !files.isEmpty else {
+            if explainSkips { recordSkip(.folderEmpty(folder: folderName), ruleId: rule.id) }
+            return
+        }
 
         // Skip OCR for files that no enabled binding will accept (e.g. a
         // tag-filtered Linear destination that excludes untagged notes) so we
         // never pay the OCR provider for output nothing will consume.
         let neededFiles = files.filter { file in bindings.contains { $0.configuration.accepts(fileTags: file.tags) } }
-        guard !neededFiles.isEmpty else { return }
+        guard !neededFiles.isEmpty else {
+            if explainSkips { recordSkip(.allNotesFilteredOut(folder: folderName), ruleId: rule.id) }
+            return
+        }
 
         // OCR each file once (combining all its pages into one transcript),
         // reused across every binding — provider cost shouldn't scale with
@@ -311,6 +338,60 @@ final class SyncCoordinator: ObservableObject {
             notionPageUrl: url, durationMs: durationMs,
             ocrProvider: ocrProvider, errorMessage: errorMessage
         )
+    }
+
+    /// Why a manual cycle or rule produced no work. The message is what the user
+    /// sees in the log, so it names the folder and the fix where it can.
+    enum SyncSkipReason: Equatable {
+        case noAccountPaired
+        case syncingPaused
+        case noConnectedFolders
+        case folderEmpty(folder: String)
+        case noEnabledDestinations(folder: String)
+        case allNotesFilteredOut(folder: String)
+
+        var message: String {
+            switch self {
+            case .noAccountPaired:
+                return "Nothing to sync: no reMarkable account is paired."
+            case .syncingPaused:
+                return "Skipped: syncing is paused."
+            case .noConnectedFolders:
+                return "Nothing to sync: no folders are connected to a destination."
+            case .folderEmpty(let folder):
+                return "Nothing to sync: \(folder) has no documents."
+            case .noEnabledDestinations(let folder):
+                return "Nothing to sync: \(folder) has no enabled destinations."
+            case .allNotesFilteredOut(let folder):
+                return "Nothing to sync: every document in \(folder) was excluded by a destination's tag filter."
+            }
+        }
+
+        /// The reMarkable folder this skip concerns, when it is rule-specific.
+        var folderName: String? {
+            switch self {
+            case .folderEmpty(let folder),
+                 .noEnabledDestinations(let folder),
+                 .allNotesFilteredOut(let folder):
+                return folder
+            case .noAccountPaired, .syncingPaused, .noConnectedFolders:
+                return nil
+            }
+        }
+    }
+
+    /// Writes a visible "Nothing to sync" event explaining why a manual cycle did
+    /// no work, so "Sync now" is never a silent no-op.
+    private func recordSkip(_ reason: SyncSkipReason, ruleId: String? = nil) {
+        Log.sync.info("Cycle skipped: \(reason.message, privacy: .public)")
+        ledger.appendEvent(SyncEvent(
+            id: UUID().uuidString, occurredAt: Date(),
+            ruleId: ruleId, ruleName: reason.message,
+            eventType: .cycleSkipped,
+            rmNotebookName: reason.folderName, rmPageId: nil,
+            notionPageUrl: nil, durationMs: nil,
+            ocrProvider: nil, errorMessage: nil
+        ))
     }
 
     private func recordFailure(rule: SyncRule, binding: DestinationBinding?, message: String) {

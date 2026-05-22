@@ -239,6 +239,9 @@ enum SyncEventType: String, Codable {
     case ruleRunCompleted
     case tokenRefreshed
     case orphanDetected
+    /// A manual sync that found no work, written so "Sync now" never silently
+    /// does nothing. Carries the human-readable reason in the event.
+    case cycleSkipped
 
     var label: String {
         switch self {
@@ -248,6 +251,7 @@ enum SyncEventType: String, Codable {
         case .ruleRunCompleted:  return "Run completed"
         case .tokenRefreshed:    return "Token refreshed"
         case .orphanDetected:    return "Orphan detected"
+        case .cycleSkipped:      return "Nothing to sync"
         }
     }
 }

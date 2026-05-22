@@ -233,6 +233,7 @@ private struct EventRow: View {
         case .ruleRunCompleted: return .info
         case .tokenRefreshed:   return .neutral
         case .orphanDetected:   return .warning
+        case .cycleSkipped:     return .neutral
         }
     }
 
@@ -245,6 +246,7 @@ private struct EventRow: View {
         case .ruleRunCompleted: return "Sync run completed"
         case .tokenRefreshed:   return "Auth token refreshed"
         case .orphanDetected:   return "Orphaned item detected"
+        case .cycleSkipped:     return "Sync ran but found nothing to do"
         }
     }
 
@@ -266,6 +268,7 @@ private struct EventRow: View {
         case .ruleRunCompleted: return "flag.checkered"
         case .tokenRefreshed:   return "key"
         case .orphanDetected:   return "questionmark"
+        case .cycleSkipped:     return "minus.circle"
         }
     }
 }

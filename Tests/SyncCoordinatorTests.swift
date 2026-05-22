@@ -209,6 +209,87 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    // MARK: skip reasons (a manual "Sync now" must never be a silent no-op)
+
+    func test_manual_sync_with_no_connected_destinations_records_skip_reason() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        var rule = SyncRule.new(notebookId: "nb-skip-empty", notebookName: "Journal")
+        rule.destinations = []   // connected to nothing
+        ledger.upsertRule(rule)
+        ledger.clearEvents()
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        coordinator.syncNow(ruleId: rule.id)
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(skip?.ruleName, "Nothing to sync: no folders are connected to a destination.")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_manual_sync_of_empty_folder_records_skip_reason() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule.new(notebookId: "nb-skip-nofiles", notebookName: "Journal")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        ledger.clearEvents()
+
+        // The folder has a connected destination but no documents on the device.
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 0))
+        coordinator.syncNow(ruleId: rule.id)
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(skip?.ruleName, "Nothing to sync: Journal has no documents.")
+        XCTAssertEqual(skip?.rmNotebookName, "Journal")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_manual_sync_with_tag_filter_excluding_every_note_records_skip_reason() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+
+        var rule = SyncRule.new(notebookId: "nb-skip-filtered", notebookName: "Journal")
+        rule.destinations = [DestinationBinding(configuration: .linear(LinearDestinationConfig(
+            workspaceId: "team-1", workspaceName: "Team",
+            projectId: nil, projectName: nil, defaultLabel: nil,
+            requiredTags: ["needed"]
+        )))]
+        ledger.upsertRule(rule)
+        ledger.clearEvents()
+
+        // Three untagged notes; the Linear tag filter accepts none of them.
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        coordinator.syncNow(ruleId: rule.id)
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(
+            skip?.ruleName,
+            "Nothing to sync: every document in Journal was excluded by a destination's tag filter."
+        )
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_scheduled_cycle_stays_quiet_when_nothing_to_sync() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        ledger.clearEvents()
+
+        // A scheduled tick that finds nothing must not write a skip event, or an
+        // idle account would flood the log every interval.
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 0))
+        await coordinator.scheduledTick()
+
+        let skips = ledger.events.filter { $0.eventType == .cycleSkipped }
+        XCTAssertTrue(skips.isEmpty, "scheduled cycles must stay silent, got \(skips.count) skip events")
+    }
+
     // MARK: helpers
 
     /// Triggers a sync and waits until the binding records a *new* run result and
@@ -232,6 +313,19 @@ final class SyncCoordinatorTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 25_000_000)
         }
         return binding()
+    }
+
+    /// Polls the shared ledger's event log until an event matches, or times out.
+    /// Skip events are appended from a fire-and-forget cycle Task, so a poll is
+    /// the black-box way to observe them.
+    private func waitForEvent(timeout: TimeInterval = 5,
+                              _ predicate: @escaping (SyncEvent) -> Bool) async -> SyncEvent? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let event = Ledger.shared.events.first(where: predicate) { return event }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return nil
     }
 
     private func markdownBinding(folderPath: String) -> DestinationBinding {

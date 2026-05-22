@@ -146,11 +146,19 @@ final class RemarkableLinesV6Tests: XCTestCase {
         tag(index, 0xC) + u32LE(UInt32(payload.count)) + payload
     }
 
+    /// A paragraph style entry for `v6TextBlock`: the (author, counter) char id
+    /// the style is keyed by, and the on-disk format code.
+    private struct StyleEntry {
+        let author: UInt8
+        let counter: UInt64
+        let code: UInt8
+    }
+
     /// Builds a RootTextBlock (type 0x07): the whole `text` as one CRDT run with
     /// id (1,1), plus a styles map keyed by (author, counter) char ids. The
     /// first line is keyed by the (0,0) anchor; later lines by the id of the
     /// newline that opens them.
-    private func v6TextBlock(text: String, styles: [(author: UInt8, counter: UInt64, code: UInt8)]) -> [UInt8] {
+    private func v6TextBlock(text: String, styles: [StyleEntry]) -> [UInt8] {
         // One text run holding the entire string, starting at char id (1,1).
         let utf8 = Array(text.utf8)
         let valuePayload = varuint(UInt64(utf8.count)) + [1] + utf8
@@ -180,10 +188,10 @@ final class RemarkableLinesV6Tests: XCTestCase {
         // "Shopping" heading, two checkboxes (one checked), one bullet.
         let text = "Shopping\nBuy milk\nGot eggs\na bullet"
         bytes += v6TextBlock(text: text, styles: [
-            (author: 0, counter: 0,  code: ParagraphStyle.heading.rawValue),          // first line
-            (author: 1, counter: 9,  code: ParagraphStyle.checkbox.rawValue),         // "Buy milk"
-            (author: 1, counter: 18, code: ParagraphStyle.checkboxChecked.rawValue),  // "Got eggs"
-            (author: 1, counter: 27, code: ParagraphStyle.bullet.rawValue)            // "a bullet"
+            StyleEntry(author: 0, counter: 0,  code: ParagraphStyle.heading.rawValue),          // first line
+            StyleEntry(author: 1, counter: 9,  code: ParagraphStyle.checkbox.rawValue),         // "Buy milk"
+            StyleEntry(author: 1, counter: 18, code: ParagraphStyle.checkboxChecked.rawValue),  // "Got eggs"
+            StyleEntry(author: 1, counter: 27, code: ParagraphStyle.bullet.rawValue)            // "a bullet"
         ])
 
         let typedText = try RemarkableLinesV6.parse(Data(bytes)).typedText
@@ -205,7 +213,7 @@ final class RemarkableLinesV6Tests: XCTestCase {
     func test_parse_returns_strokes_and_typed_text_together() throws {
         var bytes = v6Header()
         bytes += v6LineBlock(points: [(1, 2), (3, 4)])
-        bytes += v6TextBlock(text: "Task one", styles: [(author: 0, counter: 0, code: ParagraphStyle.checkbox.rawValue)])
+        bytes += v6TextBlock(text: "Task one", styles: [StyleEntry(author: 0, counter: 0, code: ParagraphStyle.checkbox.rawValue)])
         let page = try RemarkableLinesV6.parse(Data(bytes))
         XCTAssertEqual(page.drawing.strokes.count, 1)
         XCTAssertEqual(page.typedText, [TypedParagraph(style: .checkbox, text: "Task one")])

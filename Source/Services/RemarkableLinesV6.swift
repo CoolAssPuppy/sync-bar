@@ -323,7 +323,7 @@ enum RemarkableLinesV6 {
                 _ = try reader.readUInt8()                  // is-ascii flag
                 let available = max(0, strEnd - reader.offset)
                 let bytes = try reader.readBytes(min(declared, available))
-                value = String(decoding: bytes, as: UTF8.self)
+                value = String(bytes: bytes, encoding: .utf8) ?? ""
                 try advance(&reader, to: strEnd)
             }
             // Keep only live text runs; deleted runs carry "" and format-only

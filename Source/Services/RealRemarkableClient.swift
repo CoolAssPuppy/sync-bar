@@ -213,8 +213,8 @@ struct RealRemarkableClient: RemarkableClient {
     func pageImage(for page: RmPage) async throws -> Data? {
         // A page blob is named "<documentUUID>/<pageUUID>.rm".
         let data = try await blob(hash: page.versionHash, filename: "\(page.notebookId)/\(page.pageId).rm")
-        guard let drawing = try? RemarkableLinesV6.parse(data), !drawing.isEmpty else { return nil }
-        return RemarkableRenderer.pngData(for: drawing)
+        guard let parsed = try? RemarkableLinesV6.parse(data), !parsed.drawing.isEmpty else { return nil }
+        return RemarkableRenderer.pngData(for: parsed.drawing)
     }
 
     // MARK: Blob store

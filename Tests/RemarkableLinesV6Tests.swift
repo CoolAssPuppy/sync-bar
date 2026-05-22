@@ -103,7 +103,7 @@ final class RemarkableLinesV6Tests: XCTestCase {
     func test_parse_extracts_points_from_line_block() throws {
         var bytes = v6Header()
         bytes += v6LineBlock(points: [(10, 20), (30, 40), (50, 60)])
-        let drawing = try RemarkableLinesV6.parse(Data(bytes))
+        let drawing = try RemarkableLinesV6.parse(Data(bytes)).drawing
 
         XCTAssertEqual(drawing.strokes.count, 1)
         XCTAssertEqual(drawing.strokes.first?.count, 3)
@@ -118,7 +118,104 @@ final class RemarkableLinesV6Tests: XCTestCase {
         var bytes = v6Header()
         bytes += v6LineBlock(points: [(1, 2), (3, 4)])
         bytes += v6LineBlock(points: [(5, 6), (7, 8)])
-        let drawing = try RemarkableLinesV6.parse(Data(bytes))
+        let drawing = try RemarkableLinesV6.parse(Data(bytes)).drawing
         XCTAssertEqual(drawing.strokes.count, 2)
+    }
+
+    // MARK: Typed text extraction (v6 RootTextBlock)
+
+    private func varuint(_ value: UInt64) -> [UInt8] {
+        var remaining = value
+        var out: [UInt8] = []
+        repeat {
+            var byte = UInt8(remaining & 0x7F)
+            remaining >>= 7
+            if remaining != 0 { byte |= 0x80 }
+            out.append(byte)
+        } while remaining != 0
+        return out
+    }
+
+    /// Tag byte: high bits are the field index, low nibble is the wire type.
+    private func tag(_ index: UInt8, _ type: UInt8) -> [UInt8] { [(index << 4) | type] }
+    private func taggedId(_ index: UInt8, _ author: UInt8, _ counter: UInt64) -> [UInt8] {
+        tag(index, 0xF) + [author] + varuint(counter)
+    }
+    private func taggedInt(_ index: UInt8, _ value: UInt32) -> [UInt8] { tag(index, 0x4) + u32LE(value) }
+    private func subblock(_ index: UInt8, _ payload: [UInt8]) -> [UInt8] {
+        tag(index, 0xC) + u32LE(UInt32(payload.count)) + payload
+    }
+
+    /// Builds a RootTextBlock (type 0x07): the whole `text` as one CRDT run with
+    /// id (1,1), plus a styles map keyed by (author, counter) char ids. The
+    /// first line is keyed by the (0,0) anchor; later lines by the id of the
+    /// newline that opens them.
+    private func v6TextBlock(text: String, styles: [(author: UInt8, counter: UInt64, code: UInt8)]) -> [UInt8] {
+        // One text run holding the entire string, starting at char id (1,1).
+        let utf8 = Array(text.utf8)
+        let valuePayload = varuint(UInt64(utf8.count)) + [1] + utf8
+        var itemInner: [UInt8] = []
+        itemInner += taggedId(2, 1, 1)        // item id
+        itemInner += taggedId(3, 0, 0)        // left id
+        itemInner += taggedId(4, 0, 0)        // right id
+        itemInner += taggedInt(5, 0)          // deleted length
+        itemInner += subblock(6, valuePayload)
+        let itemsInner = subblock(1, varuint(1) + subblock(0, itemInner))
+        let itemsOuter = subblock(1, itemsInner)
+
+        var formatsList: [UInt8] = varuint(UInt64(styles.count))
+        for style in styles {
+            formatsList += [style.author] + varuint(style.counter)  // bare char id
+            formatsList += taggedId(1, 0, 0)                         // timestamp
+            formatsList += subblock(2, [17, style.code])
+        }
+        let formatsOuter = subblock(2, subblock(1, formatsList))
+
+        let content = taggedId(1, 0, 0) + subblock(2, itemsOuter + formatsOuter)
+        return u32LE(UInt32(content.count)) + [0x00, 0x00, 0x01, 0x07] + content
+    }
+
+    func test_parse_extracts_typed_paragraphs_with_styles() throws {
+        var bytes = v6Header()
+        // "Shopping" heading, two checkboxes (one checked), one bullet.
+        let text = "Shopping\nBuy milk\nGot eggs\na bullet"
+        bytes += v6TextBlock(text: text, styles: [
+            (author: 0, counter: 0,  code: ParagraphStyle.heading.rawValue),          // first line
+            (author: 1, counter: 9,  code: ParagraphStyle.checkbox.rawValue),         // "Buy milk"
+            (author: 1, counter: 18, code: ParagraphStyle.checkboxChecked.rawValue),  // "Got eggs"
+            (author: 1, counter: 27, code: ParagraphStyle.bullet.rawValue)            // "a bullet"
+        ])
+
+        let typedText = try RemarkableLinesV6.parse(Data(bytes)).typedText
+        XCTAssertEqual(typedText, [
+            TypedParagraph(style: .heading, text: "Shopping"),
+            TypedParagraph(style: .checkbox, text: "Buy milk"),
+            TypedParagraph(style: .checkboxChecked, text: "Got eggs"),
+            TypedParagraph(style: .bullet, text: "a bullet")
+        ])
+    }
+
+    func test_lines_without_a_style_default_to_plain() throws {
+        var bytes = v6Header()
+        bytes += v6TextBlock(text: "just a line", styles: [])
+        let typedText = try RemarkableLinesV6.parse(Data(bytes)).typedText
+        XCTAssertEqual(typedText, [TypedParagraph(style: .plain, text: "just a line")])
+    }
+
+    func test_parse_returns_strokes_and_typed_text_together() throws {
+        var bytes = v6Header()
+        bytes += v6LineBlock(points: [(1, 2), (3, 4)])
+        bytes += v6TextBlock(text: "Task one", styles: [(author: 0, counter: 0, code: ParagraphStyle.checkbox.rawValue)])
+        let page = try RemarkableLinesV6.parse(Data(bytes))
+        XCTAssertEqual(page.drawing.strokes.count, 1)
+        XCTAssertEqual(page.typedText, [TypedParagraph(style: .checkbox, text: "Task one")])
+    }
+
+    func test_garbage_text_block_yields_no_paragraphs_without_throwing() throws {
+        var bytes = v6Header()
+        let content: [UInt8] = [0x1F, 0x00, 0x00, 0xFF, 0xFF]  // valid block id, then junk
+        bytes += u32LE(UInt32(content.count)) + [0x00, 0x00, 0x01, 0x07] + content
+        let page = try RemarkableLinesV6.parse(Data(bytes))
+        XCTAssertTrue(page.typedText.isEmpty)
     }
 }

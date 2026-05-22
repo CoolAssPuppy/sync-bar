@@ -185,89 +185,17 @@ struct RuleSliderView: View {
 
     // MARK: Notebooks card
 
-    /// Sync the whole folder, or hand-pick notebooks (e.g. "only my journal").
-    /// "Sync every notebook" maps to a nil scope; checking notebooks sets the
-    /// rule's `selectedFileIds`.
     private var notebooksCard: some View {
-        AppCard("Notebooks") {
-            VStack(spacing: 0) {
-                AppSettingRow("Sync every notebook", description: syncsEntireFolder
-                              ? "Every notebook in this folder syncs, including new ones."
-                              : "Only the notebooks you check below sync.") {
-                    Toggle("", isOn: syncAllBinding)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
-                        // Hand-picking needs the loaded document list; until then the
-                        // toggle would write an empty (whole-folder) selection.
-                        .disabled(isLoadingFiles)
-                }
-                if !syncsEntireFolder {
-                    AppRowDivider().padding(.vertical, 10)
-                    notebookChecklist
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var notebookChecklist: some View {
-        if isLoadingFiles {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Loading notebooks…").font(.system(size: 11)).foregroundStyle(theme.muted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else if folderFiles.isEmpty {
-            Text("No notebooks in this folder.")
-                .font(.system(size: 11)).foregroundStyle(theme.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            VStack(spacing: 4) {
-                ForEach(folderFiles) { file in
-                    Button(action: { toggleFile(file, on: !isSelected(file)) }) {
-                        HStack(spacing: 10) {
-                            Image(systemName: isSelected(file) ? "checkmark.square.fill" : "square")
-                                .font(.system(size: 13))
-                                .foregroundStyle(isSelected(file) ? theme.primary : theme.tertiary)
-                            Text(file.name).font(.system(size: 12)).foregroundStyle(theme.foreground).lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text("\(file.pageCount) page\(file.pageCount == 1 ? "" : "s")")
-                                .font(.system(size: 10)).foregroundStyle(theme.muted)
-                        }
-                        .contentShape(Rectangle())
-                        .padding(.vertical, 3)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private var syncsEntireFolder: Bool { rule?.syncsEntireFolder ?? true }
-
-    private var syncAllBinding: Binding<Bool> {
-        Binding(
-            get: { syncsEntireFolder },
-            set: { all in
+        NotebookScopePicker(
+            files: folderFiles,
+            isLoading: isLoadingFiles,
+            selectedFileIds: rule?.selectedFileIds,
+            onChange: { newScope in
                 var copy = ensureRule()
-                // Switching to hand-pick needs a loaded list; with none, stay on
-                // "whole folder" (nil) rather than writing an empty selection.
-                copy.selectedFileIds = (all || folderFiles.isEmpty) ? nil : folderFiles.map(\.id)
+                copy.selectedFileIds = newScope
                 ledger.upsertRule(copy)
             }
         )
-    }
-
-    private func isSelected(_ file: RmFile) -> Bool {
-        rule?.includes(fileId: file.id) ?? true
-    }
-
-    private func toggleFile(_ file: RmFile, on: Bool) {
-        var copy = ensureRule()
-        var ids = Set(copy.selectedFileIds ?? folderFiles.map(\.id))
-        if on { ids.insert(file.id) } else { ids.remove(file.id) }
-        // Persist in folder order so the stored list is stable and readable.
-        copy.selectedFileIds = folderFiles.map(\.id).filter { ids.contains($0) }
-        ledger.upsertRule(copy)
     }
 
     // MARK: Destinations card

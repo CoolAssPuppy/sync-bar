@@ -49,6 +49,9 @@ protocol RemarkableClient: Sendable {
 struct RemarkablePageContent: Sendable {
     var imageData: Data?
     var typedText: [TypedParagraph]
+    /// Whether the typed text should render before the handwriting on this page
+    /// (by vertical position). Defaults to true (typed first).
+    var typedTextFirst: Bool = true
 }
 
 /// Returns the live reMarkable client once a device is paired (a device token

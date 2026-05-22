@@ -226,4 +226,26 @@ final class RemarkableLinesV6Tests: XCTestCase {
         let page = try RemarkableLinesV6.parse(Data(bytes))
         XCTAssertTrue(page.typedText.isEmpty)
     }
+
+    // MARK: Typed-vs-handwriting ordering
+
+    private func page(strokeYs: [CGFloat], typedTextTopY: Double?) -> RemarkablePage {
+        let strokes = strokeYs.isEmpty ? [] : [strokeYs.map { CGPoint(x: 0, y: $0) }]
+        return RemarkablePage(drawing: RemarkableDrawing(strokes: strokes), typedText: [], typedTextTopY: typedTextTopY)
+    }
+
+    func test_typed_text_below_handwriting_orders_handwriting_first() {
+        // Strokes span y -200..0 (center -100); typed box at y 234 is far below.
+        XCTAssertFalse(page(strokeYs: [-200, 0], typedTextTopY: 234).typedTextLeadsHandwriting)
+    }
+
+    func test_typed_text_above_handwriting_orders_typed_first() {
+        // Strokes span y 100..300 (center 200); typed box at y -50 is above them.
+        XCTAssertTrue(page(strokeYs: [100, 300], typedTextTopY: -50).typedTextLeadsHandwriting)
+    }
+
+    func test_ordering_defaults_to_typed_first_without_position_or_strokes() {
+        XCTAssertTrue(page(strokeYs: [], typedTextTopY: 100).typedTextLeadsHandwriting)   // no strokes
+        XCTAssertTrue(page(strokeYs: [0, 100], typedTextTopY: nil).typedTextLeadsHandwriting) // no pos
+    }
 }

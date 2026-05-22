@@ -218,7 +218,8 @@ struct RealRemarkableClient: RemarkableClient {
             return RemarkablePageContent(imageData: nil, typedText: [])
         }
         let imageData = parsed.drawing.isEmpty ? nil : RemarkableRenderer.pngData(for: parsed.drawing)
-        return RemarkablePageContent(imageData: imageData, typedText: parsed.typedText)
+        return RemarkablePageContent(imageData: imageData, typedText: parsed.typedText,
+                                     typedTextFirst: parsed.typedTextLeadsHandwriting)
     }
 
     // MARK: Blob store

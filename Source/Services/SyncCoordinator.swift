@@ -190,15 +190,25 @@ final class SyncCoordinator: ObservableObject {
         for page in pages {
             let content = (try? await remarkable.pageContent(for: page))
                 ?? RemarkablePageContent(imageData: nil, typedText: [])
-            // Typed text first (exact, free); then OCR of any strokes on the page.
-            blocks.append(contentsOf: content.typedText.map(NoteContentBuilder.block(from:)))
-            guard let imageData = content.imageData, !imageData.isEmpty else { continue }
-            do {
-                let result = try await ocr.transcribe(imageData: imageData)
-                blocks.append(contentsOf: NoteContentBuilder.blocks(fromOCRText: result.text))
-                if let mermaid = result.mermaidSource { blocks.append(.mermaid(mermaid)) }
-            } catch {
-                Log.ocr.error("OCR failed for file \(file.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
+            let typedBlocks = content.typedText.map(NoteContentBuilder.block(from:))
+
+            // OCR any strokes on the page (handwriting and diagrams).
+            var ocrBlocks: [NoteBlock] = []
+            if let imageData = content.imageData, !imageData.isEmpty {
+                do {
+                    let result = try await ocr.transcribe(imageData: imageData)
+                    ocrBlocks = NoteContentBuilder.blocks(fromOCRText: result.text)
+                    if let mermaid = result.mermaidSource { ocrBlocks.append(.mermaid(mermaid)) }
+                } catch {
+                    Log.ocr.error("OCR failed for file \(file.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
+                }
+            }
+
+            // Order typed text and handwriting by their position on the page.
+            if content.typedTextFirst {
+                blocks.append(contentsOf: typedBlocks + ocrBlocks)
+            } else {
+                blocks.append(contentsOf: ocrBlocks + typedBlocks)
             }
         }
         return NoteContent(blocks: blocks, provider: ocr.name, model: nil)

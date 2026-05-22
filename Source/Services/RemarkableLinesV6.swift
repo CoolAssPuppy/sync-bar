@@ -50,6 +50,18 @@ struct BinaryReader {
         Float(bitPattern: try readUInt32LE())
     }
 
+    mutating func readUInt64LE() throws -> UInt64 {
+        guard offset + 8 <= bytes.count else { throw ReadError.outOfBounds }
+        defer { offset += 8 }
+        var value: UInt64 = 0
+        for index in 0..<8 { value |= UInt64(bytes[offset + index]) << (8 * index) }
+        return value
+    }
+
+    mutating func readFloat64LE() throws -> Double {
+        Double(bitPattern: try readUInt64LE())
+    }
+
     /// LEB128 unsigned varint, as used for v6 lengths and CRDT ids.
     mutating func readVarUInt() throws -> UInt64 {
         var result: UInt64 = 0
@@ -111,6 +123,20 @@ struct TypedParagraph: Equatable, Sendable {
 struct RemarkablePage: Sendable {
     var drawing: RemarkableDrawing
     var typedText: [TypedParagraph]
+    /// Vertical position of the typed-text box (RootTextBlock `pos_y`), in the
+    /// same coordinate space as the strokes. Used to order typed text against
+    /// handwriting on the same page. `nil` when there's no typed text.
+    var typedTextTopY: Double?
+
+    /// Whether the typed text sits above the handwriting on this page and should
+    /// be emitted first. Compares the text box's top to the strokes' vertical
+    /// center (y increases downward). Defaults to `true` when there's no
+    /// position info or no strokes to compare against.
+    var typedTextLeadsHandwriting: Bool {
+        let ys = drawing.strokes.flatMap { $0 }.map { Double($0.y) }
+        guard let topY = typedTextTopY, let minY = ys.min(), let maxY = ys.max() else { return true }
+        return topY < (minY + maxY) / 2
+    }
 }
 
 enum RemarkableLinesV6 {
@@ -153,6 +179,7 @@ enum RemarkableLinesV6 {
 
         var strokes: [[CGPoint]] = []
         var typedText: [TypedParagraph] = []
+        var typedTextTopY: Double?
         // The body is a sequence of blocks. Each block:
         //   uint32 contentLength | u8 unknown | u8 minVersion | u8 currentVersion
         //   | u8 blockType | <contentLength bytes of content>
@@ -176,14 +203,16 @@ enum RemarkableLinesV6 {
                     strokes.append(points)
                 }
             case 0x07:
-                if let paragraphs = try? parseRootText(in: content) {
-                    typedText.append(contentsOf: paragraphs)
+                if let parsed = try? parseRootText(in: content) {
+                    typedText.append(contentsOf: parsed.paragraphs)
+                    if typedTextTopY == nil { typedTextTopY = parsed.topY }
                 }
             default:
                 break
             }
         }
-        return RemarkablePage(drawing: RemarkableDrawing(strokes: strokes), typedText: typedText)
+        return RemarkablePage(drawing: RemarkableDrawing(strokes: strokes),
+                              typedText: typedText, typedTextTopY: typedTextTopY)
     }
 
     /// Reads a v6 tag: a varint whose high bits are the field index and whose
@@ -295,10 +324,11 @@ enum RemarkableLinesV6 {
         if end > reader.offset { try reader.skip(end - reader.offset) }
     }
 
-    /// Decodes a RootTextBlock into ordered paragraphs with their styles. The
-    /// layout (block id, nested subblocks of text items and formats, trailing
-    /// position/width) mirrors rmscene's `RootTextBlock.from_stream`.
-    private static func parseRootText(in content: [UInt8]) throws -> [TypedParagraph] {
+    /// Decodes a RootTextBlock into ordered paragraphs with their styles, plus
+    /// the text box's `pos_y`. The layout (block id, nested subblocks of text
+    /// items and formats, trailing position/width) mirrors rmscene's
+    /// `RootTextBlock.from_stream`.
+    private static func parseRootText(in content: [UInt8]) throws -> (paragraphs: [TypedParagraph], topY: Double?) {
         var reader = BinaryReader(bytes: content)
         _ = try readTaggedId(&reader)             // block_id (CrdtId(0,0))
         let outerEnd = try readSubblock(&reader)  // subblock(2): items + formats
@@ -307,7 +337,7 @@ enum RemarkableLinesV6 {
         let itemsOuterEnd = try readSubblock(&reader)
         _ = try readSubblock(&reader)             // inner items subblock
         let itemCount = try reader.readVarUInt()
-        guard itemCount <= UInt64(content.count) else { return [] }
+        guard itemCount <= UInt64(content.count) else { return (paragraphs: [], topY: nil) }
 
         var items: [(id: CrdtId, value: String)] = []
         for _ in 0..<itemCount {
@@ -354,7 +384,16 @@ enum RemarkableLinesV6 {
             }
         }
 
-        return reconstructParagraphs(items: items, styles: styles)
+        // Trailing subblock(3) holds pos_x, pos_y as float64; we only need pos_y
+        // to vertically order this text against handwriting on the same page.
+        try advance(&reader, to: outerEnd)
+        var topY: Double?
+        if reader.offset < content.count, (try? readSubblock(&reader)) != nil {
+            _ = try? reader.readFloat64LE()       // pos_x
+            topY = try? reader.readFloat64LE()    // pos_y
+        }
+
+        return (paragraphs: reconstructParagraphs(items: items, styles: styles), topY: topY)
     }
 
     /// Rebuilds lines from CRDT text runs and the per-line style map. Each run's

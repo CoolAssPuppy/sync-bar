@@ -209,6 +209,55 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    // MARK: source scope (sync a whole folder, or only specific notebooks)
+
+    func test_rule_scoped_to_specific_notebooks_syncs_only_those() async {
+        let ledger = Ledger.shared
+        AppSettings.shared.ocrProvider = .vision
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // Folder has three documents; scope the rule to just the middle one.
+        var rule = SyncRule.new(notebookId: "nb-scope", notebookName: "Personal")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        rule.selectedFileIds = ["file-1"]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 1, "only the one selected notebook should sync")
+
+        let written = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let names = written.map { $0.lastPathComponent }
+        XCTAssertTrue(names.contains { $0.contains("note1") }, "expected note1 to be written, got: \(names)")
+        XCTAssertFalse(names.contains { $0.contains("note0") || $0.contains("note2") }, "unselected notes must not sync: \(names)")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_manual_sync_with_selected_notebooks_all_missing_records_skip() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule.new(notebookId: "nb-scope-gone", notebookName: "Personal")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        rule.selectedFileIds = ["file-deleted"]   // no such document in the folder
+        ledger.upsertRule(rule)
+        ledger.clearEvents()
+
+        let coordinator = SyncCoordinator(remarkable: ScriptedRemarkableClient(files: 3))
+        coordinator.syncNow(ruleId: rule.id)
+
+        let skip = await waitForEvent { $0.eventType == .cycleSkipped }
+        XCTAssertEqual(skip?.ruleName, "Nothing to sync: the selected notebooks in Personal weren't found.")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     // MARK: skip reasons (a manual "Sync now" must never be a silent no-op)
 
     func test_manual_sync_of_rule_with_no_destinations_names_the_folder() async {

@@ -180,10 +180,18 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
+        // Narrow to the documents this rule is scoped to: the whole folder, or a
+        // hand-picked set (e.g. "only my journal").
+        let scopedFiles = files.filter { rule.includes(fileId: $0.id) }
+        guard !scopedFiles.isEmpty else {
+            if explainSkips { recordSkip(.selectedNotesMissing(folder: folderName), ruleId: rule.id) }
+            return
+        }
+
         // Skip OCR for files that no enabled binding will accept (e.g. a
         // tag-filtered Linear destination that excludes untagged notes) so we
         // never pay the OCR provider for output nothing will consume.
-        let neededFiles = files.filter { file in bindings.contains { $0.configuration.accepts(fileTags: file.tags) } }
+        let neededFiles = scopedFiles.filter { file in bindings.contains { $0.configuration.accepts(fileTags: file.tags) } }
         guard !neededFiles.isEmpty else {
             if explainSkips { recordSkip(.allNotesFilteredOut(folder: folderName), ruleId: rule.id) }
             return
@@ -348,6 +356,7 @@ final class SyncCoordinator: ObservableObject {
         case noConnectedFolders
         case ruleDisabled(folder: String)
         case folderEmpty(folder: String)
+        case selectedNotesMissing(folder: String)
         case noEnabledDestinations(folder: String)
         case allNotesFilteredOut(folder: String)
 
@@ -363,6 +372,8 @@ final class SyncCoordinator: ObservableObject {
                 return "Skipped: syncing for \(folder) is turned off."
             case .folderEmpty(let folder):
                 return "Nothing to sync: \(folder) has no documents."
+            case .selectedNotesMissing(let folder):
+                return "Nothing to sync: the selected notebooks in \(folder) weren't found."
             case .noEnabledDestinations(let folder):
                 return "Nothing to sync: \(folder) has no enabled destinations."
             case .allNotesFilteredOut(let folder):
@@ -375,6 +386,7 @@ final class SyncCoordinator: ObservableObject {
             switch self {
             case .ruleDisabled(let folder),
                  .folderEmpty(let folder),
+                 .selectedNotesMissing(let folder),
                  .noEnabledDestinations(let folder),
                  .allNotesFilteredOut(let folder):
                 return folder

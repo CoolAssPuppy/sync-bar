@@ -163,6 +163,11 @@ struct SyncRule: Codable, Equatable, Identifiable, Hashable {
     var enabled: Bool
     var rmNotebookId: String
     var rmNotebookName: String
+    /// Which documents in the folder to sync. `nil`/empty means the whole folder
+    /// (current and future documents); a non-empty set scopes the rule to just
+    /// those `RmFile` ids (e.g. "sync only my journal"). Optional so rules
+    /// persisted before this field still decode (missing key -> whole folder).
+    var selectedFileIds: [String]? = nil
     var titleStrategy: TitleStrategy
     var titleTemplate: String?
     var pageOrder: PageOrder
@@ -190,6 +195,18 @@ struct SyncRule: Codable, Equatable, Identifiable, Hashable {
             updatedAt: now,
             destinations: []
         )
+    }
+
+    /// Whether this rule syncs every document in the folder (vs a hand-picked set).
+    var syncsEntireFolder: Bool {
+        (selectedFileIds ?? []).isEmpty
+    }
+
+    /// Whether a given document is in this rule's scope. The whole folder is in
+    /// scope when no specific documents are selected.
+    func includes(fileId: String) -> Bool {
+        guard let ids = selectedFileIds, !ids.isEmpty else { return true }
+        return ids.contains(fileId)
     }
 
     /// Aggregated rollup across all destination bindings on this rule.

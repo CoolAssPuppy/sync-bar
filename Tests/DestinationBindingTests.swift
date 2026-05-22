@@ -53,6 +53,33 @@ final class DestinationBindingTests: XCTestCase {
         XCTAssertEqual(rule.aggregateLastRunPagesSynced, 5)
     }
 
+    func test_rule_scope_includes_whole_folder_by_default() {
+        let rule = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
+        XCTAssertTrue(rule.syncsEntireFolder)
+        XCTAssertTrue(rule.includes(fileId: "any-document"))
+    }
+
+    func test_rule_scoped_to_selected_notebooks_includes_only_those() {
+        var rule = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
+        rule.selectedFileIds = ["journal"]
+        XCTAssertFalse(rule.syncsEntireFolder)
+        XCTAssertTrue(rule.includes(fileId: "journal"))
+        XCTAssertFalse(rule.includes(fileId: "shopping-list"))
+    }
+
+    func test_rule_persisted_without_scope_field_decodes_as_whole_folder() throws {
+        // A rule saved before per-notebook scoping existed has no selectedFileIds key.
+        let legacyJSON = Data("""
+        {"id":"r1","enabled":true,"rmNotebookId":"nb-1","rmNotebookName":"Personal",
+         "titleStrategy":"firstLineOfOcr","pageOrder":"chronological","ocrMode":"all",
+         "savePdfAttachment":true,"createdAt":0,"updatedAt":0,"destinations":[]}
+        """.utf8)
+        let rule = try JSONDecoder().decode(SyncRule.self, from: legacyJSON)
+        XCTAssertNil(rule.selectedFileIds)
+        XCTAssertTrue(rule.syncsEntireFolder)
+        XCTAssertTrue(rule.includes(fileId: "anything"))
+    }
+
     func test_linear_tag_filter_accepts_only_matching_notes() {
         let filtered = DestinationConfiguration.linear(LinearDestinationConfig(
             workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,

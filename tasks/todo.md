@@ -97,10 +97,17 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
       folder-anchored rule model; cross-folder selection is out of scope.
 
 ### Phase 4 — both-as-peers + guided empty states
-- [ ] 8. Destination-first: destination detail shows "connect a source" empty state ->
-      source picker -> creates/extends a connection (find-or-create rule by source scope).
-- [ ] 9. Guided empty states at each level: no reMarkable, no destinations, destination
-      with no connections, source with nothing routed. Each points to the next action.
+- [x] 8. Destination-first connect: each destination detail has a "Connect a folder"
+      action + actionable empty state ("Nothing flows here yet") -> FolderPickerSheet ->
+      Ledger.connect(folder:configuration:) finds-or-creates the folder's rule and
+      attaches the binding, skipping duplicates and folders already connected here.
+      Wired for all five destination types via shared defaultConfiguration accessors.
+- [x] 9. Guided empty states: destination-with-no-connections is now an actionable CTA;
+      no-reMarkable (pairPrompt) and no-destinations (sidebar/AddDestinationSheet) already
+      existed. Commits e7d9f5e + 907dacc + 1c5b219; 139 green.
+      Known limitation: OAuth destinations (esp. Notion) connect at a blank default that
+      must be refined via the folder's rule-sheet Edit; the destination detail's sync
+      rows are read-only (same as the pre-existing source-first quick-add).
 
 ### Phase 5 — structural cleanup (done first, per user, to build features on a clean base)
 - [x] 11. Rename `RmNotebook` -> `RmFolder` + the folder cache API throughout. Done in
@@ -126,6 +133,28 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
 - Phase 0 and 1 deliver user-visible fixes immediately and are independent of 2–4.
 - Keep strict-concurrency clean; trust `xcodebuild`/`make test` over SourceKit.
 
-## Review
+## Review (2026-05-22)
 
-(to be filled in as commits land)
+All phases landed. Each shipped as: implementation -> build + `make test` -> commit ->
+`/simplify` (recall-mode review, fixes committed) -> `/clean-and-refactor` (committed).
+Test count grew 122 -> 139, all green; build green throughout.
+
+- Phase 5 (foundation): renamed RmNotebook -> RmFolder + folder cache API; decided
+  against unifying the five destination records (scales fine; localized refactor later
+  if type count grows).
+- Phase 0: a manual "Sync now" now writes a visible cycleSkipped event with the reason
+  (no account, paused, no connected folders, rule disabled, folder empty, selection
+  missing, all-tag-filtered); scheduled ticks stay quiet. Fixes the "spins then nothing"
+  report.
+- Phase 1: creating a Markdown destination requires choosing the folder and captures the
+  default config; connections inherit it; multiple Markdown folders supported. Fixes
+  "can't choose where .md files go".
+- Phase 2: SyncRule.selectedFileIds scopes a rule to specific notebooks (no migration).
+- Phase 3: NotebookScopePicker in the rule sheet — "sync only my journal" works.
+- Phase 4: destination-first "Connect a folder" + actionable empty states; both flows
+  converge on Ledger.connect.
+
+Follow-ups deferred (not blocking): "already up to date" friendly message; event-log
+decode resilience on downgrade; skip-event dedup; per-connection editing of OAuth
+destinations from the destination detail (today via the rule sheet). Destination-record
+unification remains intentionally unbuilt.

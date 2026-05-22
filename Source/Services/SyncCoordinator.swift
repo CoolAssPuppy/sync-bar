@@ -131,8 +131,11 @@ final class SyncCoordinator: ObservableObject {
         let explainSkips = (trigger == .manual)
 
         guard ledger.remarkableAccount != nil else {
-            if explainSkips { recordSkip(.noAccountPaired) }
-            else { Log.sync.info("Skipping scheduled cycle: no reMarkable account paired.") }
+            if explainSkips {
+                recordSkip(.noAccountPaired)
+            } else {
+                Log.sync.info("Skipping scheduled cycle: no reMarkable account paired.")
+            }
             return
         }
         guard !self.settings.pauseSyncing else {

@@ -65,34 +65,89 @@ struct NotionDestinationClient: DestinationClient {
         }
     }
 
-    private static func buildChildren(payload: DestinationPayload) -> [[String: Any]] {
+    /// Builds the page body. Renders structured blocks natively (headings,
+    /// bulleted lists, to-do checkboxes, Mermaid code); falls back to splitting
+    /// `body` into paragraphs for any payload that has no blocks.
+    static func buildChildren(payload: DestinationPayload) -> [[String: Any]] {
+        guard !payload.blocks.isEmpty else { return bodyParagraphs(payload: payload) }
+        return payload.blocks.map(notionBlock(for:))
+    }
+
+    /// Legacy path: split the flattened body on blank lines into paragraphs,
+    /// then append any Mermaid diagram as a code block.
+    private static func bodyParagraphs(payload: DestinationPayload) -> [[String: Any]] {
         var children: [[String: Any]] = []
         for paragraph in payload.body.components(separatedBy: "\n\n") where !paragraph.isEmpty {
             children.append([
                 "object": "block",
                 "type": "paragraph",
-                "paragraph": ["rich_text": [["type": "text", "text": ["content": paragraph]]]]
+                "paragraph": ["rich_text": richText(paragraph)]
             ])
         }
         if let mermaid = payload.mermaidSource {
-            children.append([
-                "object": "block",
-                "type": "code",
-                "code": [
-                    "language": "mermaid",
-                    "rich_text": [["type": "text", "text": ["content": mermaid]]]
-                ]
-            ])
+            children.append(mermaidBlock(mermaid))
         }
         return children
+    }
+
+    /// Maps one `NoteBlock` to its Notion block JSON.
+    private static func notionBlock(for block: NoteBlock) -> [String: Any] {
+        switch block {
+        case .heading(let text):
+            return ["object": "block", "type": "heading_2",
+                    "heading_2": ["rich_text": richText(text)]]
+        case .paragraph(let text):
+            return ["object": "block", "type": "paragraph",
+                    "paragraph": ["rich_text": richText(text)]]
+        case .bullet(let text):
+            return ["object": "block", "type": "bulleted_list_item",
+                    "bulleted_list_item": ["rich_text": richText(text)]]
+        case .checkbox(let text, let checked):
+            return ["object": "block", "type": "to_do",
+                    "to_do": ["rich_text": richText(text), "checked": checked]]
+        case .mermaid(let source):
+            return mermaidBlock(source)
+        }
+    }
+
+    private static func mermaidBlock(_ source: String) -> [String: Any] {
+        ["object": "block", "type": "code",
+         "code": ["language": "mermaid", "rich_text": richText(source)]]
+    }
+
+    /// Notion caps a single rich_text content string at 2000 characters, so
+    /// long text is split across several text objects in the same block.
+    private static func richText(_ text: String) -> [[String: Any]] {
+        guard !text.isEmpty else { return [] }
+        let limit = 2000
+        var objects: [[String: Any]] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            let end = text.index(index, offsetBy: limit, limitedBy: text.endIndex) ?? text.endIndex
+            objects.append(["type": "text", "text": ["content": String(text[index..<end])]])
+            index = end
+        }
+        return objects
+    }
+
+    /// Splits blocks into batches of at most `size`, since Notion accepts at
+    /// most 100 children per create or append request.
+    static func chunked(_ blocks: [[String: Any]], size: Int = 100) -> [[[String: Any]]] {
+        guard size > 0, blocks.count > size else { return blocks.isEmpty ? [] : [blocks] }
+        return stride(from: 0, to: blocks.count, by: size).map {
+            Array(blocks[$0..<min($0 + size, blocks.count)])
+        }
     }
 
     private func createPage(token: String, config: NotionDestinationConfig, properties: [String: Any], children: [[String: Any]]) async throws -> DestinationWriteResult {
         let parent: [String: Any] = config.destinationType == .database
             ? ["database_id": config.destinationId]
             : ["page_id": config.destinationId]
+        // Notion accepts at most 100 children in the create call; the page is
+        // created with the first batch and the rest are appended afterwards.
+        let initial = Array(children.prefix(100))
         var request = try Self.notionRequest(url: "https://api.notion.com/v1/pages", method: "POST", token: token)
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["parent": parent, "properties": properties, "children": children])
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["parent": parent, "properties": properties, "children": initial])
 
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -100,6 +155,9 @@ struct NotionDestinationClient: DestinationClient {
         }
         struct Page: Decodable { let id: String; let url: String }
         let parsed = try JSONDecoder().decode(Page.self, from: data)
+        if children.count > 100 {
+            try await appendChildren(token: token, pageId: parsed.id, children: Array(children.dropFirst(100)))
+        }
         return DestinationWriteResult(externalId: parsed.id, externalURL: URL(string: parsed.url), notes: nil)
     }
 
@@ -139,12 +197,18 @@ struct NotionDestinationClient: DestinationClient {
             }
         }
 
-        guard !children.isEmpty else { return }
-        var appendRequest = try Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children", method: "PATCH", token: token)
-        appendRequest.httpBody = try JSONSerialization.data(withJSONObject: ["children": children])
-        let (appendData, appendResponse) = try await URLSession.shared.data(for: appendRequest)
-        if let http = appendResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw NotionError.from(status: http.statusCode, data: appendData, context: "append page blocks")
+        try await appendChildren(token: token, pageId: pageId, children: children)
+    }
+
+    /// Appends blocks to a page in batches of 100 (Notion's per-request cap).
+    private func appendChildren(token: String, pageId: String, children: [[String: Any]]) async throws {
+        for batch in Self.chunked(children) {
+            var request = try Self.notionRequest(url: "https://api.notion.com/v1/blocks/\(pageId)/children", method: "PATCH", token: token)
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["children": batch])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw NotionError.from(status: http.statusCode, data: data, context: "append page blocks")
+            }
         }
     }
 

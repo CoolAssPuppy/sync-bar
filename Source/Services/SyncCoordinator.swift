@@ -371,13 +371,13 @@ final class SyncCoordinator: ObservableObject {
             case .ruleDisabled(let folder):
                 return "Skipped: syncing for \(folder) is turned off."
             case .folderEmpty(let folder):
-                return "Nothing to sync: \(folder) has no documents."
+                return "Nothing to sync: \(folder) has no notebooks."
             case .selectedNotesMissing(let folder):
                 return "Nothing to sync: the selected notebooks in \(folder) weren't found."
             case .noEnabledDestinations(let folder):
                 return "Nothing to sync: \(folder) has no enabled destinations."
             case .allNotesFilteredOut(let folder):
-                return "Nothing to sync: every document in \(folder) was excluded by a destination's tag filter."
+                return "Nothing to sync: every notebook in \(folder) was excluded by a destination's tag filter."
             }
         }
 

@@ -330,7 +330,7 @@ final class SyncCoordinatorTests: XCTestCase {
         coordinator.syncNow(ruleId: rule.id)
 
         let skip = await waitForEvent { $0.eventType == .cycleSkipped }
-        XCTAssertEqual(skip?.ruleName, "Nothing to sync: Journal has no documents.")
+        XCTAssertEqual(skip?.ruleName, "Nothing to sync: Journal has no notebooks.")
         XCTAssertEqual(skip?.rmNotebookName, "Journal")
 
         ledger.deleteRule(id: rule.id)
@@ -356,7 +356,7 @@ final class SyncCoordinatorTests: XCTestCase {
         let skip = await waitForEvent { $0.eventType == .cycleSkipped }
         XCTAssertEqual(
             skip?.ruleName,
-            "Nothing to sync: every document in Journal was excluded by a destination's tag filter."
+            "Nothing to sync: every notebook in Journal was excluded by a destination's tag filter."
         )
 
         ledger.deleteRule(id: rule.id)

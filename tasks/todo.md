@@ -85,10 +85,19 @@ B. `SyncRule.rmNotebookId/Name` -> `source: SourceScope` where
 - [ ] 9. Guided empty states at each level: no reMarkable, no destinations, destination
       with no connections, source with nothing routed. Each points to the next action.
 
-### Phase 5 — deferred cleanup (separate ADR, do NOT block fixes on this)
-- [ ] 10. Unify the five destination arrays into one `Destination` type.
-- [ ] 11. Rename `RmNotebook` -> `RmFolder` throughout (removes the naming confusion
-      that made per-notebook sync look like it should already exist).
+### Phase 5 — structural cleanup (done first, per user, to build features on a clean base)
+- [x] 11. Rename `RmNotebook` -> `RmFolder` + the folder cache API throughout. Done in
+      commit 3b8c65f; folder cache key string + UI copy preserved; 122 tests green.
+      (`rmNotebookId/Name` persisted fields and `RmPage.notebookId` left for later.)
+- [~] 10. Unify the five destination arrays: DECLINED 2026-05-22. Not worth the risk.
+      Scaling check: 30 destination *instances* is fine (tiny arrays, linear lookups,
+      no quadratic). 30 destination *types* is also fine at runtime but costs ~13 files
+      of per-type boilerplate each (the five parallel `Ledger` arrays are the offender).
+      Switches are exhaustive (one `default:` in AddDestinationSheet), so the compiler
+      catches every spot — no silent runtime breakage. If the type count ever justifies
+      it, collapse only the five `Ledger` arrays into one generic kind-keyed store; that
+      is a localized refactor, not a rewrite. Phase 1's default-config home will be a
+      small per-destination-id side store, not a unification.
 
 ## Notes / risks
 

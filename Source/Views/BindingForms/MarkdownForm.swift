@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AppKit
 
 struct MarkdownForm: View {
     @Binding var binding: MarkdownFormState
@@ -57,13 +56,6 @@ struct MarkdownForm: View {
     }
 
     private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.title = "Pick a folder for Markdown notes"
-        if panel.runModal() == .OK, let url = panel.url {
-            binding.folderPath = url.path
-        }
+        if let path = FolderChooser.choose() { binding.folderPath = path }
     }
 }

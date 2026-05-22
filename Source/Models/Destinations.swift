@@ -277,12 +277,30 @@ struct GoogleAccount: Codable, Equatable, Identifiable, Hashable {
     var connectedAt: Date
 }
 
-/// Local Markdown sync target.
+/// A local Markdown destination: a folder plus the default write settings every
+/// connection to it inherits (and may override per connection). The folder is
+/// chosen when the destination is created, so a connection never starts blank.
 struct MarkdownTarget: Codable, Equatable, Identifiable, Hashable {
     var id: String
     var displayName: String
     var folderPath: String
     var connectedAt: Date
+    /// Default file-name template. Optional so targets persisted before this
+    /// field existed still decode (missing key -> the standard default below).
+    var fileNameTemplate: String? = nil
+    /// Default "include YAML frontmatter" setting, optional for the same reason.
+    var includeFrontmatter: Bool? = nil
+
+    static let defaultFileNameTemplate = "{notebook}-page-{page_n}"
+
+    /// The full configuration a new connection to this destination inherits.
+    var defaultConfiguration: MarkdownFolderDestinationConfig {
+        MarkdownFolderDestinationConfig(
+            folderPath: folderPath,
+            fileNameTemplate: fileNameTemplate ?? Self.defaultFileNameTemplate,
+            includeFrontmatter: includeFrontmatter ?? true
+        )
+    }
 }
 
 /// Apple Notes target. There's no "account" per se - the user is whoever's

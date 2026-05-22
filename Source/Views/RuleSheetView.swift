@@ -255,9 +255,10 @@ struct RuleSliderView: View {
             })
         }
         for target in ledger.markdownTargets {
-            items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown Files") {
-                .markdownFolder(MarkdownFolderDestinationConfig(folderPath: target.folderPath,
-                    fileNameTemplate: "{notebook}-page-{page_n}", includeFrontmatter: true))
+            // Inherit the destination's default config (folder + template +
+            // frontmatter), chosen when the destination was created.
+            items.append(ConfiguredDestination(id: "md-\(target.id)", kind: .markdownFolder, label: "Markdown · \(target.displayName)") {
+                .markdownFolder(target.defaultConfiguration)
             })
         }
         return items

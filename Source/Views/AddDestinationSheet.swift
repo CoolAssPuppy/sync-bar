@@ -20,6 +20,12 @@ struct AddDestinationSheet: View {
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
 
+    // Default config for a new Markdown destination, chosen here at creation so a
+    // connection to it never starts with a blank folder.
+    @State private var markdownFolderPath: String = ""
+    @State private var markdownTemplate: String = MarkdownTarget.defaultFileNameTemplate
+    @State private var markdownFrontmatter: Bool = true
+
     var body: some View {
         let theme = themeStore.palette
         return VStack(spacing: 0) {
@@ -169,11 +175,34 @@ struct AddDestinationSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("""
                 Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, \
-                anything. You'll choose the destination folder when you set up a sync for a \
-                reMarkable folder.
+                anything. Choose the folder these notes land in; a sync you set up later starts \
+                from these defaults and you can change them per folder.
                 """)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+
+            AppSettingRow("Folder", description: "Where the .md files land.") {
+                HStack(spacing: 6) {
+                    Text(markdownFolderPath.isEmpty ? "Not chosen" : markdownFolderPath)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 220, alignment: .leading)
+                    AppSecondaryButton(title: "Choose…", systemImage: "folder") {
+                        if let path = FolderChooser.choose() { markdownFolderPath = path }
+                    }
+                }
+            }
+            AppSettingRow("File name template", description: "Tokens: {notebook}, {page_n}, {date}, {title}") {
+                TextField(MarkdownTarget.defaultFileNameTemplate, text: $markdownTemplate)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 240)
+            }
+            AppSettingRow("Include YAML frontmatter", description: nil) {
+                Toggle("", isOn: $markdownFrontmatter)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
+            }
         }
     }
 
@@ -225,7 +254,7 @@ struct AddDestinationSheet: View {
         case .linear:         return AuthSecrets.isLinearConfigured && !isConnecting
         case .googleDocs:     return AuthSecrets.isGoogleConfigured && !isConnecting
         case .appleNotes:     return true
-        case .markdownFolder: return true
+        case .markdownFolder: return !markdownFolderPath.isEmpty
         }
     }
 
@@ -286,17 +315,19 @@ struct AddDestinationSheet: View {
             }
             isPresented = false
         case .markdownFolder:
-            // The destination folder is chosen per reMarkable-folder binding, so
-            // the target is just a marker that Markdown output is available.
-            if ledger.markdownTargets.isEmpty {
-                ledger.upsertMarkdownTarget(MarkdownTarget(
-                    id: "md-" + UUID().uuidString.prefix(8).lowercased(),
-                    displayName: "Markdown Files",
-                    folderPath: "",
-                    connectedAt: Date()
-                ))
-                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
-            }
+            // The folder (and its default write settings) are chosen here, so a
+            // connection to this destination starts from a real folder, never
+            // blank. Multiple Markdown folders are allowed (e.g. journal vs work).
+            let folderName = (markdownFolderPath as NSString).lastPathComponent
+            ledger.upsertMarkdownTarget(MarkdownTarget(
+                id: "md-" + UUID().uuidString.prefix(8).lowercased(),
+                displayName: folderName.isEmpty ? "Markdown Files" : folderName,
+                folderPath: markdownFolderPath,
+                connectedAt: Date(),
+                fileNameTemplate: markdownTemplate,
+                includeFrontmatter: markdownFrontmatter
+            ))
+            Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
             isPresented = false
         }
     }

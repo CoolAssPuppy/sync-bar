@@ -40,25 +40,14 @@ struct GoogleDocsDestinationClient: DestinationClient {
 
     private func rewriteDoc(token: String, docId: String, payload: DestinationPayload) async throws -> DestinationWriteResult {
         let endIndex = try await documentEndIndex(token: token, docId: docId)
-        var requests: [[String: Any]] = []
         // The body always ends in a newline at endIndex-1 that can't be deleted;
-        // clear everything before it, then insert the fresh transcript at the top.
+        // clear everything before it, then insert the fresh content at the top.
+        var requests: [[String: Any]] = []
         if endIndex > 2 {
             requests.append(["deleteContentRange": ["range": ["startIndex": 1, "endIndex": endIndex - 1]]])
         }
-        requests.append(["insertText": ["text": bodyText(payload), "location": ["index": 1]]])
-
-        guard let url = URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate") else {
-            throw DestinationError.network("Could not build the Google Docs update URL.")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["requests": requests])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try Self.validate(response: response, data: data)
-
+        requests.append(contentsOf: Self.contentRequests(payload: payload, blocks: payload.blocks, startIndex: 1))
+        try await batchUpdate(token: token, docId: docId, requests: requests)
         try await renameDocument(token: token, docId: docId, name: payload.title)
         return result(for: docId)
     }
@@ -100,7 +89,8 @@ struct GoogleDocsDestinationClient: DestinationClient {
 
     private func createDocPerPage(token: String, config: GoogleDocsDestinationConfig, payload: DestinationPayload) async throws -> DestinationWriteResult {
         let docId = try await createDocument(token: token, name: payload.title, folderId: config.folderId)
-        try await insertText(token: token, docId: docId, text: bodyText(payload), atEnd: false)
+        try await batchUpdate(token: token, docId: docId,
+                              requests: Self.contentRequests(payload: payload, blocks: payload.blocks, startIndex: 1))
         return result(for: docId)
     }
 
@@ -114,8 +104,14 @@ struct GoogleDocsDestinationClient: DestinationClient {
         } else {
             docId = try await createDocument(token: token, name: docName, folderId: config.folderId)
         }
-        let section = "\n\n\(payload.title)\n\(bodyText(payload))"
-        try await insertText(token: token, docId: docId, text: section, atEnd: true)
+        // Insert before the document's final newline, with the note title as a
+        // heading so successive notes stay visually separated.
+        let endIndex = try await documentEndIndex(token: token, docId: docId)
+        let insertAt = max(1, endIndex - 1)
+        let sectionBlocks = [NoteBlock.heading(payload.title)] + payload.blocks
+        try await batchUpdate(token: token, docId: docId,
+                              requests: Self.contentRequests(payload: payload, blocks: sectionBlocks,
+                                                             startIndex: insertAt, leadingNewlines: 1))
         return result(for: docId)
     }
 
@@ -158,11 +154,8 @@ struct GoogleDocsDestinationClient: DestinationClient {
         return (try? JSONDecoder().decode(FileList.self, from: data))?.files.first?.id
     }
 
-    private func insertText(token: String, docId: String, text: String, atEnd: Bool) async throws {
-        let location: [String: Any] = atEnd ? ["endOfSegmentLocation": [:]] : ["location": ["index": 1]]
-        var insert: [String: Any] = ["text": text]
-        for (key, value) in location { insert[key] = value }
-
+    private func batchUpdate(token: String, docId: String, requests: [[String: Any]]) async throws {
+        guard !requests.isEmpty else { return }
         guard let url = URL(string: "https://docs.googleapis.com/v1/documents/\(docId):batchUpdate") else {
             throw DestinationError.network("Could not build the Google Docs update URL.")
         }
@@ -170,12 +163,90 @@ struct GoogleDocsDestinationClient: DestinationClient {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["requests": [["insertText": insert]]])
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["requests": requests])
         let (data, response) = try await URLSession.shared.data(for: request)
         try Self.validate(response: response, data: data)
     }
 
-    private func bodyText(_ payload: DestinationPayload) -> String {
+    // MARK: Content -> batchUpdate requests
+
+    /// Builds the batchUpdate requests for a payload's content. Uses the
+    /// structured `blocks` when present (native headings, bullets, and
+    /// checkboxes); otherwise inserts the flattened text.
+    static func contentRequests(payload: DestinationPayload, blocks: [NoteBlock],
+                                startIndex: Int, leadingNewlines: Int = 0) -> [[String: Any]] {
+        guard !blocks.isEmpty else {
+            let text = String(repeating: "\n", count: leadingNewlines) + flattenedText(payload)
+            guard !text.isEmpty else { return [] }
+            return [["insertText": ["text": text, "location": ["index": startIndex]]]]
+        }
+        return batchRequests(blocks: blocks, startIndex: startIndex, leadingNewlines: leadingNewlines)
+    }
+
+    /// Inserts the blocks as text in one request, then applies native paragraph
+    /// formatting over computed ranges: headings as HEADING_2, bullets and
+    /// checkboxes via bullet presets, and a strikethrough over completed items
+    /// (the Docs API can't pre-tick a checkbox, so a strike mirrors how
+    /// reMarkable shows a checked item). Indices are UTF-16 offsets from the
+    /// single insert, so no request shifts another's range.
+    static func batchRequests(blocks: [NoteBlock], startIndex: Int, leadingNewlines: Int = 0) -> [[String: Any]] {
+        var text = String(repeating: "\n", count: leadingNewlines)
+        var cursor = startIndex + leadingNewlines
+        var formatting: [[String: Any]] = []
+
+        for block in blocks {
+            let line = lineText(for: block)
+            let length = line.utf16.count
+            let paragraphRange: [String: Any] = ["startIndex": cursor, "endIndex": cursor + length + 1]
+            switch block {
+            case .heading:
+                formatting.append(["updateParagraphStyle": [
+                    "range": paragraphRange,
+                    "paragraphStyle": ["namedStyleType": "HEADING_2"],
+                    "fields": "namedStyleType"
+                ]])
+            case .bullet:
+                formatting.append(["createParagraphBullets": [
+                    "range": paragraphRange, "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+                ]])
+            case .checkbox(_, let checked):
+                formatting.append(["createParagraphBullets": [
+                    "range": paragraphRange, "bulletPreset": "BULLET_CHECKBOX"
+                ]])
+                if checked, length > 0 {
+                    formatting.append(["updateTextStyle": [
+                        "range": ["startIndex": cursor, "endIndex": cursor + length],
+                        "textStyle": ["strikethrough": true],
+                        "fields": "strikethrough"
+                    ]])
+                }
+            case .paragraph, .mermaid:
+                break
+            }
+            text += line + "\n"
+            cursor += length + 1
+        }
+
+        var requests: [[String: Any]] = [["insertText": ["text": text, "location": ["index": startIndex]]]]
+        requests.append(contentsOf: formatting)
+        return requests
+    }
+
+    /// The single-paragraph text for a block (the checkbox/bullet glyph is a
+    /// paragraph property, not text). Mermaid is labelled, since Docs has no
+    /// diagram rendering.
+    private static func lineText(for block: NoteBlock) -> String {
+        switch block {
+        case .heading(let text), .paragraph(let text), .bullet(let text):
+            return text
+        case .checkbox(let text, _):
+            return text
+        case .mermaid(let source):
+            return "[Mermaid diagram]\n\(source)"
+        }
+    }
+
+    private static func flattenedText(_ payload: DestinationPayload) -> String {
         payload.body + (payload.mermaidSource.map { "\n\n[Mermaid diagram]\n\($0)" } ?? "")
     }
 

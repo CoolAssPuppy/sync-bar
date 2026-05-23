@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 0.4.0</title>
+      <pubDate>Sat, 23 May 2026 05:41:53 +0000</pubDate>
+      <sparkle:version>6</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Better onboarding flow.</li><li>Removed keychain prompt. You will need to re-setup your reMarkable and your destinations.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.4.0.dmg"
+        sparkle:edSignature="rnnpYuLyMOcVIzA+tzYQ5oL4Hnu38Pr42+FrFaJIV0+KMuIZWevV+VB9Shm860xrnCWlxhrPrdNRWRKv4vWPAw=="
+        length="4675859"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 0.1.3</title>
       <pubDate>Fri, 22 May 2026 13:46:12 +0000</pubDate>
       <sparkle:version>5</sparkle:version>

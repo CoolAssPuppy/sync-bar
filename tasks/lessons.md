@@ -1,5 +1,12 @@
 # Build lessons and contradictions
 
+## 2026-05-23 verify UI changes by running, not just building
+
+- **Correction from the user:** I shipped visual changes (a reMarkable logo, "broken Notion") to 0.4.0/0.4.1 having only run `make build` + `make test`. The tests don't cover views, so a flattened logo and a token-dependent dropdown slipped through. Lesson: for any UI/visual or integration change, launch the app and look (`make run` then `screencapture`), don't declare it done off a green build alone.
+- **Asset gotcha:** the bundled `Remarkable` PNG is opaque (RGB, no alpha). `renderingMode(.template)` flattens an alpha-less image to a solid tinted square. Check `file *.png` for "RGBA" before template-tinting; render opaque marks as-is (e.g. on a small white chip).
+- **Token-dependent UI fails silently after a keychain change:** moving to the data-protection keychain (0.4.0) wiped OAuth tokens, so `NotionClientFactory` fell back to the mock (empty dropdown) and Google showed "expired" — with no reconnect UI. Any keychain-store change needs a re-auth path (added Reconnect to the account gear drawer).
+- **Screenshot caveat:** `screencapture` on a locked Mac returns the lock-screen clock, not the app. `caffeinate -u` wakes the display but can't unlock; if `pgrep loginwindow ... console` shows the lock screen, ask the user to unlock before relying on a screenshot.
+
 ## 2026-05-19 overnight build
 
 ### Choices made under time pressure

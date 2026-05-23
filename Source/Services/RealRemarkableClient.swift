@@ -103,7 +103,7 @@ struct RealRemarkableClient: RemarkableClient {
                 guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components),
                       let metadataData = try? await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier),
                       let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
-                      !metadata.deleted else { continue }
+                      metadata.isLive else { continue }   // skip deleted AND trashed docs
                 var tags: [String] = []
                 if includeTags,
                    let contentEntry = RemarkableSyncIndex.contentEntry(in: components),

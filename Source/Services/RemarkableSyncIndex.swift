@@ -45,8 +45,14 @@ struct RemarkableMetadata: Equatable {
     let lastModified: Date
     let deleted: Bool
 
-    var isNotebook: Bool { type == "DocumentType" && !deleted }
-    var isFolder: Bool { type == "CollectionType" && !deleted }
+    /// reMarkable moves a trashed item to a reserved "trash" parent rather than
+    /// setting `deleted` (which is reserved for tombstoned/purged items). Both
+    /// must be excluded for a listing to reflect what's actually on the device.
+    var isTrashed: Bool { parent == "trash" }
+    var isLive: Bool { !deleted && !isTrashed }
+
+    var isNotebook: Bool { type == "DocumentType" && isLive }
+    var isFolder: Bool { type == "CollectionType" && isLive }
 }
 
 enum RemarkableSyncIndex {

@@ -96,6 +96,21 @@ final class RemarkableSyncIndexTests: XCTestCase {
         XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(json.utf8)), ["sync", "draft", "idea"])
     }
 
+    func test_trashed_document_is_not_live_even_when_deleted_flag_is_false() throws {
+        let json = #"{"visibleName":"Old Note","type":"DocumentType","parent":"trash","deleted":false,"lastModified":"1"}"#
+        let meta = try RemarkableSyncIndex.parseMetadata(Data(json.utf8))
+        XCTAssertTrue(meta.isTrashed)
+        XCTAssertFalse(meta.isLive)
+        XCTAssertFalse(meta.isNotebook, "a trashed notebook must not list as a notebook")
+    }
+
+    func test_live_document_in_a_folder_is_a_notebook() throws {
+        let json = #"{"visibleName":"Active","type":"DocumentType","parent":"some-folder-id","deleted":false,"lastModified":"1"}"#
+        let meta = try RemarkableSyncIndex.parseMetadata(Data(json.utf8))
+        XCTAssertTrue(meta.isLive)
+        XCTAssertTrue(meta.isNotebook)
+    }
+
     func test_parseRootHash_handles_json_and_plain() {
         let json = #"{"hash":"roothash","generation":5}"#
         XCTAssertEqual(RealRemarkableClient.parseRootHash(Data(json.utf8)), "roothash")

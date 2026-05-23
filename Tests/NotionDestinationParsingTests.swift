@@ -58,4 +58,36 @@ final class NotionDestinationParsingTests: XCTestCase {
         let titles = try RealNotionClient.parseDestinations(json).map(\.title)
         XCTAssertEqual(titles, ["Apples", "Notes", "Car Market (EVs)", "Untitled"])
     }
+
+    /// A real database carries a `properties` schema where the title property's
+    /// `title` is an object ({}), not the rich-text array a page uses. Decoding
+    /// must tolerate both, or the whole dropdown errors with "isn't in the
+    /// correct format".
+    func test_database_with_a_property_schema_object_still_decodes() throws {
+        let data = Data("""
+        {
+          "results": [
+            { "object": "database", "id": "dbx", "parent": {"type": "workspace"},
+              "title": [ {"plain_text": "Schema DB"} ],
+              "properties": {
+                "Name": { "id": "title", "type": "title", "title": {} },
+                "Tags": { "id": "x", "type": "multi_select", "multi_select": {"options": []} }
+              } }
+          ]
+        }
+        """.utf8)
+        let db = try XCTUnwrap(try RealNotionClient.parseDestinations(data).first { $0.id == "dbx" })
+        XCTAssertEqual(db.title, "Schema DB")
+        XCTAssertEqual(db.type, .database)
+    }
+
+    func test_an_undecodable_result_is_skipped_not_fatal() throws {
+        let data = Data("""
+        { "results": [
+            { "object": "database", "id": "ok", "parent": {"type": "workspace"}, "title": [ {"plain_text": "Fine"} ] },
+            { "object": "page" }
+        ] }
+        """.utf8)
+        XCTAssertEqual(try RealNotionClient.parseDestinations(data).map(\.id), ["ok"])
+    }
 }

@@ -61,28 +61,44 @@ struct RealNotionClient: NotionClient {
     /// "title"), which is why the old key-based lookup showed everything as
     /// "Untitled". Databases are sorted first, then alphabetically.
     static func parseDestinations(_ data: Data) throws -> [NotionDestination] {
-        struct SearchResponse: Decodable {
-            struct Item: Decodable {
-                struct Inner: Decodable { let plain_text: String? }
-                struct PageProperty: Decodable { let type: String?; let title: [Inner]? }
-                struct Parent: Decodable { let type: String?; let page_id: String? }
-                struct Icon: Decodable { let emoji: String? }
-                let id: String
-                let object: String  // "page" or "database"
-                let properties: [String: PageProperty]?
-                let parent: Parent?
-                let icon: Icon?
-                let title: [Inner]?  // databases ship their title at the top level
+        struct Inner: Decodable { let plain_text: String? }
+        struct PageProperty: Decodable {
+            let type: String?
+            let title: [Inner]?
+            enum CodingKeys: String, CodingKey { case type, title }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                type = try c.decodeIfPresent(String.self, forKey: .type)
+                // A page's title property holds an array of rich text; a database's
+                // title schema holds an object. Take the array, ignore anything else.
+                title = try? c.decodeIfPresent([Inner].self, forKey: .title)
             }
-            let results: [Item]
         }
-        let parsed = try JSONDecoder().decode(SearchResponse.self, from: data)
-        let known = Set(parsed.results.map(\.id))
+        struct Parent: Decodable { let type: String?; let page_id: String? }
+        struct Icon: Decodable { let emoji: String? }
+        struct Item: Decodable {
+            let id: String
+            let object: String  // "page" or "database"
+            let properties: [String: PageProperty]?
+            let parent: Parent?
+            let icon: Icon?
+            let title: [Inner]?  // databases ship their title at the top level
+        }
+        // Decode each result independently so one unexpected item can't fail the
+        // whole response.
+        struct Skippable: Decodable {
+            let item: Item?
+            init(from decoder: Decoder) throws { item = try? Item(from: decoder) }
+        }
+        struct SearchResponse: Decodable { let results: [Skippable] }
+
+        let items = try JSONDecoder().decode(SearchResponse.self, from: data).results.compactMap(\.item)
+        let known = Set(items.map(\.id))
         // Top-level only: keep all databases, plus pages at the workspace root or
         // the root of a shared subtree; drop pages nested under another shared
         // page and drop database rows. Trims the dropdown from every descendant
         // down to the handful you'd actually pick.
-        func isTopLevel(_ item: SearchResponse.Item) -> Bool {
+        func isTopLevel(_ item: Item) -> Bool {
             if item.object == "database" { return true }
             switch item.parent?.type {
             case "workspace":   return true
@@ -91,7 +107,7 @@ struct RealNotionClient: NotionClient {
             default:            return true
             }
         }
-        return parsed.results.filter(isTopLevel).map { item -> NotionDestination in
+        return items.filter(isTopLevel).map { item -> NotionDestination in
             let extractedTitle: String = {
                 if let dbTitle = item.title?.compactMap(\.plain_text).joined(), !dbTitle.isEmpty {
                     return dbTitle

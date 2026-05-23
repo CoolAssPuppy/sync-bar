@@ -33,6 +33,14 @@ struct DestinationDetailScaffold: View {
     @State private var renameValue: String = ""
     @FocusState private var renameFocused: Bool
     @State private var isPickingFolder = false
+    @State private var editing: EditingBinding?
+
+    /// A sync the user tapped to edit (rule + its binding to this destination).
+    private struct EditingBinding: Identifiable {
+        let rule: SyncRule
+        let binding: DestinationBinding
+        var id: String { binding.id }
+    }
 
     /// Folders not already routed to this destination, so picking one always adds
     /// a real connection (rather than silently hitting the duplicate guard).
@@ -42,6 +50,14 @@ struct DestinationDetailScaffold: View {
     }
 
     private var canConnectFolder: Bool { connectSource != nil && !availableFolders.isEmpty }
+
+    /// The source folder for a rule, used as the editor's context. Falls back to a
+    /// stub from the rule's cached name if the live folder list isn't loaded.
+    private func folder(for rule: SyncRule) -> RmFolder {
+        Ledger.shared.folders.first(where: { $0.id == rule.rmNotebookId })
+            ?? RmFolder(id: rule.rmNotebookId, name: rule.rmNotebookName,
+                        parentFolder: nil, lastModified: Date(), pageCount: 0)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,6 +84,18 @@ struct DestinationDetailScaffold: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 18)
+            }
+            .sheet(item: $editing) { target in
+                BindingEditorSheet(
+                    kind: target.binding.kind,
+                    notebook: folder(for: target.rule),
+                    existingBinding: target.binding,
+                    onSave: { updated in
+                        Ledger.shared.updateBinding(ruleId: target.rule.id, binding: updated)
+                        editing = nil
+                    },
+                    onCancel: { editing = nil }
+                )
             }
         }
         .background(theme.background)
@@ -248,7 +276,8 @@ struct DestinationDetailScaffold: View {
         } else {
             VStack(spacing: 8) {
                 ForEach(Array(activeBindings.enumerated()), id: \.offset) { _, pair in
-                    ActiveSyncRow(rule: pair.0, binding: pair.1)
+                    ActiveSyncRow(rule: pair.0, binding: pair.1,
+                                  onEdit: { editing = EditingBinding(rule: pair.0, binding: pair.1) })
                 }
             }
         }
@@ -306,46 +335,59 @@ struct DestinationDetailScaffold: View {
 struct ActiveSyncRow: View {
     let rule: SyncRule
     let binding: DestinationBinding
+    var onEdit: () -> Void = {}
 
     @Environment(\.theme) private var theme
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(theme.primary)
+        Button(action: onEdit) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
+                    Image(systemName: "book.closed.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.primary)
+                }
+                .frame(width: 28, height: 28)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(theme.borderStrong, lineWidth: 1)
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(rule.rmNotebookName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground)
+                        .lineLimit(1)
+                    Text(secondaryLine)
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                statusPill
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(theme.tertiary)
             }
-            .frame(width: 28, height: 28)
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(theme.borderStrong, lineWidth: 1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
+                    .fill(isHovered ? theme.cardElevated : theme.cardInset)
             )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(rule.rmNotebookName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                    .lineLimit(1)
-                Text(secondaryLine)
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            statusPill
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1)
-        )
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help("Edit \(binding.kind.label) destination")
     }
 
     private var secondaryLine: String {

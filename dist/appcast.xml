@@ -6,6 +6,60 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 0.4.3</title>
+      <pubDate>Sat, 23 May 2026 08:08:55 +0000</pubDate>
+      <sparkle:version>9</sparkle:version>
+      <sparkle:shortVersionString>0.4.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Better onboarding flow.</li><li>Prepped for additional sources.</li><li>Better Linear and Notion integration</li><li>You can now filter by tags in reMarkable</li><li>Bug fixes and cleanup</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.4.3.dmg"
+        sparkle:edSignature="6xzvq5Xbt1hLpIDouQTTtsWa9NMsozPqJtbPDfdC0x6STBfR6yeNLStaN4Y7Gy5ozNBHsGN7n6Q/UoxAcLuTBA=="
+        length="4780851"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
+      <title>Version 0.4.2</title>
+      <pubDate>Sat, 23 May 2026 07:50:43 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>0.4.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Better onboarding flow.</li><li>Prepped for additional sources.</li><li>Better Linear and Notion integration</li><li>You can now filter by tags in reMarkable</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.4.2.dmg"
+        sparkle:edSignature="AH14kZGGWoqoRXb4wyceRnUnmgVrfwxTuc0rZc2fIZDXpD53PLkJPvNeNYsLohgxyHkLtx4yaNL86oLdZ/FMDA=="
+        length="4778056"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
+      <title>Version 0.4.1</title>
+      <pubDate>Sat, 23 May 2026 06:47:38 +0000</pubDate>
+      <sparkle:version>7</sparkle:version>
+      <sparkle:shortVersionString>0.4.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Better onboarding flow.</li><li>Prepped for additional sources.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-0.4.1.dmg"
+        sparkle:edSignature="gzbesZythc3UupAERIK/EDM7DZrf76sOHcTRuWHp92wZcpuM4Pfxjb+lrBnQzWsKh3WHd4Bv0bpjBGElF8d4Cw=="
+        length="4713179"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 0.4.0</title>
       <pubDate>Sat, 23 May 2026 05:41:53 +0000</pubDate>
       <sparkle:version>6</sparkle:version>

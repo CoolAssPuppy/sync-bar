@@ -48,10 +48,11 @@ struct NotebookListView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Notebooks")
-                    .font(.system(size: 16, weight: .semibold))
+        HStack(alignment: .center, spacing: 14) {
+            sourceIcon
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Folders")
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text(headerSubtitle)
                     .font(.system(size: 11))
@@ -70,7 +71,20 @@ struct NotebookListView: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
+    }
+
+    /// The reMarkable source mark, sized and laid out to match a destination's
+    /// detail-header icon (DestinationIcon at 36pt), so sources and destinations
+    /// read as peers. Template-tinted so the mark stays visible on any theme.
+    private var sourceIcon: some View {
+        Image("Remarkable")
+            .resizable()
+            .renderingMode(.template)
+            .interpolation(.high)
+            .scaledToFit()
+            .foregroundStyle(theme.foreground)
+            .frame(width: 36, height: 36)
     }
 
     private var headerSubtitle: String {

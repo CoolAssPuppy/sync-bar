@@ -76,7 +76,10 @@ struct DestinationDetailScaffold: View {
                         Divider().background(theme.divider)
                         headerDrawer
                     }
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    // Fade rather than slide: a focused rename TextField (an AppKit
+                    // field) escapes the clip and floats behind the title during a
+                    // .move transition.
+                    .transition(.opacity)
                 }
             }
             .clipped()
@@ -112,6 +115,8 @@ struct DestinationDetailScaffold: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
                     renameFocused = true
                 }
+            } else {
+                renameFocused = false
             }
         }
         .sheet(isPresented: $isPickingFolder) {
@@ -157,6 +162,7 @@ struct DestinationDetailScaffold: View {
 
             AppIconButton(systemName: isHeaderDrawerOpen ? "chevron.up" : "gearshape",
                           help: "Destination options") {
+                if isHeaderDrawerOpen { renameFocused = false }
                 isHeaderDrawerOpen.toggle()
             }
         }
@@ -168,18 +174,14 @@ struct DestinationDetailScaffold: View {
     // MARK: Header drawer
 
     private var headerDrawer: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if rename != nil {
-                HStack(alignment: .center, spacing: 10) {
-                    Text("RENAME")
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(theme.tertiary)
-                        .frame(width: 92, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if rename != nil {
                     TextField("Name", text: $renameValue)
                         .textFieldStyle(.roundedBorder)
                         .focused($renameFocused)
                         .onSubmit(submitRename)
+                        .frame(maxWidth: 280)
                     Button(action: submitRename) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
@@ -192,34 +194,11 @@ struct DestinationDetailScaffold: View {
                     .help("Save name")
                     .disabled(renameValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }
 
-            if case .keychainToken = authorization {
-                HStack(alignment: .center, spacing: 10) {
-                    Text("REAUTHORIZE")
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(theme.tertiary)
-                        .frame(width: 92, alignment: .leading)
-                    Text("Scroll to the Authorization card below to replace the token.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.muted)
-                    Spacer()
-                }
-            }
+                Spacer(minLength: 12)
 
-            if let reconnect {
-                HStack(alignment: .center, spacing: 10) {
-                    Text("RECONNECT")
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(theme.tertiary)
-                        .frame(width: 92, alignment: .leading)
-                    Text("Re-authorize if this account's sign-in has expired.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.muted)
-                    Spacer()
-                    AppSecondaryButton(title: isReconnecting ? "Connecting…" : "Reconnect", systemImage: "arrow.clockwise") {
+                if let reconnect {
+                    AppIconButton(systemName: "arrow.clockwise", help: "Reconnect", spinOnTap: true) {
                         Task {
                             isReconnecting = true
                             reconnectError = nil
@@ -229,27 +208,15 @@ struct DestinationDetailScaffold: View {
                     }
                     .disabled(isReconnecting)
                 }
-                if let reconnectError {
-                    Text(reconnectError)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.destructive)
-                        .padding(.leading, 102)
+                AppIconButton(systemName: "minus.circle", help: "Disconnect", tint: .destructive) {
+                    disconnect()
                 }
             }
 
-            HStack(alignment: .center, spacing: 10) {
-                Text("DELETE")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(theme.tertiary)
-                    .frame(width: 92, alignment: .leading)
-                Text("Removes this destination and any bindings that use it.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
-                Spacer()
-                AppSecondaryButton(title: "Disconnect", systemImage: "minus.circle", tint: .destructive) {
-                    disconnect()
-                }
+            if let reconnectError {
+                Text(reconnectError)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.destructive)
             }
         }
         .padding(.horizontal, 24)

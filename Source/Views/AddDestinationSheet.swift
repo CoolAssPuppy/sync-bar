@@ -154,6 +154,9 @@ struct AddDestinationSheet: View {
             Text("Connect Google with OAuth. Sync Bar opens Google in your browser, you grant access to Docs and Drive, and the account is added here.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+            Text("Google Docs integration is subject to Google's absurd CASA certification. This will take time and money.")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.red)
             if !AuthSecrets.isGoogleConfigured {
                 oauthNotConfiguredHint(provider: "Google")
             }

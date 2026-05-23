@@ -31,6 +31,16 @@ struct NotionWorkspaceDetailView: View {
             connectSource: workspace.map { w in { folder in
                 ledger.connect(folder: folder, configuration: w.defaultConfiguration)
             } },
+            reconnect: {
+                do {
+                    ledger.upsertNotionWorkspace(try await NotionAuthService.shared.connect())
+                    return nil
+                } catch OAuthError.userCancelled {
+                    return nil
+                } catch {
+                    return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            },
             disconnect: { ledger.removeNotionWorkspace(id: workspaceId) }
         )
     }
@@ -61,6 +71,18 @@ struct LinearAccountDetailView: View {
             connectSource: account.map { a in { folder in
                 ledger.connect(folder: folder, configuration: a.defaultConfiguration)
             } },
+            reconnect: {
+                do {
+                    for account in try await LinearAuthService.shared.connect() {
+                        ledger.upsertLinearAccount(account)
+                    }
+                    return nil
+                } catch OAuthError.userCancelled {
+                    return nil
+                } catch {
+                    return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            },
             disconnect: { ledger.removeLinearAccount(id: accountId) }
         )
     }
@@ -91,6 +113,16 @@ struct GoogleAccountDetailView: View {
             connectSource: account.map { a in { folder in
                 ledger.connect(folder: folder, configuration: a.defaultConfiguration)
             } },
+            reconnect: {
+                do {
+                    ledger.upsertGoogleAccount(try await GoogleAuthService.shared.connect())
+                    return nil
+                } catch OAuthError.userCancelled {
+                    return nil
+                } catch {
+                    return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            },
             disconnect: { ledger.removeGoogleAccount(id: accountId) }
         )
     }

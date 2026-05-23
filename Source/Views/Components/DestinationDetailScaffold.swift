@@ -26,6 +26,10 @@ struct DestinationDetailScaffold: View {
     /// Routes the chosen folder to this destination. When nil, the connect action
     /// is hidden (the destination doesn't support destination-first connect yet).
     var connectSource: ((RmFolder) -> Void)? = nil
+    /// Re-runs the account's OAuth flow when its sign-in expired. Returns an error
+    /// message to show, or nil on success/cancel. When nil, no reconnect action is
+    /// offered (local destinations like Markdown/Apple Notes have nothing to renew).
+    var reconnect: (() async -> String?)? = nil
     let disconnect: () -> Void
 
     @Environment(\.theme) private var theme
@@ -34,6 +38,8 @@ struct DestinationDetailScaffold: View {
     @FocusState private var renameFocused: Bool
     @State private var isPickingFolder = false
     @State private var editing: EditingBinding?
+    @State private var isReconnecting = false
+    @State private var reconnectError: String?
 
     /// A sync the user tapped to edit (rule + its binding to this destination).
     private struct EditingBinding: Identifiable {
@@ -199,6 +205,35 @@ struct DestinationDetailScaffold: View {
                         .font(.system(size: 11))
                         .foregroundStyle(theme.muted)
                     Spacer()
+                }
+            }
+
+            if let reconnect {
+                HStack(alignment: .center, spacing: 10) {
+                    Text("RECONNECT")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.6)
+                        .foregroundStyle(theme.tertiary)
+                        .frame(width: 92, alignment: .leading)
+                    Text("Re-authorize if this account's sign-in has expired.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.muted)
+                    Spacer()
+                    AppSecondaryButton(title: isReconnecting ? "Connecting…" : "Reconnect", systemImage: "arrow.clockwise") {
+                        Task {
+                            isReconnecting = true
+                            reconnectError = nil
+                            reconnectError = await reconnect()
+                            isReconnecting = false
+                        }
+                    }
+                    .disabled(isReconnecting)
+                }
+                if let reconnectError {
+                    Text(reconnectError)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.destructive)
+                        .padding(.leading, 102)
                 }
             }
 

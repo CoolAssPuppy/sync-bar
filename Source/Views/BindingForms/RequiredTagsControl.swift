@@ -18,7 +18,16 @@ struct RequiredTagsControl: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        content.task { await loadTags() }
+        // Without a paired reMarkable the client factory returns the mock, whose
+        // sample tags would mislead the user into filtering on tags that don't
+        // exist on their device. Only offer tags once there's a real source.
+        if Ledger.shared.remarkableAccount == nil {
+            Text("Pair your reMarkable to filter by tag")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.tertiary)
+        } else {
+            content.task { await loadTags() }
+        }
     }
 
     @ViewBuilder

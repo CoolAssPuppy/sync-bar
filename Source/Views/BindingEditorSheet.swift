@@ -191,7 +191,10 @@ struct BindingEditorSheet: View {
                 projectId: project,
                 projectName: projectName,
                 defaultLabel: localLinear.defaultLabel.isEmpty ? nil : localLinear.defaultLabel,
-                requiredTags: nil   // the tag filter is now per-binding (see below)
+                // Mirror the per-binding tag filter into the Linear config (sorted
+                // for stable equality) so an unchanged save isn't seen as a config
+                // change, which would wipe the binding's sync history.
+                requiredTags: localRequiredTags.isEmpty ? nil : localRequiredTags.sorted()
             ))
         case .googleDocs:
             configuration = .googleDocs(GoogleDocsDestinationConfig(
@@ -220,7 +223,7 @@ struct BindingEditorSheet: View {
             lastRunError: existingBinding?.lastRunError,
             ocrModeOverride: existingBinding?.ocrModeOverride,
             titleStrategyOverride: existingBinding?.titleStrategyOverride,
-            requiredTags: localRequiredTags.isEmpty ? nil : localRequiredTags
+            requiredTags: localRequiredTags.isEmpty ? nil : localRequiredTags.sorted()
         )
         onSave(binding)
     }

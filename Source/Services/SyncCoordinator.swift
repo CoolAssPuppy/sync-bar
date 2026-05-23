@@ -204,8 +204,8 @@ final class SyncCoordinator: ObservableObject {
         }
 
         // Skip OCR for files that no enabled binding will accept (e.g. a
-        // tag-filtered Linear destination that excludes untagged notes) so we
-        // never pay the OCR provider for output nothing will consume.
+        // destination whose tag filter excludes untagged notes) so we never pay
+        // the OCR provider for output nothing will consume.
         let neededFiles = scopedFiles.filter { file in bindings.contains { $0.accepts(fileTags: file.tags) } }
         guard !neededFiles.isEmpty else {
             if explainSkips { recordSkip(.allNotesFilteredOut(folder: folderName), ruleId: rule.id) }

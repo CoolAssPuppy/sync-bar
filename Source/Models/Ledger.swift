@@ -178,9 +178,12 @@ final class Ledger: ObservableObject {
     /// team that was unchecked (which cascades its bindings, like Disconnect).
     func applyLinearTeamSelection(available: [LinearAccount], selectedIds: Set<String>) {
         for team in available {
+            let present = linearAccounts.contains(where: { $0.id == team.id })
             if selectedIds.contains(team.id) {
-                upsertLinearAccount(team)
-            } else if linearAccounts.contains(where: { $0.id == team.id }) {
+                // Only add newly-checked teams; leave existing ones untouched so a
+                // reconnect doesn't clobber a rename or reset connectedAt.
+                if !present { upsertLinearAccount(team) }
+            } else if present {
                 removeLinearAccount(id: team.id)
             }
         }

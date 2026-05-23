@@ -173,6 +173,19 @@ final class Ledger: ObservableObject {
                })
     }
 
+    /// Applies a Linear team selection from the picker: among the teams the OAuth
+    /// token can reach, adds the checked ones and removes any currently-present
+    /// team that was unchecked (which cascades its bindings, like Disconnect).
+    func applyLinearTeamSelection(available: [LinearAccount], selectedIds: Set<String>) {
+        for team in available {
+            if selectedIds.contains(team.id) {
+                upsertLinearAccount(team)
+            } else if linearAccounts.contains(where: { $0.id == team.id }) {
+                removeLinearAccount(id: team.id)
+            }
+        }
+    }
+
     func upsertGoogleAccount(_ account: GoogleAccount) {
         upsert(account, in: \.googleAccounts, key: Self.googleAccountsKey,
                notification: .destinationsChanged)

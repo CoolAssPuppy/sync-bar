@@ -51,6 +51,7 @@ struct NotionWorkspaceDetailView: View {
 struct LinearAccountDetailView: View {
     let accountId: String
     @ObservedObject private var ledger = Ledger.shared
+    @State private var teamChoices: LinearTeamChoices?
 
     private var account: LinearAccount? {
         ledger.linearAccounts.first(where: { $0.id == accountId })
@@ -73,9 +74,8 @@ struct LinearAccountDetailView: View {
             } },
             reconnect: {
                 do {
-                    for account in try await LinearAuthService.shared.connect() {
-                        ledger.upsertLinearAccount(account)
-                    }
+                    // Re-fetch the teams and let the user adjust the selection.
+                    teamChoices = LinearTeamChoices(teams: try await LinearAuthService.shared.connect())
                     return nil
                 } catch OAuthError.userCancelled {
                     return nil
@@ -85,6 +85,17 @@ struct LinearAccountDetailView: View {
             },
             disconnect: { ledger.removeLinearAccount(id: accountId) }
         )
+        .sheet(item: $teamChoices) { choices in
+            LinearTeamPickerSheet(
+                teams: choices.teams,
+                preselected: Set(ledger.linearAccounts.map(\.id)),
+                onConfirm: { selectedIds in
+                    ledger.applyLinearTeamSelection(available: choices.teams, selectedIds: selectedIds)
+                    teamChoices = nil
+                },
+                onCancel: { teamChoices = nil }
+            )
+        }
     }
 }
 

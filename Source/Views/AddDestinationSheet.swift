@@ -19,6 +19,9 @@ struct AddDestinationSheet: View {
     @State private var selectedKind: DestinationKind = .notion
     @State private var isConnecting: Bool = false
     @State private var errorMessage: String?
+    /// Teams returned by a Linear connect, awaiting the user's pick. Non-nil shows
+    /// the team picker instead of adding every team.
+    @State private var linearTeamChoices: LinearTeamChoices?
 
     // Default config for a new Markdown destination, chosen here at creation so a
     // connection to it never starts with a blank folder.
@@ -45,6 +48,19 @@ struct AddDestinationSheet: View {
         .background(theme.background)
         .environment(\.theme, theme)
         .environment(\.colorScheme, theme.isDark ? .dark : .light)
+        .sheet(item: $linearTeamChoices) { choices in
+            LinearTeamPickerSheet(
+                teams: choices.teams,
+                preselected: Set(ledger.linearAccounts.map(\.id)),
+                onConfirm: { selectedIds in
+                    ledger.applyLinearTeamSelection(available: choices.teams, selectedIds: selectedIds)
+                    Telemetry.capture("destination.connected", properties: ["provider": "linear"])
+                    linearTeamChoices = nil
+                    isPresented = false
+                },
+                onCancel: { linearTeamChoices = nil }
+            )
+        }
     }
 
     // MARK: Header
@@ -274,10 +290,17 @@ struct AddDestinationSheet: View {
     }
 
     private func connectLinear() async {
-        await connect(.linear) {
-            for account in try await LinearAuthService.shared.connect() {
-                ledger.upsertLinearAccount(account)
-            }
+        isConnecting = true
+        errorMessage = nil
+        defer { isConnecting = false }
+        do {
+            // Fetch the teams, then let the user choose, rather than adding all.
+            linearTeamChoices = LinearTeamChoices(teams: try await LinearAuthService.shared.connect())
+        } catch OAuthError.userCancelled {
+            // User backed out of the web flow; leave the sheet open, no error.
+        } catch {
+            Telemetry.capture("destination.connect_failed", properties: ["provider": "linear"])
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 

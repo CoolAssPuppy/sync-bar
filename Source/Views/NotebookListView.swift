@@ -85,6 +85,7 @@ struct NotebookListView: View {
             .scaledToFit()
             .foregroundStyle(theme.foreground)
             .frame(width: 36, height: 36)
+            .roleBadge(.source)
     }
 
     private var headerSubtitle: String {

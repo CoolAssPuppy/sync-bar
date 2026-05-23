@@ -97,6 +97,7 @@ struct DestinationDetailScaffold: View {
     private var titleBar: some View {
         HStack(alignment: .center, spacing: 14) {
             DestinationIcon(kind: kind, size: 36)
+                .roleBadge(.destination)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)

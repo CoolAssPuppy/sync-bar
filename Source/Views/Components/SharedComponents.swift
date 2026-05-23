@@ -293,6 +293,57 @@ struct DestinationIcon: View {
     }
 }
 
+// MARK: - Source / destination role badge
+
+/// Which side of a sync a logo represents.
+enum SyncRole {
+    case source
+    case destination
+
+    /// Small glyph shown in the badge. Notes flow source -> destination, so the
+    /// source emits (up/forward) and the destination receives (down/forward).
+    var symbol: String {
+        switch self {
+        case .source:      return "arrow.up.forward"
+        case .destination: return "arrow.down.forward"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .source:      return "Source"
+        case .destination: return "Destination"
+        }
+    }
+}
+
+/// A small role glyph overlaid on a logo's bottom-trailing corner, so a source
+/// and a destination are distinguishable at a glance in the detail views.
+struct RoleBadge: View {
+    let role: SyncRole
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Image(systemName: role.symbol)
+            .font(.system(size: 7, weight: .heavy))
+            .foregroundStyle(theme.primaryForeground)
+            .frame(width: 15, height: 15)
+            .background(Circle().fill(theme.primary))
+            .overlay(Circle().strokeBorder(theme.background, lineWidth: 1.5))
+            .help(role.help)
+    }
+}
+
+extension View {
+    /// Overlays the source/destination badge on the bottom-trailing corner of a
+    /// logo. Use on the detail-view header marks only.
+    func roleBadge(_ role: SyncRole) -> some View {
+        overlay(alignment: .bottomTrailing) {
+            RoleBadge(role: role).offset(x: 4, y: 4)
+        }
+    }
+}
+
 // MARK: - Brand mark
 
 struct BrandMark: View {

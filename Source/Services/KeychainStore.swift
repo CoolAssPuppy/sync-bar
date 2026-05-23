@@ -6,13 +6,21 @@
 //
 
 import Foundation
-import KeychainAccess
+import Security
 
-/// Thin wrapper around KeychainAccess so callers never deal with raw service
-/// and account strings. Synchronizable items live in iCloud Keychain.
-/// `Sendable` because KeychainAccess.Keychain is itself thread-safe — every
-/// method calls into the underlying Security framework which is safe for
-/// concurrent reads and writes.
+/// Token storage. Prefers the **data-protection keychain** under a team-prefixed
+/// access group: access is gated by the app's `keychain-access-groups`
+/// entitlement, not a per-binary ACL, so reads never show the "allow keychain
+/// access" prompt. Shipped (Developer ID) and Xcode builds carry that entitlement.
+///
+/// The command-line debug build signs ad-hoc (automatic signing can't apply the
+/// managed profile without `-allowProvisioningUpdates`), so it lacks the
+/// entitlement; there we transparently fall back to the legacy file-based
+/// keychain. That keeps the dev loop working (with a dev-only prompt) while
+/// shipped users get the prompt-free path.
+///
+/// `Sendable` because every method goes through the Security framework, which is
+/// safe for concurrent use; the read cache is guarded by a lock.
 final class KeychainStore: @unchecked Sendable {
     static let shared = KeychainStore()
 
@@ -42,24 +50,44 @@ final class KeychainStore: @unchecked Sendable {
         }
     }
 
-    private let keychain: Keychain
+    /// Must match the value the `keychain-access-groups` entitlement signs to
+    /// (`$(AppIdentifierPrefix)com.strategicnerds.SyncBar`); the prefix is the
+    /// team identifier.
+    private static let service = "com.strategicnerds.SyncBar"
+    private static let accessGroup = "955GSY56UT.com.strategicnerds.SyncBar"
 
     private let lock = NSLock()
-    /// In-memory memo of reads. A file-based keychain read can be slow and, on a
-    /// code-signature mismatch, shows the access prompt; caching means each item
-    /// is fetched at most once per launch (so repeated reads don't re-prompt or
-    /// re-block). The outer optional is "is it cached"; the inner is the value
-    /// (a cached `nil` means known-absent). Writes keep the cache in step.
+    /// In-memory memo of reads so repeated lookups in a launch don't re-hit the
+    /// keychain. Outer optional is "is it cached"; inner is the value (a cached
+    /// `nil` means known-absent). Writes keep the cache in step.
     private var cache: [String: String?] = [:]
 
-    private init() {
-        // Device-local keychain item (not synchronizable). iCloud Keychain sync
-        // needs an entitlement the Developer ID distribution can't carry; a
-        // local item persists tokens reliably across launches. Matches the
-        // sibling apps' configuration.
-        keychain = Keychain(service: "com.strategicnerds.SyncBar")
-            .accessibility(.whenUnlockedThisDeviceOnly)
+    private init() {}
+
+    // MARK: Queries
+
+    /// Entitlement-gated data-protection keychain (no prompt).
+    private func protectedQuery(account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: account,
+            kSecAttrAccessGroup as String: Self.accessGroup,
+            kSecUseDataProtectionKeychain as String: true
+        ]
     }
+
+    /// Legacy file-based keychain, used only when the entitlement is absent
+    /// (ad-hoc dev builds).
+    private func legacyQuery(account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: account
+        ]
+    }
+
+    // MARK: Public API
 
     func value(for key: Key) -> String? {
         let account = key.account
@@ -70,7 +98,13 @@ final class KeychainStore: @unchecked Sendable {
         }
         lock.unlock()
 
-        let value = try? keychain.get(account)
+        var (value, status) = read(protectedQuery(account: account))
+        if status == errSecMissingEntitlement {
+            (value, status) = read(legacyQuery(account: account))
+        }
+        if status != errSecSuccess && status != errSecItemNotFound {
+            Log.app.error("Keychain read failed for \(account, privacy: .public): \(status, privacy: .public)")
+        }
 
         lock.lock()
         cache.updateValue(value, forKey: account)   // caches a nil result too
@@ -83,20 +117,57 @@ final class KeychainStore: @unchecked Sendable {
             delete(key: key)
             return
         }
-        do {
-            try keychain.set(value, key: key.account)
+        let account = key.account
+        let data = Data(value.utf8)
+
+        var status = write(protectedQuery(account: account), data: data)
+        if status == errSecMissingEntitlement {
+            status = write(legacyQuery(account: account), data: data)
+        }
+
+        if status == errSecSuccess {
             lock.lock()
-            cache.updateValue(value, forKey: key.account)
+            cache.updateValue(value, forKey: account)
             lock.unlock()
-        } catch {
-            Log.app.error("Failed to write Keychain key \(key.account, privacy: .public): \(String(describing: error), privacy: .public)")
+        } else {
+            Log.app.error("Keychain write failed for \(account, privacy: .public): \(status, privacy: .public)")
         }
     }
 
     func delete(key: Key) {
-        try? keychain.remove(key.account)
+        var status = SecItemDelete(protectedQuery(account: key.account) as CFDictionary)
+        if status == errSecMissingEntitlement {
+            status = SecItemDelete(legacyQuery(account: key.account) as CFDictionary)
+        }
+        if status != errSecSuccess && status != errSecItemNotFound {
+            Log.app.error("Keychain delete failed for \(key.account, privacy: .public): \(status, privacy: .public)")
+        }
         lock.lock()
         cache.updateValue(nil, forKey: key.account)   // cache as known-absent
         lock.unlock()
+    }
+
+    // MARK: SecItem helpers
+
+    private func read(_ query: [String: Any]) -> (value: String?, status: OSStatus) {
+        var query = query
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        let value = status == errSecSuccess
+            ? (item as? Data).flatMap { String(data: $0, encoding: .utf8) }
+            : nil
+        return (value, status)
+    }
+
+    /// Updates the item if it exists, otherwise adds it. Returns the final status.
+    private func write(_ query: [String: Any], data: Data) -> OSStatus {
+        let update = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        guard update == errSecItemNotFound else { return update }
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        return SecItemAdd(addQuery as CFDictionary, nil)
     }
 }

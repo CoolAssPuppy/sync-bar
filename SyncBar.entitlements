@@ -9,5 +9,16 @@
 	-->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+
+	<!--
+	Token storage moves to the data-protection keychain under this team-prefixed
+	access group, so access is gated by the entitlement instead of a per-binary
+	ACL and the "allow keychain access" prompt never appears. Requires a
+	provisioning profile (created once via Xcode automatic signing).
+	-->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.strategicnerds.SyncBar</string>
+	</array>
 </dict>
 </plist>

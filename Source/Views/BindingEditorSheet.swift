@@ -26,8 +26,11 @@ struct BindingEditorSheet: View {
             header(theme: theme)
             Divider().background(theme.divider)
             ScrollView {
-                form
-                    .padding(20)
+                VStack(spacing: 14) {
+                    form
+                    tagFilterCard
+                }
+                .padding(20)
             }
             Divider().background(theme.divider)
             footer(theme: theme)
@@ -48,6 +51,16 @@ struct BindingEditorSheet: View {
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
+        }
+    }
+
+    /// The tag filter, shared by every destination kind.
+    private var tagFilterCard: some View {
+        AppCard("Filter") {
+            AppSettingRow("Only sync tagged notes",
+                          description: "Limit this destination to reMarkable notes carrying a chosen tag. Leave empty to sync every note.") {
+                RequiredTagsControl(requiredTags: $localRequiredTags)
+            }
         }
     }
 
@@ -98,6 +111,8 @@ struct BindingEditorSheet: View {
     @State private var localGoogle = GoogleFormState()
     @State private var localAppleNotes = AppleNotesFormState()
     @State private var localMarkdown = MarkdownFormState()
+    /// Tag filter shared by every destination kind (the per-binding requiredTags).
+    @State private var localRequiredTags: [String] = []
 
     init(kind: DestinationKind, notebook: RmFolder, existingBinding: DestinationBinding?, onSave: @escaping (DestinationBinding) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
@@ -105,6 +120,7 @@ struct BindingEditorSheet: View {
         self.existingBinding = existingBinding
         self.onSave = onSave
         self.onCancel = onCancel
+        _localRequiredTags = State(initialValue: existingBinding?.effectiveRequiredTags ?? [])
         if let existingBinding {
             switch existingBinding.configuration {
             case .notion(let cfg):
@@ -120,8 +136,7 @@ struct BindingEditorSheet: View {
                     workspaceId: cfg.workspaceId,
                     projectId: cfg.projectId ?? "",
                     projectName: cfg.projectName ?? "",
-                    defaultLabel: cfg.defaultLabel ?? "",
-                    requiredTags: cfg.requiredTags ?? []
+                    defaultLabel: cfg.defaultLabel ?? ""
                 ))
             case .googleDocs(let cfg):
                 _localGoogle = State(initialValue: GoogleFormState(
@@ -176,7 +191,7 @@ struct BindingEditorSheet: View {
                 projectId: project,
                 projectName: projectName,
                 defaultLabel: localLinear.defaultLabel.isEmpty ? nil : localLinear.defaultLabel,
-                requiredTags: localLinear.requiredTags.isEmpty ? nil : localLinear.requiredTags
+                requiredTags: nil   // the tag filter is now per-binding (see below)
             ))
         case .googleDocs:
             configuration = .googleDocs(GoogleDocsDestinationConfig(
@@ -204,7 +219,8 @@ struct BindingEditorSheet: View {
             lastRunPagesSynced: existingBinding?.lastRunPagesSynced ?? 0,
             lastRunError: existingBinding?.lastRunError,
             ocrModeOverride: existingBinding?.ocrModeOverride,
-            titleStrategyOverride: existingBinding?.titleStrategyOverride
+            titleStrategyOverride: existingBinding?.titleStrategyOverride,
+            requiredTags: localRequiredTags.isEmpty ? nil : localRequiredTags
         )
         onSave(binding)
     }

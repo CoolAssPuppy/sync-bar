@@ -206,7 +206,7 @@ final class SyncCoordinator: ObservableObject {
         // Skip OCR for files that no enabled binding will accept (e.g. a
         // tag-filtered Linear destination that excludes untagged notes) so we
         // never pay the OCR provider for output nothing will consume.
-        let neededFiles = scopedFiles.filter { file in bindings.contains { $0.configuration.accepts(fileTags: file.tags) } }
+        let neededFiles = scopedFiles.filter { file in bindings.contains { $0.accepts(fileTags: file.tags) } }
         guard !neededFiles.isEmpty else {
             if explainSkips { recordSkip(.allNotesFilteredOut(folder: folderName), ruleId: rule.id) }
             return
@@ -278,7 +278,7 @@ final class SyncCoordinator: ObservableObject {
         var firstError: String?
         let runStart = Date()
 
-        for (file, content) in transcripts where binding.configuration.accepts(fileTags: file.tags) {
+        for (file, content) in transcripts where binding.accepts(fileTags: file.tags) {
             let directive = engine.evaluate(
                 rule: effectiveRule, file: file, folderName: folderName,
                 ocrText: content.plainText,

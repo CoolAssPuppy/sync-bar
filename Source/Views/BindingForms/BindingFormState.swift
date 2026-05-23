@@ -28,7 +28,6 @@ struct LinearFormState {
     var projectId: String = ""
     var projectName: String = ""
     var defaultLabel: String = ""
-    var requiredTags: [String] = []
 }
 
 struct GoogleFormState {

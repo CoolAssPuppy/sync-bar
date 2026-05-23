@@ -209,15 +209,6 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
         }
     }
 
-    /// Whether a note carrying these document tags should sync to this
-    /// destination. Only Linear honors a tag filter today: a note is accepted
-    /// when it has at least one of the configured `requiredTags` (OR semantics).
-    /// Every other destination, and Linear with no filter, accepts all notes.
-    func accepts(fileTags: [String]) -> Bool {
-        guard case .linear(let config) = self,
-              let required = config.requiredTags, !required.isEmpty else { return true }
-        return !Set(required).isDisjoint(with: Set(fileTags))
-    }
 }
 
 // MARK: - Binding (one destination on one rule)
@@ -236,6 +227,9 @@ struct DestinationBinding: Codable, Equatable, Identifiable, Hashable {
     var ocrModeOverride: OcrMode?
     /// Optional override of the rule-level title strategy for this destination.
     var titleStrategyOverride: TitleStrategy?
+    /// Only sync reMarkable notes carrying at least one of these tags (OR
+    /// semantics). nil/empty means sync every note. Applies to any destination.
+    var requiredTags: [String]?
 
     init(id: String = UUID().uuidString,
          enabled: Bool = true,
@@ -246,7 +240,8 @@ struct DestinationBinding: Codable, Equatable, Identifiable, Hashable {
          lastRunPagesSynced: Int = 0,
          lastRunError: String? = nil,
          ocrModeOverride: OcrMode? = nil,
-         titleStrategyOverride: TitleStrategy? = nil) {
+         titleStrategyOverride: TitleStrategy? = nil,
+         requiredTags: [String]? = nil) {
         self.id = id
         self.enabled = enabled
         self.configuration = configuration
@@ -257,6 +252,24 @@ struct DestinationBinding: Codable, Equatable, Identifiable, Hashable {
         self.lastRunError = lastRunError
         self.ocrModeOverride = ocrModeOverride
         self.titleStrategyOverride = titleStrategyOverride
+        self.requiredTags = requiredTags
+    }
+
+    /// The active tag filter, preferring the per-binding value and falling back
+    /// to Linear's legacy per-config field so existing filters keep working
+    /// without a migration.
+    var effectiveRequiredTags: [String]? {
+        if let requiredTags, !requiredTags.isEmpty { return requiredTags }
+        if case .linear(let cfg) = configuration { return cfg.requiredTags }
+        return nil
+    }
+
+    /// Whether a note carrying these tags should sync here. No filter (or an
+    /// empty one) accepts every note; otherwise the note must carry at least one
+    /// required tag.
+    func accepts(fileTags: [String]) -> Bool {
+        guard let required = effectiveRequiredTags, !required.isEmpty else { return true }
+        return !Set(required).isDisjoint(with: Set(fileTags))
     }
 }
 

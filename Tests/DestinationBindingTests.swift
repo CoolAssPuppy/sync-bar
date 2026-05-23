@@ -80,26 +80,34 @@ final class DestinationBindingTests: XCTestCase {
         XCTAssertTrue(rule.includes(fileId: "anything"))
     }
 
-    func test_linear_tag_filter_accepts_only_matching_notes() {
-        let filtered = DestinationConfiguration.linear(LinearDestinationConfig(
-            workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,
-            defaultLabel: nil, requiredTags: ["Linear", "Action"]))
+    func test_tag_filter_accepts_only_matching_notes_on_any_destination() {
+        // The filter is per-binding now, so even a Markdown destination can use it.
+        let markdown = DestinationConfiguration.markdownFolder(
+            MarkdownFolderDestinationConfig(folderPath: "/tmp", fileNameTemplate: "{notebook}", includeFrontmatter: false))
+        let filtered = DestinationBinding(configuration: markdown, requiredTags: ["Linear", "Action"])
         XCTAssertTrue(filtered.accepts(fileTags: ["Action"]))
         XCTAssertTrue(filtered.accepts(fileTags: ["Idea", "Linear"]))
         XCTAssertFalse(filtered.accepts(fileTags: ["Idea"]))
         XCTAssertFalse(filtered.accepts(fileTags: []))
     }
 
-    func test_unfiltered_destinations_accept_every_note() {
-        let noFilter = DestinationConfiguration.linear(LinearDestinationConfig(
-            workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,
-            defaultLabel: nil, requiredTags: nil))
-        XCTAssertTrue(noFilter.accepts(fileTags: []))
-        XCTAssertTrue(noFilter.accepts(fileTags: ["anything"]))
-
+    func test_unfiltered_bindings_accept_every_note() {
         let markdown = DestinationConfiguration.markdownFolder(
             MarkdownFolderDestinationConfig(folderPath: "/tmp", fileNameTemplate: "{notebook}", includeFrontmatter: false))
-        XCTAssertTrue(markdown.accepts(fileTags: []))
+        let binding = DestinationBinding(configuration: markdown)
+        XCTAssertTrue(binding.accepts(fileTags: []))
+        XCTAssertTrue(binding.accepts(fileTags: ["anything"]))
+    }
+
+    func test_legacy_linear_config_tag_filter_still_applies() {
+        // Bindings saved before the filter moved to the binding level keep working
+        // via the legacy LinearDestinationConfig.requiredTags fallback.
+        let legacy = DestinationBinding(configuration: .linear(LinearDestinationConfig(
+            workspaceId: "t", workspaceName: "Eng", projectId: nil, projectName: nil,
+            defaultLabel: nil, requiredTags: ["Action"])))
+        XCTAssertNil(legacy.requiredTags)
+        XCTAssertTrue(legacy.accepts(fileTags: ["Action"]))
+        XCTAssertFalse(legacy.accepts(fileTags: ["Idea"]))
     }
 
     private func binding(status: RuleRunStatus, pages: Int = 0) -> DestinationBinding {

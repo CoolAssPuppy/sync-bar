@@ -77,6 +77,25 @@ final class RemarkableSyncIndexTests: XCTestCase {
         XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(blank.utf8)), ["Keep"])
     }
 
+    func test_parseContentTags_reads_legacy_flat_page_tags() throws {
+        let json = #"{"pageTags":[{"name":"sync","timestamp":1}]}"#
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(json.utf8)), ["sync"])
+    }
+
+    func test_parseContentTags_reads_modern_per_page_tags() throws {
+        let json = #"{"cPages":{"pages":[{"id":"p1","tags":[{"name":"sync"}]},{"id":"p2"}]}}"#
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(json.utf8)), ["sync"])
+    }
+
+    func test_parseContentTags_merges_and_dedupes_across_locations() throws {
+        let json = #"""
+        {"tags":[{"name":"sync"}],
+         "pageTags":[{"name":"sync"},{"name":"draft"}],
+         "cPages":{"pages":[{"id":"p1","tags":[{"name":"draft"},{"name":"idea"}]}]}}
+        """#
+        XCTAssertEqual(try RemarkableSyncIndex.parseContentTags(Data(json.utf8)), ["sync", "draft", "idea"])
+    }
+
     func test_parseRootHash_handles_json_and_plain() {
         let json = #"{"hash":"roothash","generation":5}"#
         XCTAssertEqual(RealRemarkableClient.parseRootHash(Data(json.utf8)), "roothash")

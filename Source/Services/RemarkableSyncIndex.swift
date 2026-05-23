@@ -137,17 +137,34 @@ enum RemarkableSyncIndex {
         return raw.pages ?? []
     }
 
-    /// Document-level tag names from a `.content` blob. reMarkable stores tags
-    /// as `tags: [{name, timestamp}]` (whole-note tags); page tags live in a
-    /// separate `pageTags` array we don't need for note-level filtering. Blank
-    /// names are dropped. Returns [] when the blob has no tags.
+    /// All tag names from a `.content` blob. reMarkable tags live in three
+    /// places depending on app version and whether the tag is on the whole note
+    /// or a single page:
+    ///   - `tags: [{name}]`                  whole-note tags
+    ///   - `pageTags: [{name}]`              legacy page tags (flat)
+    ///   - `cPages.pages[].tags: [{name}]`   modern page tags (per page)
+    /// We treat a note as carrying a tag if the tag appears anywhere in it, so a
+    /// note with a "sync"-tagged page filters the same as one tagged as a whole.
+    /// Blank names are dropped and duplicates collapsed (order preserved).
+    /// Returns [] when the blob has no tags.
     static func parseContentTags(_ data: Data) throws -> [String] {
         struct Tag: Decodable { let name: String? }
-        struct Raw: Decodable { let tags: [Tag]? }
+        struct Page: Decodable { let tags: [Tag]? }
+        struct CPages: Decodable { let pages: [Page]? }
+        struct Raw: Decodable {
+            let tags: [Tag]?
+            let pageTags: [Tag]?
+            let cPages: CPages?
+        }
         let raw = try JSONDecoder().decode(Raw.self, from: data)
-        return (raw.tags ?? []).compactMap { tag in
+        let all = (raw.tags ?? [])
+            + (raw.pageTags ?? [])
+            + (raw.cPages?.pages ?? []).flatMap { $0.tags ?? [] }
+        var seen = Set<String>()
+        return all.compactMap { tag -> String? in
             let name = tag.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return name.isEmpty ? nil : name
+            guard !name.isEmpty, seen.insert(name).inserted else { return nil }
+            return name
         }
     }
 }

@@ -52,17 +52,24 @@ struct RealNotionClient: NotionClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
         try Self.validate(response: response, data: data)
+        return try Self.parseDestinations(data)
+    }
 
+    /// Parses a Notion `/v1/search` response into destinations. Databases carry
+    /// their title at the top level; a page's title lives in whichever property
+    /// has type `title` (its key is the column name, e.g. "Name", not literally
+    /// "title"), which is why the old key-based lookup showed everything as
+    /// "Untitled". Databases are sorted first, then alphabetically.
+    static func parseDestinations(_ data: Data) throws -> [NotionDestination] {
         struct SearchResponse: Decodable {
             struct Item: Decodable {
                 struct Inner: Decodable { let plain_text: String? }
-                struct Title: Decodable { let title: [Inner]? }
-                struct PropertiesContainer: Decodable { let title: Title? }
-                struct Parent: Decodable { let type: String? }
+                struct PageProperty: Decodable { let type: String?; let title: [Inner]? }
+                struct Parent: Decodable { let type: String?; let page_id: String? }
                 struct Icon: Decodable { let emoji: String? }
                 let id: String
                 let object: String  // "page" or "database"
-                let properties: PropertiesContainer?
+                let properties: [String: PageProperty]?
                 let parent: Parent?
                 let icon: Icon?
                 let title: [Inner]?  // databases ship their title at the top level
@@ -70,13 +77,27 @@ struct RealNotionClient: NotionClient {
             let results: [Item]
         }
         let parsed = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return parsed.results.map { item -> NotionDestination in
+        let known = Set(parsed.results.map(\.id))
+        // Top-level only: keep all databases, plus pages at the workspace root or
+        // the root of a shared subtree; drop pages nested under another shared
+        // page and drop database rows. Trims the dropdown from every descendant
+        // down to the handful you'd actually pick.
+        func isTopLevel(_ item: SearchResponse.Item) -> Bool {
+            if item.object == "database" { return true }
+            switch item.parent?.type {
+            case "workspace":   return true
+            case "database_id": return false
+            case "page_id":     return !(item.parent?.page_id.map(known.contains) ?? false)
+            default:            return true
+            }
+        }
+        return parsed.results.filter(isTopLevel).map { item -> NotionDestination in
             let extractedTitle: String = {
                 if let dbTitle = item.title?.compactMap(\.plain_text).joined(), !dbTitle.isEmpty {
                     return dbTitle
                 }
-                if let pageTitle = item.properties?.title?.title?.compactMap(\.plain_text).joined(),
-                   !pageTitle.isEmpty {
+                if let titleProp = item.properties?.values.first(where: { $0.type == "title" }),
+                   let pageTitle = titleProp.title?.compactMap(\.plain_text).joined(), !pageTitle.isEmpty {
                     return pageTitle
                 }
                 return "Untitled"
@@ -88,6 +109,10 @@ struct RealNotionClient: NotionClient {
                 icon: item.icon?.emoji,
                 parentPath: item.parent?.type
             )
+        }
+        .sorted { lhs, rhs in
+            if (lhs.type == .database) != (rhs.type == .database) { return lhs.type == .database }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
         }
     }
 

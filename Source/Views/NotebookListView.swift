@@ -51,7 +51,7 @@ struct NotebookListView: View {
         HStack(alignment: .center, spacing: 14) {
             sourceIcon
             VStack(alignment: .leading, spacing: 1) {
-                Text("Folders")
+                Text("reMarkable Folders")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                 Text(headerSubtitle)
@@ -78,13 +78,17 @@ struct NotebookListView: View {
     /// detail-header icon (DestinationIcon at 36pt), so sources and destinations
     /// read as peers. Template-tinted so the mark stays visible on any theme.
     private var sourceIcon: some View {
+        // The reMarkable mark ships as an opaque (no-alpha) black-on-white PNG, so
+        // template tinting would flatten it to a solid square. Render it as-is on
+        // a small white chip so it stays legible on any theme.
         Image("Remarkable")
             .resizable()
-            .renderingMode(.template)
             .interpolation(.high)
             .scaledToFit()
-            .foregroundStyle(theme.foreground)
+            .padding(5)
             .frame(width: 36, height: 36)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             .roleBadge(.source)
     }
 
@@ -254,7 +258,7 @@ private struct NotebookRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(theme.tertiary)
                     }
-                    Text("\(notebook.pageCount) note\(notebook.pageCount == 1 ? "" : "s")")
+                    Text("\(notebook.pageCount) Notebook\(notebook.pageCount == 1 ? "" : "s")")
                         .font(.system(size: 10))
                         .foregroundStyle(theme.muted)
                     Text("·")

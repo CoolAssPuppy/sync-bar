@@ -179,20 +179,20 @@ Use `defaultConfiguration` (the same accessor the detail-view connect uses).
 - **Reconnect**: OAuth accounts expose Reconnect in the detail gear drawer.
 - **Tag filtering ("only sync tagged notes")**: see below.
 
-### Tag filtering (being made consistent)
+### Tag filtering
 
-Today this lives only on Linear: `LinearDestinationConfig.requiredTags` plus
-`DestinationConfiguration.accepts(fileTags:)`, which special-cases `.linear` and
-returns `true` for every other kind. The coordinator calls `accepts` to drop
-notes that lack the required tags before OCR and before writing.
+Every destination supports "only sync tagged notes" through a per-binding filter,
+so you get it for free; there is nothing to wire per kind. The pieces:
+`DestinationBinding.requiredTags` (nil/empty means sync all) and
+`DestinationBinding.accepts(fileTags:)`, which the coordinator calls to drop
+notes lacking a required tag before OCR and before writing. The editor renders
+the shared `RequiredTagsControl` for all kinds (step 8's "Filter" card), bound to
+the binding's `requiredTags`.
 
-The intended end state is that the filter is a **per-binding** capability every
-destination supports, not a per-kind config field. To get there: move
-`requiredTags` from `LinearDestinationConfig` onto `DestinationBinding`, make
-`accepts` a `DestinationBinding` method, surface the "only sync tagged notes"
-control in `BindingEditorSheet` for all kinds (it currently lives in
-`LinearForm`), and migrate existing Linear bindings (decode the old config field
-into the new binding field). Until that lands, treat tag filtering as Linear-only.
+Back-compat: filters saved before this was generalized lived on
+`LinearDestinationConfig.requiredTags`. `DestinationBinding.effectiveRequiredTags`
+falls back to that legacy field, so old Linear filters keep working with no
+migration; new saves write the binding-level field and leave the legacy one nil.
 
 ## Handled generically (do not touch)
 

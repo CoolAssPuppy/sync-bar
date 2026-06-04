@@ -51,6 +51,10 @@ struct NotebookListView: View {
             .clipped()
             Divider().background(theme.divider)
 
+            if ledger.remarkableNeedsRepair {
+                disconnectedBanner
+            }
+
             if ledger.remarkableAccount == nil {
                 pairPrompt
             } else if visibleNotebooks.isEmpty {
@@ -121,6 +125,34 @@ struct NotebookListView: View {
             .roleBadge(.source)
     }
 
+    // MARK: Disconnected banner
+
+    /// Shown when the cloud has rejected the device token. Cached folders stay
+    /// visible; this surfaces that syncs/uploads are failing and offers re-pair.
+    private var disconnectedBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.destructive)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("reMarkable disconnected")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("Your device token was rejected. Re-pair to resume syncing and uploads.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer(minLength: 12)
+            AppSecondaryButton(title: "Re-Pair", systemImage: "qrcode.viewfinder", tint: .destructive) {
+                isRepairDrawerOpen = true
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(theme.destructive.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider().background(theme.divider) }
+    }
+
     // MARK: Re-pair drawer
 
     /// Drops down from the header (gear icon) so a user whose reMarkable account
@@ -174,6 +206,7 @@ struct NotebookListView: View {
             KeychainStore.shared.delete(key: .remarkableUserToken)
             ledger.setRemarkableAccount(account)
             ledger.setFolders(try await remarkable.listFolders())
+            ledger.updateRemarkableHealth(error: nil)   // reconnected
             Telemetry.capture("remarkable.repaired")
             repairCode = ""
             isRepairDrawerOpen = false

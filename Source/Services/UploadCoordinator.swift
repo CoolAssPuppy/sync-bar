@@ -83,6 +83,7 @@ final class UploadCoordinator: ObservableObject {
                 } catch {
                     failed += 1
                     Log.remarkable.error("upload failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    Ledger.shared.updateRemarkableHealth(error: error)
                 }
             }
 

@@ -134,6 +134,7 @@ struct MainView: View {
             do {
                 let folders = try await client.listFolders()
                 await MainActor.run {
+                    ledger.updateRemarkableHealth(error: nil)
                     ledger.setFolders(folders)
                     // Clean up rules left pointing at folders that no longer
                     // exist (e.g. orphaned by the folder/file model change).
@@ -142,6 +143,7 @@ struct MainView: View {
                     }
                 }
             } catch {
+                await MainActor.run { ledger.updateRemarkableHealth(error: error) }
                 Log.ui.error("Notebook refresh failed: \(String(describing: error), privacy: .public)")
             }
         }

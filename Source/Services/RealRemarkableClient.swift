@@ -309,6 +309,13 @@ struct RealRemarkableClient: RemarkableClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
         let (data, response) = try await session.data(for: request)
+        // A 401 here means the long-lived *device* token itself was rejected
+        // (deleted/de-registered/account recreated) — not a transient user-token
+        // expiry. Surface it distinctly so the UI can prompt a re-pair.
+        if (response as? HTTPURLResponse)?.statusCode == 401 {
+            keychain.delete(key: .remarkableUserToken)
+            throw RemarkableError.tokenRejected
+        }
         try Self.validate(response: response, data: data)
         guard let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !token.isEmpty else {

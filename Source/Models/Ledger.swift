@@ -30,6 +30,11 @@ final class Ledger: ObservableObject {
     private static let syncedExternalIdsKey = "ledger.syncedExternalIds"
 
     @Published private(set) var remarkableAccount: RemarkableAccount?
+    /// True when the cloud has rejected the device token (it was deleted,
+    /// de-registered, or the account was recreated). Runtime-only — not
+    /// persisted — so it's recomputed by the next sync/refresh after launch. The
+    /// UI uses it to prompt re-pairing instead of silently serving cached data.
+    @Published private(set) var remarkableNeedsRepair = false
     @Published private(set) var notionWorkspaces: [NotionWorkspace] = []
     @Published private(set) var linearAccounts: [LinearAccount] = []
     @Published private(set) var googleAccounts: [GoogleAccount] = []
@@ -145,6 +150,23 @@ final class Ledger: ObservableObject {
         remarkableAccount = account
         persistRemarkable()
         NotificationCenter.default.post(name: .remarkableAccountChanged, object: nil)
+    }
+
+    /// Updates the reMarkable connection health from the result of a network
+    /// call. A `.tokenRejected` error means the device token is dead (prompt
+    /// re-pair); a clean result clears it. Other errors (offline, rate-limited)
+    /// are transient and leave the health unchanged.
+    func updateRemarkableHealth(error: Error?) {
+        if error == nil {
+            setRemarkableNeedsRepair(false)
+        } else if case RemarkableError.tokenRejected = error! {
+            setRemarkableNeedsRepair(true)
+        }
+    }
+
+    func setRemarkableNeedsRepair(_ value: Bool) {
+        guard remarkableNeedsRepair != value else { return }
+        remarkableNeedsRepair = value
     }
 
     func upsertNotionWorkspace(_ workspace: NotionWorkspace) {

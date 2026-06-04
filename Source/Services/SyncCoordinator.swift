@@ -64,10 +64,12 @@ final class SyncCoordinator: ObservableObject {
         guard keychain.value(for: .remarkableDeviceToken)?.isEmpty == false else { return }
         do {
             let folders = try await remarkable.listFolders()
+            ledger.updateRemarkableHealth(error: nil)
             guard !folders.isEmpty else { return }
             ledger.setFolders(folders)
             ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id)))
         } catch {
+            ledger.updateRemarkableHealth(error: error)
             Log.sync.error("Folder refresh failed: \(Formatters.userMessage(for: error), privacy: .public)")
         }
     }
@@ -178,7 +180,9 @@ final class SyncCoordinator: ObservableObject {
         var files: [RmFile] = []
         do {
             files = try await remarkable.listFiles(inFolderId: rule.rmNotebookId)
+            ledger.updateRemarkableHealth(error: nil)
         } catch {
+            ledger.updateRemarkableHealth(error: error)
             recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))
             return
         }

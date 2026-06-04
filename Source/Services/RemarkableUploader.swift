@@ -250,7 +250,13 @@ struct RemarkableUploader: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
         let (data, response) = try await session.data(for: request)
-        try Self.validate(status: (response as? HTTPURLResponse)?.statusCode ?? -1, data: data)
+        let mintStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
+        if mintStatus == 401 {
+            // The device token itself is dead — distinct from a transient expiry.
+            keychain.delete(key: .remarkableUserToken)
+            throw RemarkableError.tokenRejected
+        }
+        try Self.validate(status: mintStatus, data: data)
         guard let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !token.isEmpty else {
             throw RemarkableError.network("Empty user token from reMarkable cloud.")

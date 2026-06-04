@@ -10,6 +10,7 @@ import Foundation
 enum RemarkableError: LocalizedError, Sendable {
     case invalidOneTimeCode
     case deviceNotPaired
+    case tokenRejected
     case rateLimited
     case unsupportedFileType(String)
     case network(String)
@@ -18,6 +19,7 @@ enum RemarkableError: LocalizedError, Sendable {
         switch self {
         case .invalidOneTimeCode: return "That one-time code wasn't valid."
         case .deviceNotPaired:    return "Connect a reMarkable first."
+        case .tokenRejected:      return "reMarkable rejected your device token. Re-pair to reconnect."
         case .rateLimited:        return "The reMarkable cloud is throttling us. Try again in a minute."
         case .unsupportedFileType(let name): return "Can't upload \(name) — only PDF and EPUB files are supported."
         case .network(let msg):   return msg

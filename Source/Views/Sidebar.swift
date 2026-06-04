@@ -246,20 +246,24 @@ struct Sidebar: View {
         ledger.rules.flatMap(\.destinations).contains { $0.lastRunStatus == .error }
     }
 
+    private var needsRepair: Bool { hasRemarkable && ledger.remarkableNeedsRepair }
+
     private var statusDot: Color {
         if coordinator.isSyncing { return theme.primary }
-        if !hasRemarkable { return theme.destructive }
+        if !hasRemarkable || needsRepair { return theme.destructive }
         if hasSyncIssues { return theme.warning }
         return theme.success
     }
 
     private var statusPrimary: String {
         if !hasRemarkable { return "Not connected" }
+        if needsRepair { return "reMarkable disconnected" }
         if hasSyncIssues { return "Issues with reMarkable" }
         return "Connected to reMarkable"
     }
 
     private var statusSecondary: String {
+        if needsRepair { return "Re-pair to resume syncing" }
         if coordinator.isSyncing { return "Syncing now…" }
         if AppSettings.shared.pauseSyncing { return "Syncing paused" }
         guard let last = lastSyncDate else { return "Last sync: never" }

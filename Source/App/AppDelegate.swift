@@ -18,7 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popoverEventMonitor: Any?
     private var subscriptions = Set<AnyCancellable>()
     private var mainWindow: NSWindow?
-    private static let spinAnimationKey = "syncbar.spin"
+    private var cometLayer: CALayer?
+    private static let cometAnimationKey = "syncbar.comet"
 
     let coordinator = SyncCoordinator()
     private let launchAtLogin = LaunchAtLoginManager.shared
@@ -84,14 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rightClickMenu = buildRightClickMenu()
     }
 
-    private func applyStatusItemIcon(syncing: Bool = false) {
+    private func applyStatusItemIcon() {
         guard let button = statusItem?.button else { return }
-        let assetName = syncing ? "MenuBarIconSyncing" : "MenuBarIcon"
-        if let image = NSImage(named: assetName) {
-            // Template-rendered name stays muted (system-tinted) while idle;
-            // the syncing variant ships its own yellow and opts out of
-            // template tinting.
-            image.isTemplate = !syncing
+        // The template loop stays the button image at all times, so the arrows
+        // render in the system-tinted menu-bar color whether idle or syncing.
+        // The syncing state is conveyed by the comet overlay (startStatusItemSync),
+        // not by swapping the image.
+        if let image = NSImage(named: "MenuBarIcon") {
+            image.isTemplate = true
             button.image = image
         } else {
             // Fallback if assets are missing for any reason.
@@ -101,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fallback?.isTemplate = true
             button.image = fallback
         }
-        button.toolTip = syncing ? "Sync Bar — syncing…" : "Sync Bar"
+        button.toolTip = "Sync Bar"
     }
 
     private func buildRightClickMenu() -> NSMenu {
@@ -249,10 +250,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func subscribeToNotifications() {
         NotificationCenter.default.publisher(for: .syncStarted)
-            .sink { [weak self] _ in self?.startStatusItemSpin() }
+            .sink { [weak self] _ in self?.startStatusItemSync() }
             .store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .syncFinished)
-            .sink { [weak self] _ in self?.stopStatusItemSpin() }
+            .sink { [weak self] _ in self?.stopStatusItemSync() }
             .store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .pauseSyncingChanged)
             .sink { [weak self] _ in
@@ -265,28 +266,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &subscriptions)
     }
 
-    // MARK: Status spin
+    // MARK: Status sync animation
 
-    private func startStatusItemSpin() {
-        applyStatusItemIcon(syncing: true)
-        guard let button = statusItem?.button else { return }
+    /// While syncing, the loop arrows hold still and a yellow "comet" of light
+    /// orbits clockwise around them — left→right across the top, right→left
+    /// across the bottom — so it reads like data flowing through the sync.
+    ///
+    /// The base template image stays as the button image (so the arrows keep
+    /// their system-tinted color). On top we add a glyph-shaped clip whose only
+    /// content is a conic yellow wedge that rotates inside the static mask. The
+    /// mask is the loop image's own alpha, so the glow lands pixel-perfectly on
+    /// the arrows without re-deriving the geometry.
+    private func startStatusItemSync() {
+        guard let button = statusItem?.button, let image = button.image else { return }
+        button.toolTip = "Sync Bar — syncing…"
         button.wantsLayer = true
-        guard let layer = button.layer else { return }
-        let bounds = layer.bounds
-        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
-        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
-        animation.fromValue = 0
-        animation.toValue = -Double.pi * 2  // clockwise
-        animation.duration = 1.2
-        animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .linear)
-        layer.add(animation, forKey: Self.spinAnimationKey)
+        guard let hostLayer = button.layer else { return }
+
+        cometLayer?.removeFromSuperlayer()
+
+        let scale = button.window?.backingScaleFactor ?? 2
+        let imageSize = image.size
+        let originX = ((button.bounds.width - imageSize.width) / 2).rounded()
+        let originY = ((button.bounds.height - imageSize.height) / 2).rounded()
+        let iconRect = CGRect(x: originX, y: originY, width: imageSize.width, height: imageSize.height)
+
+        let container = CALayer()
+        container.frame = iconRect
+        container.contentsScale = scale
+
+        // Clip everything inside to the loop shape (the image's alpha). Static —
+        // it never rotates, so the arrows stay put.
+        var proposed = CGRect(origin: .zero, size: imageSize)
+        if let cg = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil) {
+            let mask = CALayer()
+            mask.frame = container.bounds
+            mask.contents = cg
+            mask.contentsScale = scale
+            container.mask = mask
+        }
+
+        // A conic gradient: one bright yellow wedge fading to a transparent tail,
+        // sized to cover the whole glyph even while rotating.
+        let comet = CAGradientLayer()
+        comet.type = .conic
+        let side = (hypot(iconRect.width, iconRect.height)).rounded(.up)
+        comet.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        comet.position = CGPoint(x: iconRect.width / 2, y: iconRect.height / 2)
+        comet.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        comet.contentsScale = scale
+        comet.startPoint = CGPoint(x: 0.5, y: 0.5)
+        comet.endPoint = CGPoint(x: 0.5, y: 0.0)
+        let yellow = NSColor(red: 253.0 / 255.0, green: 184.0 / 255.0, blue: 23.0 / 255.0, alpha: 1).cgColor
+        let clear = NSColor(red: 253.0 / 255.0, green: 184.0 / 255.0, blue: 23.0 / 255.0, alpha: 0).cgColor
+        comet.colors = [clear, yellow, clear, clear]
+        comet.locations = [0.0, 0.12, 0.5, 1.0]
+
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = -Double.pi * 2  // clockwise
+        spin.duration = 1.4
+        spin.repeatCount = .infinity
+        spin.timingFunction = CAMediaTimingFunction(name: .linear)
+        comet.add(spin, forKey: Self.cometAnimationKey)
+
+        container.addSublayer(comet)
+        hostLayer.addSublayer(container)
+        cometLayer = container
     }
 
-    private func stopStatusItemSpin() {
-        statusItem?.button?.layer?.removeAnimation(forKey: Self.spinAnimationKey)
-        applyStatusItemIcon(syncing: false)
+    private func stopStatusItemSync() {
+        cometLayer?.removeFromSuperlayer()
+        cometLayer = nil
+        statusItem?.button?.toolTip = "Sync Bar"
     }
 }
 

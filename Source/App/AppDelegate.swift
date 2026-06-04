@@ -241,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.contentView = NSHostingView(rootView: MainView(coordinator: coordinator))
+        window.contentView = NSHostingView(rootView: MainShellView(coordinator: coordinator))
         window.title = "Sync Bar"
         window.toolbar = nil
         window.titlebarAppearsTransparent = true

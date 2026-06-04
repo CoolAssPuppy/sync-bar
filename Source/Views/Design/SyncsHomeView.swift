@@ -1,0 +1,272 @@
+//
+//  SyncsHomeView.swift
+//  SyncBar
+//
+//  Copyright (c) 2026 Strategic Nerds. All rights reserved.
+//
+//  The redesigned home: a flat list of Syncs. Each row is one flow —
+//  folder → app · how · status. Creating and editing happen in one editor.
+//
+
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+
+struct SyncsHomeView: View {
+    @ObservedObject var coordinator: SyncCoordinator
+    var onNew: () -> Void
+    var onEdit: (SyncFlow) -> Void
+    var onRefresh: () -> Void
+
+    @ObservedObject private var ledger = Ledger.shared
+    @Environment(\.theme) private var theme
+
+    private var flows: [SyncFlow] { ledger.syncFlows }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            if ledger.remarkableNeedsRepair { disconnectedBanner }
+            content
+        }
+        .background(theme.background)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Syncs")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(theme.foreground)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+            AppIconButton(systemName: "arrow.clockwise", help: "Refresh folders", spinOnTap: true) { onRefresh() }
+            PillButton(title: "New sync", systemImage: "plus") { onNew() }
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 26)
+        .padding(.bottom, 18)
+    }
+
+    private var subtitle: String {
+        let count = flows.count
+        if count == 0 { return ledger.remarkableAccount == nil ? "Connect your reMarkable to begin" : "No syncs yet" }
+        let last = flows.compactMap(\.lastRunAt).max()
+        let active = "\(count) sync\(count == 1 ? "" : "s")"
+        if coordinator.isSyncing { return "\(active) · syncing now" }
+        if let last { return "\(active) · last run \(Formatters.relativeLabel(for: last))" }
+        return "\(active) · not run yet"
+    }
+
+    // MARK: Content
+
+    @ViewBuilder
+    private var content: some View {
+        if ledger.remarkableAccount == nil {
+            pairPrompt
+        } else if flows.isEmpty {
+            emptyState
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(flows) { flow in
+                        SyncRowView(
+                            flow: flow,
+                            isSyncing: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
+                            onTap: { onEdit(flow) },
+                            onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
+                        )
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(theme.card)
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(theme.primary)
+            }
+            .frame(width: 92, height: 92)
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+            VStack(spacing: 6) {
+                Text("No syncs yet")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("A sync sends one reMarkable folder to one app. Make your first one to start turning notes into text.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+            PillButton(title: "Create your first sync", systemImage: "plus") { onNew() }
+                .padding(.top, 2)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var pairPrompt: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(theme.card)
+                Image(systemName: "pencil.tip.crop.circle.badge.plus")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(theme.primary)
+            }
+            .frame(width: 92, height: 92)
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+            VStack(spacing: 6) {
+                Text("Connect your reMarkable")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(theme.foreground)
+                Text("Pair your tablet in Connections, then make a sync.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var disconnectedBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.destructive)
+            Text("reMarkable disconnected — re-pair in Connections to resume syncing.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.foregroundSoft)
+            Spacer()
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 11)
+        .background(theme.destructive.opacity(0.08))
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
+    }
+}
+
+// MARK: - Sync row
+
+private struct SyncRowView: View {
+    let flow: SyncFlow
+    let isSyncing: Bool
+    let onTap: () -> Void
+    let onSyncNow: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 10) {
+                        FolderGlyph(size: 30)
+                        Text(flow.folderName)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(theme.foreground)
+                            .lineLimit(1)
+                        FlowArrow()
+                        DestinationIcon(kind: flow.kind, size: 26)
+                        Text(flow.kind.label)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(theme.foreground)
+                            .lineLimit(1)
+                        Text("· \(flow.destinationSummary)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                    }
+                    Text(flow.howSummary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.tertiary)
+                        .padding(.leading, 40)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                statusPill
+                syncNowButton
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(theme.tertiary)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
+            .background(
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .fill(isHovered ? theme.cardElevated : theme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
+                    .strokeBorder(isHovered ? theme.borderStrong : theme.border, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+
+    private var statusPill: some View {
+        HStack(spacing: 6) {
+            SyncStatusDot(status: flow.status, isSyncing: isSyncing)
+            Text(statusText)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(statusColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background(Capsule().fill(statusColor.opacity(0.12)))
+    }
+
+    private var syncNowButton: some View {
+        Button(action: onSyncNow) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(theme.muted)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Sync this now")
+    }
+
+    private var statusText: String {
+        if isSyncing { return "Syncing now…" }
+        if !flow.isEnabled { return "Off" }
+        switch flow.status {
+        case .neverRun: return "Not synced yet"
+        case .running:  return "Syncing…"
+        case .error:    return "Failed"
+        case .partial:  return "Partial"
+        case .success:
+            if let last = flow.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
+            return "Synced"
+        }
+    }
+
+    private var statusColor: Color {
+        if isSyncing { return theme.primary }
+        if !flow.isEnabled { return theme.tertiary }
+        switch flow.status {
+        case .success:  return theme.success
+        case .partial:  return theme.warning
+        case .error:    return theme.destructive
+        case .running:  return theme.primary
+        case .neverRun: return theme.muted
+        }
+    }
+}

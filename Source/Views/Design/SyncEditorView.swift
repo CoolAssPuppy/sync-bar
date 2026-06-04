@@ -84,7 +84,7 @@ struct SyncEditorView: View {
             }
             footer
         }
-        .frame(width: 680, height: 720)
+        .frame(width: 680, height: 600)
         .background(theme.surface)
         .environment(\.theme, theme)
         .onAppear(perform: load)

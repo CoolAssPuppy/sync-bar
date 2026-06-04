@@ -30,4 +30,6 @@ extension Notification.Name {
     static let openAddNotionWorkspace   = Notification.Name("syncbar.openAddNotion")
     static let openPairRemarkable       = Notification.Name("syncbar.openPairRemarkable")
     static let notebookSelectionChanged = Notification.Name("syncbar.notebookSelected")
+    static let selectRemarkableView     = Notification.Name("syncbar.selectRemarkableView")
+    static let remarkableUploadFinished = Notification.Name("syncbar.remarkableUploadFinished")
 }

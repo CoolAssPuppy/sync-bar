@@ -13,6 +13,7 @@ struct MenuBarPopoverActions {
     var openSettings: () -> Void
     var openNotionUrl: (URL) -> Void
     var togglePause: () -> Void
+    var uploadFiles: () -> Void
     var quit: () -> Void
 }
 
@@ -73,6 +74,9 @@ struct MenuBarPopover: View {
             } else if settings.pauseSyncing {
                 StatusPill(label: "Paused", kind: .warning)
             }
+
+            AppIconButton(systemName: "arrow.up.doc",
+                          help: "Upload PDF/EPUB to reMarkable") { actions.uploadFiles() }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

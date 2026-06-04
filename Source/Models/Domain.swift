@@ -58,6 +58,12 @@ struct RmFile: Codable, Equatable, Hashable, Identifiable, Sendable {
 /// Sentinel folder id for files that live at the cloud root (no folder).
 let unfiledFolderId = "__unfiled__"
 
+/// The outcome of uploading one file to the reMarkable cloud.
+struct RmUploadResult: Sendable, Equatable {
+    var documentId: String
+    var visibleName: String
+}
+
 // MARK: - Notion
 
 struct NotionWorkspace: Codable, Equatable, Identifiable, Hashable {

@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct NotebookListView: View {
     @Binding var selectedNotebookId: String?
@@ -20,6 +22,7 @@ struct NotebookListView: View {
     @State private var repairCode = ""
     @State private var isRepairing = false
     @State private var repairError: String?
+    @State private var isRootDropTargeted = false
 
     private let remarkable = RealRemarkableClient()
 
@@ -83,6 +86,10 @@ struct NotebookListView: View {
             AppIconButton(systemName: isRepairDrawerOpen ? "chevron.up" : "gearshape",
                           help: "Re-pair reMarkable") {
                 isRepairDrawerOpen.toggle()
+            }
+            AppIconButton(systemName: "arrow.up.doc",
+                          help: "Upload PDF/EPUB to reMarkable") {
+                presentUploadPanel()
             }
             AppIconButton(systemName: "arrow.triangle.2.circlepath",
                           help: "Refresh & sync all rules now",
@@ -241,13 +248,34 @@ struct NotebookListView: View {
             Text("No Folders Found")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
-            Text("Create a folder on your reMarkable and put your notes inside it, then refresh.")
+            Text("Create a folder on your reMarkable and put your notes inside it, then refresh. Or drop a PDF/EPUB here to upload it to My Files.")
                 .font(.system(size: 12))
                 .foregroundStyle(theme.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
             AppSecondaryButton(title: "Refresh", systemImage: "arrow.clockwise", action: onRefresh)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .dropDestination(for: URL.self) { urls, _ in
+            uploadToRoot(urls)
+            return true
+        } isTargeted: { isRootDropTargeted = $0 }
+        .overlay(rootDropHighlight)
+    }
+
+    /// Accent-colored inset border shown while files are dragged over the root
+    /// (My Files) drop area.
+    @ViewBuilder
+    private var rootDropHighlight: some View {
+        if isRootDropTargeted {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(theme.primary, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+                .padding(10)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
     }
 
     // MARK: List + right-edge slider
@@ -266,15 +294,27 @@ struct NotebookListView: View {
                                     settings.ignoreUnfiledNotes = true
                                     if selectedNotebookId == unfiledFolderId { selectedNotebookId = nil }
                                 }
-                                : nil
+                                : nil,
+                            onDropFiles: { urls in
+                                UploadCoordinator.shared.upload(urls: urls, toFolderId: notebook.id)
+                            }
                         )
                         .onTapGesture { selectNotebook(notebook) }
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            // Files dropped on the empty area beneath the rows go to the root.
+            // A drop on a folder row is consumed by the row first (innermost wins).
+            .dropDestination(for: URL.self) { urls, _ in
+                uploadToRoot(urls)
+                return true
+            } isTargeted: { isRootDropTargeted = $0 }
+            .overlay(rootDropHighlight)
 
             if let notebookId = selectedNotebookId,
                let notebook = visibleNotebooks.first(where: { $0.id == notebookId }) {
@@ -304,6 +344,28 @@ struct NotebookListView: View {
     private func closeSheet() {
         selectedNotebookId = nil
     }
+
+    // MARK: Upload
+
+    /// Opens a PDF/EPUB picker; chosen files upload to the root ("My Files").
+    private func presentUploadPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf, .epub]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.prompt = "Upload"
+        panel.message = "Choose PDF or EPUB files to upload to reMarkable (My Files)."
+        panel.begin { response in
+            guard response == .OK else { return }
+            UploadCoordinator.shared.upload(urls: panel.urls, toFolderId: "")
+        }
+    }
+
+    /// Routes files dropped on empty space (not on a folder row) to the root.
+    private func uploadToRoot(_ urls: [URL]) {
+        UploadCoordinator.shared.upload(urls: urls, toFolderId: "")
+    }
 }
 
 // MARK: - Notebook row
@@ -315,9 +377,12 @@ private struct NotebookRow: View {
     /// Provided only for the synthetic "Unfiled" folder, surfacing a faint "x"
     /// that hides it from the list (re-enable in Settings → Folder visibility).
     var onIgnore: (() -> Void)?
+    /// Files dropped onto this row, to upload into this folder.
+    var onDropFiles: ([URL]) -> Void = { _ in }
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
+    @State private var isDropTargeted = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -379,6 +444,10 @@ private struct NotebookRow: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .dropDestination(for: URL.self) { urls, _ in
+            onDropFiles(urls)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
     }
 
     /// Faint dismiss control shown only on the Unfiled folder row.
@@ -396,12 +465,14 @@ private struct NotebookRow: View {
     }
 
     private var rowBackgroundColor: Color {
+        if isDropTargeted { return theme.primary.opacity(0.16) }
         if isSelected { return theme.primary.opacity(0.08) }
         if isHovered  { return theme.cardElevated.opacity(0.6) }
         return theme.card
     }
 
     private var rowBorder: Color {
+        if isDropTargeted { return theme.primary }
         if isSelected { return theme.primary.opacity(0.35) }
         return theme.border
     }

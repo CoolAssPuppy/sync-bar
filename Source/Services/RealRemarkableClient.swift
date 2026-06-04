@@ -222,6 +222,15 @@ struct RealRemarkableClient: RemarkableClient {
                                      typedTextFirst: parsed.typedTextLeadsHandwriting)
     }
 
+    // MARK: Upload (write path)
+
+    func uploadDocument(fileURL: URL,
+                        toFolderId folderId: String,
+                        progress: @escaping @Sendable (Double) -> Void) async throws -> RmUploadResult {
+        let uploader = RemarkableUploader(session: session, keychain: keychain)
+        return try await uploader.uploadDocument(fileURL: fileURL, toFolderId: folderId, progress: progress)
+    }
+
     // MARK: Blob store
 
     private func rootIndexEntries() async throws -> [RemarkableIndexEntry] {

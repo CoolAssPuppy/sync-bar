@@ -491,4 +491,11 @@ private struct ScriptedRemarkableClient: RemarkableClient {
     func pageContent(for page: RmPage) async throws -> RemarkablePageContent {
         RemarkablePageContent(imageData: nil, typedText: typedText)
     }
+
+    func uploadDocument(fileURL: URL,
+                        toFolderId folderId: String,
+                        progress: @escaping @Sendable (Double) -> Void) async throws -> RmUploadResult {
+        progress(1.0)
+        return RmUploadResult(documentId: "uploaded", visibleName: fileURL.lastPathComponent)
+    }
 }

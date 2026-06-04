@@ -11,6 +11,7 @@ enum RemarkableError: LocalizedError, Sendable {
     case invalidOneTimeCode
     case deviceNotPaired
     case rateLimited
+    case unsupportedFileType(String)
     case network(String)
 
     var errorDescription: String? {
@@ -18,6 +19,7 @@ enum RemarkableError: LocalizedError, Sendable {
         case .invalidOneTimeCode: return "That one-time code wasn't valid."
         case .deviceNotPaired:    return "Connect a reMarkable first."
         case .rateLimited:        return "The reMarkable cloud is throttling us. Try again in a minute."
+        case .unsupportedFileType(let name): return "Can't upload \(name) — only PDF and EPUB files are supported."
         case .network(let msg):   return msg
         }
     }
@@ -42,6 +44,12 @@ protocol RemarkableClient: Sendable {
     /// e.g. the mock client) plus the page's typed text decoded structurally.
     /// One call downloads and parses the page once for both.
     func pageContent(for page: RmPage) async throws -> RemarkablePageContent
+    /// Uploads a local PDF/EPUB into the cloud at `folderId` (the destination
+    /// folder UUID, or "" for the root). `progress` reports 0…1 for this one
+    /// file and may be called from a background context.
+    func uploadDocument(fileURL: URL,
+                        toFolderId folderId: String,
+                        progress: @escaping @Sendable (Double) -> Void) async throws -> RmUploadResult
 }
 
 /// One page's content, split by source: rasterized strokes for OCR and typed
@@ -130,5 +138,23 @@ struct MockRemarkableClient: RemarkableClient {
 
     func pageContent(for page: RmPage) async throws -> RemarkablePageContent {
         RemarkablePageContent(imageData: nil, typedText: [])
+    }
+
+    /// Simulates an upload so the UI (progress bar + result banner) is fully
+    /// exercisable without a paired device. Validates the file type so the
+    /// error path is demonstrable too. Does not mutate the static fixtures.
+    func uploadDocument(fileURL: URL,
+                        toFolderId folderId: String,
+                        progress: @escaping @Sendable (Double) -> Void) async throws -> RmUploadResult {
+        let ext = fileURL.pathExtension.lowercased()
+        guard ext == "pdf" || ext == "epub" else {
+            throw RemarkableError.unsupportedFileType(fileURL.lastPathComponent)
+        }
+        for step in [0.2, 0.45, 0.7, 0.9, 1.0] {
+            try await Task.sleep(nanoseconds: 280_000_000)
+            progress(step)
+        }
+        return RmUploadResult(documentId: UUID().uuidString.lowercased(),
+                              visibleName: fileURL.deletingPathExtension().lastPathComponent)
     }
 }

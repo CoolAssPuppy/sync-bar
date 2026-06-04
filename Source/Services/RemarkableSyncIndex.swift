@@ -36,6 +36,16 @@ struct RemarkableIndexEntry: Equatable {
     let size: Int
 }
 
+/// One line of the schema-4 *root* index, which differs from the per-document
+/// index (`RemarkableIndexEntry`): the root lists documents, not component
+/// blobs. Line shape: `<docHash>:0:<uuid>:<numFiles>:<size>`.
+struct RootDocLine: Equatable {
+    let hash: String
+    let id: String
+    let numFiles: Int
+    let size: Int
+}
+
 /// Decoded `.metadata` blob for one document.
 struct RemarkableMetadata: Equatable {
     let visibleName: String
@@ -64,6 +74,12 @@ enum RemarkableSyncIndex {
         guard !lines.isEmpty else { return [] }
         // Drop the schema-version header line (a bare integer).
         if Int(lines[0]) != nil { lines.removeFirst() }
+        // Schema-4 indexes carry a summary line `0:<name>:<count>:<size>` after
+        // the header; skip it. A real entry never has 4 fields or a "0" hash.
+        if let first = lines.first {
+            let fields = first.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            if fields.count == 4 && fields[0] == "0" { lines.removeFirst() }
+        }
 
         return try lines.map { line in
             let fields = line.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
@@ -99,6 +115,130 @@ enum RemarkableSyncIndex {
             out[pageUuid] = entry.hash
         }
         return out
+    }
+
+    // MARK: - Serializers (upload / write path)
+
+    /// Serializes a schema-4 index blob: header `4`, a summary line
+    /// `0:<name>:<entryCount>:<totalSize>`, then the entries sorted by
+    /// identifier. Current reMarkable servers content-address every index by the
+    /// SHA-256 of these exact bytes and reject the old v3 format with HTTP 400
+    /// "invalid hash" — for both the root AND each per-document index.
+    private static func serializeIndexV4(summaryName: String, entries: [RemarkableIndexEntry]) -> String {
+        let sorted = entries.sorted { $0.identifier < $1.identifier }
+        let totalSize = sorted.reduce(0) { $0 + $1.size }
+        var out = "4\n"
+        out += "0:\(summaryName):\(sorted.count):\(totalSize)\n"
+        for entry in sorted {
+            out += "\(entry.hash):\(entry.type):\(entry.identifier):\(entry.subfiles):\(entry.size)\n"
+        }
+        return out
+    }
+
+    /// The per-document index blob. The summary line's name is the document's own
+    /// UUID (the root uses `.`). Components are leaf entries (type `0`, subfiles
+    /// `0`).
+    static func serializeDocumentIndex(documentId: String, entries: [RemarkableIndexEntry]) -> String {
+        serializeIndexV4(summaryName: documentId, entries: entries)
+    }
+
+    /// The root index blob. The summary line's name is `.`; each document is a
+    /// line `<docHash>:0:<uuid>:<numFiles>:<size>`.
+    static func serializeRootIndex(_ docs: [RootDocLine]) -> String {
+        let entries = docs.map {
+            RemarkableIndexEntry(hash: $0.hash, type: "0", identifier: $0.id, subfiles: $0.numFiles, size: $0.size)
+        }
+        return serializeIndexV4(summaryName: ".", entries: entries)
+    }
+
+    /// Parses a root index blob into its document lines, so a new document can be
+    /// spliced in before re-serializing. Tolerates both schema-3 roots (legacy,
+    /// no summary line, type field `80000000`) and schema-4 roots (a `0:.:…`
+    /// summary line that we skip and recompute on write). The per-line type field
+    /// is ignored, so both formats read the same.
+    static func parseRootIndexV4(_ text: String) throws -> [RootDocLine] {
+        var lines = text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).map(String.init)
+        guard !lines.isEmpty else { return [] }
+        if Int(lines[0]) != nil { lines.removeFirst() }            // schema header
+        if let first = lines.first {                                // v4 summary line
+            let fields = first.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            if fields.count >= 2 && fields[1] == "." { lines.removeFirst() }
+        }
+        return try lines.map { line in
+            let fields = line.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 5 else {
+                throw RemarkableSyncError.malformedIndex("expected 5 colon-separated fields, got \(fields.count) in \"\(line)\"")
+            }
+            return RootDocLine(
+                hash: fields[0],
+                id: fields[2],
+                numFiles: Int(fields[3]) ?? 0,
+                size: Int(fields[4]) ?? 0
+            )
+        }
+    }
+
+    /// Builds a `.metadata` JSON blob for an uploaded document. `parent` is the
+    /// destination folder UUID, or "" for the cloud root ("My Files").
+    /// `lastModified` is written as milliseconds-since-epoch *as a string*
+    /// (inverse of `parseMetadata`, which divides by 1000).
+    static func serializeMetadata(visibleName: String,
+                                  parent: String,
+                                  type: String,
+                                  lastModified: Date) throws -> Data {
+        struct MetadataBlob: Encodable {
+            let visibleName: String
+            let type: String
+            let parent: String
+            let lastModified: String
+            let lastOpened: String
+            let lastOpenedPage: Int
+            let version: Int
+            let pinned: Bool
+            let synced: Bool
+            let modified: Bool
+            let deleted: Bool
+            let metadatamodified: Bool
+        }
+        let millis = String(Int64((lastModified.timeIntervalSince1970 * 1000).rounded()))
+        let blob = MetadataBlob(
+            visibleName: visibleName, type: type, parent: parent,
+            lastModified: millis, lastOpened: "", lastOpenedPage: 0, version: 0,
+            pinned: false, synced: true, modified: false, deleted: false,
+            metadatamodified: false
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(blob)
+    }
+
+    /// Builds a `.content` JSON blob for an uploaded PDF/EPUB. For a PDF we list
+    /// one page UUID per page (annotation layers the device fills in lazily);
+    /// EPUB is reflowable so it carries no fixed pages. `formatVersion` is
+    /// deliberately omitted — rmapi omits it and uploads still succeed (the
+    /// device normalizes it on first open).
+    static func serializeContent(fileType: String, pageCount: Int) throws -> Data {
+        struct ContentBlob: Encodable {
+            let fileType: String
+            let pageCount: Int
+            let pages: [String]
+            let coverPageNumber: Int
+            let dummyDocument: Bool
+            let fontName: String
+            let lineHeight: Int
+            let margins: Int
+            let orientation: String
+            let textScale: Int
+        }
+        let pages = (0..<max(0, pageCount)).map { _ in UUID().uuidString.lowercased() }
+        let blob = ContentBlob(
+            fileType: fileType, pageCount: pageCount, pages: pages,
+            coverPageNumber: 0, dummyDocument: false, fontName: "",
+            lineHeight: -1, margins: 125, orientation: "portrait", textScale: 1
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(blob)
     }
 
     static func parseMetadata(_ data: Data) throws -> RemarkableMetadata {

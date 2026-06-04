@@ -22,6 +22,7 @@ struct MainView: View {
     @ObservedObject var coordinator: SyncCoordinator
     @ObservedObject private var themeStore = ThemeStore.shared
     @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject private var uploadCoordinator = UploadCoordinator.shared
     @State private var selection: MainSelection = .remarkable
     @State private var isSettingsOpen = false
     @State private var isLogOpen = false
@@ -43,9 +44,17 @@ struct MainView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(theme.background)
+            .overlay(alignment: .bottom) {
+                if uploadCoordinator.isUploading {
+                    UploadProgressBar(progress: uploadCoordinator.progress)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: uploadCoordinator.isUploading)
 
             SettingsDrawer(isPresented: $isSettingsOpen)
             SyncLogDrawer(isPresented: $isLogOpen)
+            UploadBannerView()
         }
         .frame(minWidth: 880, minHeight: 580)
         .background(WindowChrome(palette: theme))
@@ -65,6 +74,12 @@ struct MainView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSyncLog)) { _ in
             isLogOpen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .selectRemarkableView)) { _ in
+            selection = .remarkable
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .remarkableUploadFinished)) { _ in
+            refreshFolders()
         }
     }
 

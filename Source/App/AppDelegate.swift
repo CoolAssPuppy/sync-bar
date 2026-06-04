@@ -211,6 +211,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             togglePause: {
                 AppSettings.shared.pauseSyncing.toggle()
             },
+            uploadFiles: { [weak self] in
+                self?.popover?.performClose(nil)
+                self?.showMainWindow()
+                // Land on the reMarkable folders view so the user can drag-drop.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    NotificationCenter.default.post(name: .selectRemarkableView, object: nil)
+                }
+            },
             quit: { NSApp.terminate(nil) }
         )
         let view = MenuBarPopover(coordinator: coordinator, actions: actions)
@@ -324,7 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let spin = CABasicAnimation(keyPath: "transform.rotation.z")
         spin.fromValue = 0
-        spin.toValue = -Double.pi * 2  // clockwise
+        spin.toValue = Double.pi * 2  // flow follows the arrows (top L→R, bottom R→L)
         spin.duration = 1.4
         spin.repeatCount = .infinity
         spin.timingFunction = CAMediaTimingFunction(name: .linear)

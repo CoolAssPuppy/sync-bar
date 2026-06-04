@@ -16,6 +16,13 @@ struct NotebookListView: View {
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.theme) private var theme
 
+    @State private var isRepairDrawerOpen = false
+    @State private var repairCode = ""
+    @State private var isRepairing = false
+    @State private var repairError: String?
+
+    private let remarkable = RealRemarkableClient()
+
     /// Folders to render. Hides the synthetic "Unfiled" folder when the user has
     /// chosen to ignore loose notes. Display-only: sync runs off rules, not this
     /// list, so an ignored Unfiled folder with a rule keeps syncing.
@@ -27,6 +34,18 @@ struct NotebookListView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            // Clip the re-pair drawer to this slot so its open/close fade stays
+            // below the header, mirroring DestinationDetailScaffold.
+            VStack(spacing: 0) {
+                if isRepairDrawerOpen {
+                    VStack(spacing: 0) {
+                        Divider().background(theme.divider)
+                        repairDrawer
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .clipped()
             Divider().background(theme.divider)
 
             if ledger.remarkableAccount == nil {
@@ -38,6 +57,7 @@ struct NotebookListView: View {
             }
         }
         .background(theme.background)
+        .animation(.easeOut(duration: 0.22), value: isRepairDrawerOpen)
         .onAppear {
             if let id = selectedNotebookId, !visibleNotebooks.contains(where: { $0.id == id }) {
                 selectedNotebookId = nil
@@ -60,13 +80,15 @@ struct NotebookListView: View {
             }
             Spacer()
 
-            AppIconButton(systemName: "arrow.clockwise", help: "Refresh folders", spinOnTap: true) {
-                onRefresh()
+            AppIconButton(systemName: isRepairDrawerOpen ? "chevron.up" : "gearshape",
+                          help: "Re-pair reMarkable") {
+                isRepairDrawerOpen.toggle()
             }
             AppIconButton(systemName: "arrow.triangle.2.circlepath",
-                          help: "Sync all rules now",
+                          help: "Refresh & sync all rules now",
                           tint: ledger.rules.isEmpty ? .foreground : .primary,
                           spinOnTap: true) {
+                onRefresh()
                 if !ledger.rules.isEmpty { coordinator.syncNow(ruleId: nil) }
             }
         }
@@ -90,6 +112,73 @@ struct NotebookListView: View {
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             .roleBadge(.source)
+    }
+
+    // MARK: Re-pair drawer
+
+    /// Drops down from the header (gear icon) so a user whose reMarkable account
+    /// was deleted/recreated can pair a fresh device token in place, without
+    /// having to wipe the local account first.
+    private var repairDrawer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Re-Pair Your reMarkable")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.foreground)
+            Text("Generate a fresh 8-character code at my.remarkable.com → Connect, then enter it here.")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.muted)
+
+            HStack(spacing: 12) {
+                CodeBoxField(value: $repairCode, length: 8)
+                Spacer(minLength: 12)
+                AppSecondaryButton(title: "Cancel") { closeRepairDrawer() }
+                AppPrimaryButton(
+                    title: isRepairing ? "Re-Pairing…" : "Re-Pair",
+                    systemImage: "qrcode.viewfinder",
+                    isDisabled: repairCode.count != 8 || isRepairing
+                ) {
+                    Task { await repair() }
+                }
+            }
+
+            if let repairError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(theme.destructive)
+                    Text(repairError)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.destructive)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(theme.surface)
+    }
+
+    private func repair() async {
+        isRepairing = true
+        repairError = nil
+        defer { isRepairing = false }
+        do {
+            let account = try await remarkable.pairDevice(oneTimeCode: repairCode)
+            // Drop the stale derived session token so it re-derives against the
+            // new device token on the next sync.
+            KeychainStore.shared.delete(key: .remarkableUserToken)
+            ledger.setRemarkableAccount(account)
+            ledger.setFolders(try await remarkable.listFolders())
+            Telemetry.capture("remarkable.repaired")
+            repairCode = ""
+            isRepairDrawerOpen = false
+        } catch {
+            Telemetry.capture("remarkable.repair_failed")
+            repairError = Formatters.userMessage(for: error)
+        }
+    }
+
+    private func closeRepairDrawer() {
+        isRepairDrawerOpen = false
+        repairError = nil
     }
 
     private var headerSubtitle: String {

@@ -326,15 +326,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         comet.contentsScale = scale
         comet.startPoint = CGPoint(x: 0.5, y: 0.5)
         comet.endPoint = CGPoint(x: 0.5, y: 0.0)
-        let yellow = NSColor(red: 253.0 / 255.0, green: 184.0 / 255.0, blue: 23.0 / 255.0, alpha: 1).cgColor
-        let clear = NSColor(red: 253.0 / 255.0, green: 184.0 / 255.0, blue: 23.0 / 255.0, alpha: 0).cgColor
-        comet.colors = [clear, yellow, clear, clear]
-        comet.locations = [0.0, 0.12, 0.5, 1.0]
+        // Brighter, more saturated gold with a wider core and a soft trailing fade.
+        let yellow = NSColor(red: 1.0, green: 0.78, blue: 0.10, alpha: 1).cgColor
+        let clear = NSColor(red: 1.0, green: 0.78, blue: 0.10, alpha: 0).cgColor
+        comet.colors = [clear, yellow, yellow, clear, clear]
+        comet.locations = [0.0, 0.10, 0.28, 0.62, 1.0]
 
         let spin = CABasicAnimation(keyPath: "transform.rotation.z")
         spin.fromValue = 0
-        spin.toValue = Double.pi * 2  // flow follows the arrows (top L→R, bottom R→L)
-        spin.duration = 1.4
+        spin.toValue = -Double.pi * 2  // clockwise (top L→R, bottom R→L)
+        spin.duration = 2.2            // slower, calmer glide
         spin.repeatCount = .infinity
         spin.timingFunction = CAMediaTimingFunction(name: .linear)
         comet.add(spin, forKey: Self.cometAnimationKey)

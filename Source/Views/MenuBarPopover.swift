@@ -103,26 +103,21 @@ struct MenuBarPopover: View {
 
     @ViewBuilder
     private var content: some View {
-        // Cap the dropdown at the 10 most recently synced rules so it never
-        // grows unwieldy; the full list lives in the main window.
-        let visibleRules = Array(
-            ledger.rules
-                .filter { !$0.destinations.isEmpty }
-                .sorted { ($0.aggregateLastRunAt ?? .distantPast) > ($1.aggregateLastRunAt ?? .distantPast) }
-                .prefix(10)
-        )
-        if visibleRules.isEmpty {
+        // Cap the dropdown at the 10 most recent syncs so it never grows
+        // unwieldy; the full list lives in the main window.
+        let flows = Array(ledger.syncFlows.prefix(10))
+        if flows.isEmpty {
             EmptyRulesState(onOpen: actions.openMainWindow)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 listLabel
-                ForEach(visibleRules) { rule in
-                    SyncRuleCard(
-                        rule: rule,
-                        isActive: coordinator.activeRuleId == rule.id,
-                        onSyncRule: { actions.syncNow(rule.id, nil) },
+                ForEach(flows) { flow in
+                    MenuSyncRow(
+                        flow: flow,
+                        isActive: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
+                        onSyncNow: { actions.syncNow(flow.ruleId, flow.binding.id) },
                         onOpenWindow: actions.openMainWindow
                     )
                 }
@@ -135,7 +130,7 @@ struct MenuBarPopover: View {
 
     private var listLabel: some View {
         HStack {
-            Text("RULES")
+            Text("SYNCS")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
@@ -313,10 +308,10 @@ private struct EmptyRulesState: View {
             )
 
             VStack(spacing: 4) {
-                Text("No Rules Yet")
+                Text("No syncs yet")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Pair your reMarkable, connect Notion, then pick a notebook to sync.")
+                Text("Open Sync Bar to connect an app and make your first sync.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
                     .multilineTextAlignment(.center)
@@ -326,5 +321,51 @@ private struct EmptyRulesState: View {
             AppPrimaryButton(title: "Open Sync Bar", systemImage: "macwindow", action: onOpen)
                 .padding(.top, 4)
         }
+    }
+}
+
+// MARK: - Menu sync row
+
+private struct MenuSyncRow: View {
+    let flow: SyncFlow
+    let isActive: Bool
+    let onSyncNow: () -> Void
+    let onOpenWindow: () -> Void
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SyncStatusDot(status: flow.status, isSyncing: isActive)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(flow.folderName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground).lineLimit(1)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.tertiary)
+                    Text(flow.kind.label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground).lineLimit(1)
+                }
+                Text(secondary).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            AppIconButton(systemName: "arrow.triangle.2.circlepath",
+                          help: "Sync this now", spinOnTap: true) { onSyncNow() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture { onOpenWindow() }
+    }
+
+    private var secondary: String {
+        if isActive { return "Syncing now…" }
+        if let last = flow.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
+        return flow.destinationSummary
     }
 }

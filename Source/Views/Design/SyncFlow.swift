@@ -40,6 +40,13 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
 
     /// The muted one-line summary under a sync row.
     var howSummary: String {
+        // Bookmark sources have no OCR/title; describe the mirror instead.
+        if rule.sourceKind == .safari {
+            if case .chrome(let cfg) = binding.configuration {
+                return cfg.mirrorExactly ? "Exactly matches Safari" : "Adds & updates bookmarks"
+            }
+            return "Bookmarks"
+        }
         var parts: [String] = [titleShort + " as title"]
         switch ocrMode {
         case .all:             parts.append("OCR all pages")

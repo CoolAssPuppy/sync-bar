@@ -236,7 +236,7 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
         case .googleDocs(let config):     return [config.folderName, config.accountEmail].compactMap { $0 }.joined(separator: " · ")
         case .appleNotes(let config):     return config.folderName
         case .markdownFolder(let config): return (config.folderPath as NSString).lastPathComponent
-        case .chrome(let config):         return config.targetFolderPath.last ?? "Chrome"
+        case .chrome(let config):         return config.profileDirName
         }
     }
 

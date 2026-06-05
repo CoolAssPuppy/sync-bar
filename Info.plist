@@ -45,6 +45,8 @@
 	<string>Copyright 2026 Strategic Nerds.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Sync Bar needs permission to control Notes so it can file your transcribed reMarkable pages into the Apple Notes folder you choose.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Sync Bar needs access to your Reminders so it can keep a Reminders list and a Notion database in sync, in both directions.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>

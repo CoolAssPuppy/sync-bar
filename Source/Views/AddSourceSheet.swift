@@ -8,14 +8,36 @@
 import SwiftUI
 
 /// Modal to add a Source — the mirror of AddDestinationSheet. Pick reMarkable
-/// (pair with a one-time code) or Safari (grant Full Disk Access to read
-/// bookmarks). A source must be added before it appears in the sync editor.
+/// (pair with a one-time code), Safari (grant Full Disk Access to read
+/// bookmarks), or Reminders (grant access for a two-way sync with Notion). A
+/// source must be added before it appears in a sync editor.
 struct AddSourceSheet: View {
     @Binding var isPresented: Bool
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var themeStore = ThemeStore.shared
 
-    @State private var selectedKind: SourceKind = .remarkable
+    /// What's addable here. Reminders is offered as a source even though it isn't
+    /// a one-way SourceClient — it's the Reminders half of a two-way TaskSync.
+    private enum AddableSource: Hashable, Identifiable, CaseIterable {
+        case remarkable, safari, reminders
+        var id: String { "\(self)" }
+        var label: String {
+            switch self {
+            case .remarkable: return SourceKind.remarkable.label
+            case .safari:     return SourceKind.safari.label
+            case .reminders:  return "Reminders"
+            }
+        }
+        var subtitle: String {
+            switch self {
+            case .remarkable: return SourceKind.remarkable.subtitle
+            case .safari:     return SourceKind.safari.subtitle
+            case .reminders:  return "Two-way sync with Notion"
+            }
+        }
+    }
+
+    @State private var selected: AddableSource = .remarkable
     @State private var showingPair = false
     @State private var safariHasAccess = false
 
@@ -68,15 +90,30 @@ struct AddSourceSheet: View {
                 .font(.system(size: 10, weight: .semibold)).tracking(0.6)
                 .foregroundStyle(theme.tertiary).textCase(.uppercase)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                ForEach(SourceKind.allCases) { kind in
-                    SourceKindTile(kind: kind, isSelected: selectedKind == kind) { selectedKind = kind }
+                ForEach(AddableSource.allCases) { source in
+                    SourceTile(icon: tileIcon(for: source), label: source.label,
+                               subtitle: source.subtitle, isSelected: selected == source) {
+                        selected = source
+                    }
                 }
             }
         }
     }
 
+    @ViewBuilder private func tileIcon(for source: AddableSource) -> some View {
+        switch source {
+        case .remarkable: SourceIcon(kind: .remarkable, size: 28)
+        case .safari:     SourceIcon(kind: .safari, size: 28)
+        case .reminders:
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.accentColor.opacity(0.14))
+                Image(systemName: "checklist").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.accentColor)
+            }.frame(width: 28, height: 28)
+        }
+    }
+
     @ViewBuilder private func detailsCard(theme: ThemePalette) -> some View {
-        switch selectedKind {
+        switch selected {
         case .remarkable:
             Text("Pair your reMarkable with an 8-character one-time code from my.remarkable.com → Connect. Your tablet folders become sources you can sync.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -89,6 +126,9 @@ struct AddSourceSheet: View {
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
                 }
             }
+        case .reminders:
+            Text("Keep an Apple Reminders list and a Notion database in sync, both ways. Sync Bar will ask for Reminders access; then create a two-way sync from the Syncs screen.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 
@@ -102,21 +142,23 @@ struct AddSourceSheet: View {
     }
 
     private var primaryTitle: LocalizedStringKey {
-        switch selectedKind {
+        switch selected {
         case .remarkable: return "Pair reMarkable"
         case .safari:     return "Connect Safari"
+        case .reminders:  return "Connect Reminders"
         }
     }
 
     private var primaryIcon: String {
-        switch selectedKind {
+        switch selected {
         case .remarkable: return "qrcode.viewfinder"
         case .safari:     return "externaldrive"
+        case .reminders:  return "checklist"
         }
     }
 
     private func primaryAction() {
-        switch selectedKind {
+        switch selected {
         case .remarkable:
             showingPair = true
         case .safari:
@@ -124,12 +166,26 @@ struct AddSourceSheet: View {
             safariHasAccess = FullDiskAccessProbe.hasAccess()
             if !safariHasAccess { FullDiskAccessProbe.openSystemSettings() }
             isPresented = false
+        case .reminders:
+            // Request access (shows the system prompt). Mark connected regardless
+            // so the user can manage it in Connections; the editor degrades to an
+            // empty list with a hint if access was declined.
+            Task {
+                _ = await EventKitRemindersClient().requestAccess()
+                await MainActor.run {
+                    ledger.setRemindersConnected(true)
+                    isPresented = false
+                }
+            }
         }
     }
 }
 
-private struct SourceKindTile: View {
-    let kind: SourceKind
+/// A selectable source tile (brand or symbol icon + label + subtitle).
+private struct SourceTile<Icon: View>: View {
+    let icon: Icon
+    let label: String
+    let subtitle: String
     let isSelected: Bool
     let action: () -> Void
 
@@ -139,14 +195,14 @@ private struct SourceKindTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    SourceIcon(kind: kind, size: 28)
+                    icon
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.primary).font(.system(size: 13))
                     }
                 }
-                Text(kind.label).font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.foreground)
-                Text(kind.subtitle).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(2)
+                Text(label).font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.foreground)
+                Text(subtitle).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)

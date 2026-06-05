@@ -21,6 +21,7 @@ struct ConnectionsView: View {
     @State private var isRepairing = false
     @State private var linearTeamChoices: LinearTeamChoices?
     @State private var safariHasAccess = false
+    @State private var remindersHasAccess = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,9 +36,9 @@ struct ConnectionsView: View {
             }
         }
         .background(theme.background)
-        .onAppear { safariHasAccess = FullDiskAccessProbe.hasAccess() }
+        .onAppear { refreshAccessStatus() }
         .sheet(isPresented: $isAddingApp) { AddDestinationSheet(isPresented: $isAddingApp) }
-        .sheet(isPresented: $isAddingSource, onDismiss: { safariHasAccess = FullDiskAccessProbe.hasAccess() }) {
+        .sheet(isPresented: $isAddingSource, onDismiss: { refreshAccessStatus() }) {
             AddSourceSheet(isPresented: $isAddingSource)
         }
         .sheet(isPresented: $isRepairing) {
@@ -95,7 +96,7 @@ struct ConnectionsView: View {
             sectionHeader("Sources") {
                 Button(action: { isAddingSource = true }) { addGlyph }.buttonStyle(.plain)
             }
-            if ledger.remarkableAccount == nil && !ledger.safariConnected {
+            if ledger.remarkableAccount == nil && !ledger.safariConnected && !ledger.remindersConnected {
                 Text("No sources yet. Add one with the + above.")
                     .font(.system(size: 13)).foregroundStyle(theme.muted).padding(.vertical, 4)
             }
@@ -144,6 +145,49 @@ struct ConnectionsView: View {
                         .padding(.horizontal, 4)
                 }
             }
+            if ledger.remindersConnected {
+                ConnectionCard(
+                    icon: { AnyView(remindersGlyph) },
+                    title: "Reminders",
+                    subtitle: remindersHasAccess ? "Connected · two-way with Notion" : "Needs Reminders access",
+                    status: remindersHasAccess ? .connected : .error,
+                    trailing: {
+                        AnyView(HStack(spacing: 8) {
+                            if !remindersHasAccess {
+                                PillButton(title: "Grant access", filled: false) { requestRemindersAccess() }
+                            }
+                            Menu {
+                                Button("Disconnect", role: .destructive) { ledger.setRemindersConnected(false) }
+                            } label: {
+                                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.muted)
+                                    .frame(width: 30, height: 30)
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                                    .contentShape(Rectangle())
+                            }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        })
+                    }
+                )
+            }
+        }
+    }
+
+    private var remindersGlyph: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.accentColor.opacity(0.14))
+            Image(systemName: "checklist").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.accentColor)
+        }.frame(width: 38, height: 38)
+    }
+
+    private func refreshAccessStatus() {
+        safariHasAccess = FullDiskAccessProbe.hasAccess()
+        remindersHasAccess = EventKitRemindersClient().authorizationGranted()
+    }
+
+    private func requestRemindersAccess() {
+        Task {
+            _ = await EventKitRemindersClient().requestAccess()
+            await MainActor.run { remindersHasAccess = EventKitRemindersClient().authorizationGranted() }
         }
     }
 

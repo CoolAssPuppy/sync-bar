@@ -254,7 +254,8 @@ struct SyncEditorView: View {
     private var customizeStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("CUSTOMIZE", "configure this destination and map fields")
-            VStack(spacing: 14) { destinationForm }
+            VStack(alignment: .leading, spacing: 14) { destinationForm }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
                 .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))

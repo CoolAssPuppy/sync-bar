@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 enum SyncEditorTarget: Identifiable {
     case new
@@ -72,6 +73,7 @@ struct SyncEditorView: View {
     @State private var safariScopeName: String = ""
     // From — Reminders (two-way)
     @State private var reminderLists: [ReminderList] = []
+    @State private var remindersLoading = false
     @State private var reminderListId: String?
     @State private var reminderListName: String = ""
     // To
@@ -269,16 +271,32 @@ struct SyncEditorView: View {
     }
 
     private var remindersListPicker: some View {
-        CustomDropdown(
-            options: reminderLists.map { DropdownOption(id: $0.id, icon: AnyView(remindersGlyph), title: $0.name) },
-            selectedId: reminderListId,
-            placeholder: reminderLists.isEmpty ? "No Reminders lists found" : "Choose a list",
-            placeholderIcon: AnyView(placeholderSourceIcon),
-            onSelect: { id in
-                reminderListId = id
-                reminderListName = reminderLists.first { $0.id == id }?.name ?? ""
+        VStack(alignment: .leading, spacing: 8) {
+            CustomDropdown(
+                options: reminderLists.map { DropdownOption(id: $0.id, icon: AnyView(remindersGlyph), title: $0.name) },
+                selectedId: reminderListId,
+                placeholder: remindersLoading ? "Loading lists…" : (reminderLists.isEmpty ? "No Reminders lists found" : "Choose a list"),
+                placeholderIcon: AnyView(placeholderSourceIcon),
+                onSelect: { id in
+                    reminderListId = id
+                    reminderListName = reminderLists.first { $0.id == id }?.name ?? ""
+                }
+            )
+            if reminderLists.isEmpty && !remindersLoading {
+                HStack(spacing: 8) {
+                    Text("Reminders access is needed.").font(.system(size: 11)).foregroundStyle(.orange)
+                    Button("Allow access") { grantRemindersAccess() }
+                        .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundStyle(theme.primary)
+                    Button("Open Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundStyle(theme.primary)
+                }
+                .padding(.horizontal, 4)
             }
-        )
+        }
     }
 
     private var scopeSummary: String {
@@ -730,11 +748,20 @@ struct SyncEditorView: View {
     }
 
     private func loadReminderLists() {
+        remindersLoading = true
         Task {
+            // Each ad-hoc/dev build is a new identity to TCC, so the prior grant
+            // may be gone — ask if we don't already have access, then fetch.
+            if !remindersClient.authorizationGranted() {
+                _ = await remindersClient.requestAccess()
+            }
             let lists = await remindersClient.lists()
-            await MainActor.run { reminderLists = lists }
+            await MainActor.run { reminderLists = lists; remindersLoading = false }
         }
     }
+
+    /// Re-request Reminders access from the inline prompt and reload.
+    private func grantRemindersAccess() { loadReminderLists() }
 
     private func selectTaskWorkspace(_ id: String) {
         guard id != taskWorkspaceId else { return }

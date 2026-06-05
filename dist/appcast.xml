@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.0.3</title>
+      <pubDate>Fri, 05 Jun 2026 23:12:54 +0000</pubDate>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>New: two-way sync between Apple Reminders and a Notion database.</li><li>Filter rules to keep finished tasks (like Done or Archived) out of your lists.</li><li>One simpler editor for every sync, plus a cleaner Connections screen.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.0.3.dmg"
+        sparkle:edSignature="t+Hi69/8WgSRdjUoUdc5zrxWxAdkW4jLs05b8gwl4oGipDJJ+Bggs1RpX58CK07/GZED6VgP8Bl48dr7Y/I1BA=="
+        length="5561951"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.0.2</title>
       <pubDate>Fri, 05 Jun 2026 13:28:09 +0000</pubDate>
       <sparkle:version>15</sparkle:version>

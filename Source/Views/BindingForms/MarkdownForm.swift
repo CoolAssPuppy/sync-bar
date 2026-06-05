@@ -9,12 +9,14 @@ import SwiftUI
 
 struct MarkdownForm: View {
     @Binding var binding: MarkdownFormState
+    /// Unused now that Markdown is one generic connection (folder is chosen per
+    /// sync below). Kept so the older binding editor compiles unchanged.
     let targets: [MarkdownTarget]
 
     var body: some View {
         AppCard("Markdown Files") {
             VStack(spacing: 0) {
-                AppSettingRow("Folder", description: "Where the .md files land.") {
+                AppSettingRow("Destination folder", description: "Where the .md files land for this sync.") {
                     HStack(spacing: 6) {
                         Text(binding.folderPath.isEmpty ? "Not chosen" : binding.folderPath)
                             .font(.system(size: 11, design: .monospaced))
@@ -27,21 +29,8 @@ struct MarkdownForm: View {
                         }
                     }
                 }
-                let foldered = targets.filter { !$0.folderPath.isEmpty }
-                if !foldered.isEmpty {
-                    AppRowDivider().padding(.vertical, 10)
-                    AppSettingRow("Pick an existing target", description: nil) {
-                        Picker("", selection: $binding.folderPath) {
-                            ForEach(foldered) { target in
-                                Text(target.displayName).tag(target.folderPath)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("File name template", description: "Tokens: {notebook}, {page_n}, {date}, {title}") {
+                AppSettingRow("File name template", description: "Use / for subfolders. Tokens: {folder_name}, {notebook}, {page_n}, {date}, {title}") {
                     TextField(MarkdownTarget.defaultFileNameTemplate, text: $binding.fileNameTemplate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)

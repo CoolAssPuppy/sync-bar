@@ -23,12 +23,6 @@ struct AddDestinationSheet: View {
     /// the team picker instead of adding every team.
     @State private var linearTeamChoices: LinearTeamChoices?
 
-    // Default config for a new Markdown destination, chosen here at creation so a
-    // connection to it never starts with a blank folder.
-    @State private var markdownFolderPath: String = ""
-    @State private var markdownTemplate: String = MarkdownTarget.defaultFileNameTemplate
-    @State private var markdownFrontmatter: Bool = true
-
     var body: some View {
         let theme = themeStore.palette
         return VStack(spacing: 0) {
@@ -194,34 +188,11 @@ struct AddDestinationSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("""
                 Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, \
-                anything. Choose the folder these notes land in; a sync you set up later starts \
-                from these defaults and you can change them per folder.
+                anything. You choose the destination folder and file-name template when you set \
+                up each sync, so one Markdown connection can feed different folders.
                 """)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-
-            AppSettingRow("Folder", description: "Where the .md files land.") {
-                HStack(spacing: 6) {
-                    Text(markdownFolderPath.isEmpty ? "Not chosen" : markdownFolderPath)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 220, alignment: .leading)
-                    AppSecondaryButton(title: "Choose…", systemImage: "folder") {
-                        if let path = FolderChooser.choose() { markdownFolderPath = path }
-                    }
-                }
-            }
-            AppSettingRow("File name template", description: "Tokens: {notebook}, {page_n}, {date}, {title}") {
-                TextField(MarkdownTarget.defaultFileNameTemplate, text: $markdownTemplate)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
-            }
-            AppSettingRow("Include YAML frontmatter", description: nil) {
-                Toggle("", isOn: $markdownFrontmatter)
-                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
-            }
         }
     }
 
@@ -273,7 +244,7 @@ struct AddDestinationSheet: View {
         case .linear:         return AuthSecrets.isLinearConfigured && !isConnecting
         case .googleDocs:     return AuthSecrets.isGoogleConfigured && !isConnecting
         case .appleNotes:     return true
-        case .markdownFolder: return !markdownFolderPath.isEmpty
+        case .markdownFolder: return true
         }
     }
 
@@ -341,23 +312,19 @@ struct AddDestinationSheet: View {
             }
             isPresented = false
         case .markdownFolder:
-            // The folder (and its default write settings) are chosen here, so a
-            // connection to this destination starts from a real folder, never
-            // blank. Multiple Markdown folders are allowed (e.g. journal vs work);
-            // re-adding the same folder updates that destination instead of
-            // creating a confusing duplicate.
-            let folderName = (markdownFolderPath as NSString).lastPathComponent
-            let trimmedTemplate = markdownTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
-            let existing = ledger.markdownTargets.first { $0.folderPath == markdownFolderPath }
-            ledger.upsertMarkdownTarget(MarkdownTarget(
-                id: existing?.id ?? "md-" + UUID().uuidString.prefix(8).lowercased(),
-                displayName: folderName.isEmpty ? "Markdown Files" : folderName,
-                folderPath: markdownFolderPath,
-                connectedAt: existing?.connectedAt ?? Date(),
-                fileNameTemplate: trimmedTemplate.isEmpty ? nil : trimmedTemplate,
-                includeFrontmatter: markdownFrontmatter
-            ))
-            Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+            // One generic Markdown connection. The destination folder and
+            // file-name template are chosen per sync (in the sync editor), so
+            // this is just a marker that Markdown is available - the same model
+            // as Apple Notes. One marker is enough.
+            if ledger.markdownTargets.isEmpty {
+                ledger.upsertMarkdownTarget(MarkdownTarget(
+                    id: "md-" + UUID().uuidString.prefix(8).lowercased(),
+                    displayName: "Markdown",
+                    folderPath: "",
+                    connectedAt: Date()
+                ))
+                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+            }
             isPresented = false
         }
     }

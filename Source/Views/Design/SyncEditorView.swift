@@ -328,7 +328,9 @@ struct SyncEditorView: View {
             toAccountId = ledger.appleNotesTargets.first?.id
             localAppleNotes = AppleNotesFormState(folderName: cfg.folderName)
         case .markdownFolder(let cfg):
-            toAccountId = ledger.markdownTargets.first(where: { $0.folderPath == cfg.folderPath })?.id
+            // One generic Markdown connection; the folder lives on this sync's
+            // config, so bind to that single target rather than matching by path.
+            toAccountId = ledger.markdownTargets.first?.id
             localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
                                               includeFrontmatter: cfg.includeFrontmatter)
         }

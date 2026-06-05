@@ -27,12 +27,21 @@ struct MarkdownDestinationClient: DestinationClient {
         // Update in place: if we wrote this note before, overwrite that exact
         // file so an edit (even one that changes the templated name) updates the
         // original rather than leaving an orphan and writing a new file.
-        let fileName = Self.resolveFileName(template: config.fileNameTemplate, payload: payload) + ".md"
+        let relativePath = Self.resolveRelativePath(template: config.fileNameTemplate, payload: payload)
         let fileUrl: URL
         if let existingExternalId, !existingExternalId.isEmpty {
             fileUrl = URL(fileURLWithPath: existingExternalId)
         } else {
-            fileUrl = folderUrl.appendingPathComponent(fileName)
+            fileUrl = folderUrl.appendingPathComponent(relativePath)
+        }
+
+        // A template like "{folder_name}/{date}-{title}" puts the file in a
+        // subfolder, so create the file's parent directory (not just the base).
+        let parentUrl = fileUrl.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: parentUrl, withIntermediateDirectories: true)
+        } catch {
+            throw DestinationError.fileSystem("Couldn't create folder \(parentUrl.path): \(error.localizedDescription)")
         }
 
         let frontmatter = config.includeFrontmatter ? Self.frontmatter(payload: payload) : ""
@@ -53,7 +62,10 @@ struct MarkdownDestinationClient: DestinationClient {
 
     // MARK: Helpers
 
-    private static func resolveFileName(template: String, payload: DestinationPayload) -> String {
+    /// Resolves the template into a relative path (with ".md") under the base
+    /// folder. A "/" in the template makes a subfolder, so the slash is kept as
+    /// a separator while each path component is independently sanitized.
+    private static func resolveRelativePath(template: String, payload: DestinationPayload) -> String {
         let context = TitleTemplateContext(
             notebook: payload.ruleNotebookName,
             pageNumber: payload.pageNumber,
@@ -62,7 +74,12 @@ struct MarkdownDestinationClient: DestinationClient {
             folderName: payload.folderName
         )
         let resolved = context.apply(to: template.isEmpty ? "{notebook}" : template)
-        return sanitize(resolved)
+        let components = resolved
+            .components(separatedBy: "/")
+            .map { sanitizeComponent($0) }
+            .filter { !$0.isEmpty && $0 != "." && $0 != ".." }
+        let relative = components.isEmpty ? "note" : components.joined(separator: "/")
+        return relative + ".md"
     }
 
     private static func frontmatter(payload: DestinationPayload) -> String {
@@ -78,9 +95,15 @@ struct MarkdownDestinationClient: DestinationClient {
         return lines.joined(separator: "\n")
     }
 
-    private static func sanitize(_ raw: String) -> String {
+    /// Sanitizes a single path component. Keeps "/" out (the caller splits on it
+    /// to build subfolders) and trims whitespace so a token expanding to ""
+    /// doesn't leave a stray separator or a space-padded folder name.
+    private static func sanitizeComponent(_ raw: String) -> String {
         let disallowed = CharacterSet(charactersIn: "/\\:?*\"<>|")
-        return raw.components(separatedBy: disallowed).joined(separator: "-")
+        return raw
+            .components(separatedBy: disallowed)
+            .joined(separator: "-")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     private static func escape(_ raw: String) -> String {

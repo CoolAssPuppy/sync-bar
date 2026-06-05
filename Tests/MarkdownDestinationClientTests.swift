@@ -81,4 +81,77 @@ final class MarkdownDestinationClientTests: XCTestCase {
         XCTAssertTrue(contents.contains("- [x] Eggs"))
         XCTAssertTrue(contents.contains("- a plain bullet"))
     }
+
+    /// A "/" in the template makes subfolders: the source folder name becomes a
+    /// directory and the intermediate folders are created on write. The slash is
+    /// preserved (not sanitized away) while each path component is still cleaned.
+    func test_template_with_slash_writes_into_subfolders() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("syncbar-md-subfolder-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let client = MarkdownDestinationClient()
+        let configuration = DestinationConfiguration.markdownFolder(
+            MarkdownFolderDestinationConfig(
+                folderPath: tempDir.path,
+                fileNameTemplate: "{folder_name}/{date}-{title}",
+                includeFrontmatter: false
+            )
+        )
+        let payload = DestinationPayload(
+            title: "Auth flow",
+            body: "RLS notes.",
+            sourceDate: Date(timeIntervalSince1970: 1_700_000_000),
+            pdfData: nil,
+            ocrProvider: nil,
+            ruleNotebookName: "RLS",
+            folderName: "Supabase",
+            pageNumber: 1
+        )
+
+        let result = try await client.write(payload: payload, configuration: configuration, existingExternalId: nil)
+        let written = try XCTUnwrap(result.externalURL)
+
+        // Lands under <base>/Supabase/<date>-Auth flow.md
+        XCTAssertEqual(written.deletingLastPathComponent().lastPathComponent, "Supabase")
+        XCTAssertTrue(written.lastPathComponent.hasSuffix("-Auth flow.md"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: written.path))
+        XCTAssertTrue(try String(contentsOf: written).contains("# Auth flow"))
+    }
+
+    /// Illegal filename characters inside a component are replaced, but the path
+    /// separator survives so the subfolder structure is intact.
+    func test_subfolder_components_are_sanitized_but_slash_preserved() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("syncbar-md-sanitize-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let client = MarkdownDestinationClient()
+        let configuration = DestinationConfiguration.markdownFolder(
+            MarkdownFolderDestinationConfig(
+                folderPath: tempDir.path,
+                fileNameTemplate: "{folder_name}/{title}",
+                includeFrontmatter: false
+            )
+        )
+        let payload = DestinationPayload(
+            title: "Q3: plan?",
+            body: "x",
+            sourceDate: Date(timeIntervalSince1970: 1_700_000_000),
+            pdfData: nil,
+            ocrProvider: nil,
+            ruleNotebookName: "Roadmap",
+            folderName: "Work",
+            pageNumber: 1
+        )
+
+        let result = try await client.write(payload: payload, configuration: configuration, existingExternalId: nil)
+        let written = try XCTUnwrap(result.externalURL)
+
+        XCTAssertEqual(written.deletingLastPathComponent().lastPathComponent, "Work")
+        // ":" and "?" replaced with "-", slash kept as the folder boundary.
+        XCTAssertEqual(written.lastPathComponent, "Q3- plan-.md")
+    }
 }

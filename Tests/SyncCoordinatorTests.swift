@@ -250,7 +250,7 @@ final class SyncCoordinatorTests: XCTestCase {
         // Folder has three documents; scope the rule to just the middle one.
         var rule = SyncRule.new(notebookId: "nb-scope", notebookName: "Personal")
         rule.destinations = [markdownBinding(folderPath: folder.path)]
-        rule.selectedFileIds = ["file-1"]
+        rule.updateRemarkable { $0.selectedFileIds = ["file-1"] }
         ledger.upsertRule(rule)
         let bindingId = rule.destinations[0].id
 
@@ -274,7 +274,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
         var rule = SyncRule.new(notebookId: "nb-scope-gone", notebookName: "Personal")
         rule.destinations = [markdownBinding(folderPath: folder.path)]
-        rule.selectedFileIds = ["file-deleted"]   // no such document in the folder
+        rule.updateRemarkable { $0.selectedFileIds = ["file-deleted"] }   // no such document in the folder
         ledger.upsertRule(rule)
         ledger.clearEvents()
 

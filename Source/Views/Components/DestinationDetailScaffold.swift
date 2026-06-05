@@ -51,7 +51,7 @@ struct DestinationDetailScaffold: View {
     /// Folders not already routed to this destination, so picking one always adds
     /// a real connection (rather than silently hitting the duplicate guard).
     private var availableFolders: [RmFolder] {
-        let connected = Set(activeBindings.map { $0.0.rmNotebookId })
+        let connected = Set(activeBindings.compactMap { $0.0.remarkableConfig?.folderId })
         return connectableFolders.filter { !connected.contains($0.id) }
     }
 
@@ -60,8 +60,9 @@ struct DestinationDetailScaffold: View {
     /// The source folder for a rule, used as the editor's context. Falls back to a
     /// stub from the rule's cached name if the live folder list isn't loaded.
     private func folder(for rule: SyncRule) -> RmFolder {
-        Ledger.shared.folders.first(where: { $0.id == rule.rmNotebookId })
-            ?? RmFolder(id: rule.rmNotebookId, name: rule.rmNotebookName,
+        let folderId = rule.remarkableConfig?.folderId ?? ""
+        return Ledger.shared.folders.first(where: { $0.id == folderId })
+            ?? RmFolder(id: folderId, name: rule.sourceSummary,
                         parentFolder: nil, lastModified: Date(), pageCount: 0)
     }
 
@@ -358,7 +359,7 @@ struct ActiveSyncRow: View {
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(rule.rmNotebookName)
+                    Text(rule.sourceSummary)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.foreground)
                         .lineLimit(1)

@@ -411,8 +411,8 @@ final class SyncCoordinator: ObservableObject {
         guard let ruleId, let rule = ledger.rules.first(where: { $0.id == ruleId }) else {
             return .noConnectedFolders
         }
-        if rule.destinations.isEmpty { return .noEnabledDestinations(folder: rule.rmNotebookName) }
-        if !rule.enabled { return .ruleDisabled(folder: rule.rmNotebookName) }
+        if rule.destinations.isEmpty { return .noEnabledDestinations(folder: rule.sourceSummary) }
+        if !rule.enabled { return .ruleDisabled(folder: rule.sourceSummary) }
         return .noConnectedFolders
     }
 

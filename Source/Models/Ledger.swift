@@ -337,14 +337,18 @@ final class Ledger: ObservableObject {
     }
 
     func rule(forNotebookId notebookId: String) -> SyncRule? {
-        rules.first { $0.rmNotebookId == notebookId }
+        rules.first { $0.remarkableConfig?.folderId == notebookId }
     }
 
-    /// Drops rules whose folder is no longer present (e.g. orphaned by the
-    /// folder/file model change or a deleted folder). Only call with a fully
+    /// Drops reMarkable rules whose folder is no longer present (e.g. orphaned by
+    /// the folder/file model change or a deleted folder). Only call with a fully
     /// loaded, non-empty folder list so a transient fetch can't wipe rules.
+    /// Rules from other sources are never pruned by reMarkable folder ids.
     func pruneRules(keepingFolderIds folderIds: Set<String>) {
-        let orphaned = rules.filter { !folderIds.contains($0.rmNotebookId) }
+        let orphaned = rules.filter { rule in
+            guard let folderId = rule.remarkableConfig?.folderId else { return false }
+            return !folderIds.contains(folderId)
+        }
         guard !orphaned.isEmpty else { return }
         for rule in orphaned { deleteRule(id: rule.id) }
         Log.ledger.info("Pruned \(orphaned.count, privacy: .public) orphaned rule(s)")
@@ -626,7 +630,7 @@ final class Ledger: ObservableObject {
         guard !defaults.bool(forKey: flag) else { return }
         defaults.set(true, forKey: flag)
 
-        let cleanedRules = rules.filter { $0.rmNotebookName != "Test" }
+        let cleanedRules = rules.filter { $0.sourceSummary != "Test" }
         if cleanedRules.count != rules.count {
             rules = cleanedRules
             persistRules()

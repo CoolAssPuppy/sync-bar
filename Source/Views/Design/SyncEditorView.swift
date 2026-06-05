@@ -320,9 +320,9 @@ struct SyncEditorView: View {
         guard case .edit(let flow) = target else { return }
         folder = ledger.folders.first(where: { $0.id == flow.folderId })
             ?? RmFolder(id: flow.folderId, name: flow.folderName, parentFolder: nil, lastModified: Date(), pageCount: 0)
-        selectedFileIds = flow.rule.selectedFileIds
-        pageOrder = flow.rule.pageOrder
-        savePdf = flow.rule.savePdfAttachment
+        selectedFileIds = flow.rule.remarkableConfig?.selectedFileIds
+        pageOrder = flow.rule.remarkableConfig?.pageOrder ?? .chronological
+        savePdf = flow.rule.remarkableConfig?.savePdfAttachment ?? true
         titleStrategy = flow.titleStrategy
         ocrMode = flow.ocrMode
         requiredTags = flow.requiredTags
@@ -466,9 +466,11 @@ struct SyncEditorView: View {
             ledger.addBinding(ruleId: rule.id, binding: binding)
         } else {
             var rule = SyncRule.new(notebookId: folder.id, notebookName: folder.name)
-            rule.selectedFileIds = selectedFileIds
-            rule.pageOrder = pageOrder
-            rule.savePdfAttachment = savePdf
+            rule.updateRemarkable {
+                $0.selectedFileIds = selectedFileIds
+                $0.pageOrder = pageOrder
+                $0.savePdfAttachment = savePdf
+            }
             rule.destinations = [binding]
             ledger.upsertRule(rule)
         }
@@ -476,9 +478,11 @@ struct SyncEditorView: View {
 
     private func applyRuleLevel(folderId: String, base: SyncRule? = nil) {
         guard var rule = base ?? ledger.rule(forNotebookId: folderId) else { return }
-        rule.selectedFileIds = selectedFileIds
-        rule.pageOrder = pageOrder
-        rule.savePdfAttachment = savePdf
+        rule.updateRemarkable {
+            $0.selectedFileIds = selectedFileIds
+            $0.pageOrder = pageOrder
+            $0.savePdfAttachment = savePdf
+        }
         rule.updatedAt = Date()
         ledger.upsertRule(rule)
     }

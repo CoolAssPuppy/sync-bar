@@ -23,8 +23,7 @@ final class SyncFlowTests: XCTestCase {
 
     func test_binding_overrides_win_over_rule_defaults() {
         var rule = SyncRule.new(notebookId: "f1", notebookName: "Work")
-        rule.titleStrategy = .fileName
-        rule.ocrMode = .none
+        rule.updateRemarkable { $0.titleStrategy = .fileName; $0.ocrMode = .none }
         var binding = markdownBinding(tags: ["idea"])
         binding.titleStrategyOverride = .firstLineOfOcr
         binding.ocrModeOverride = .all
@@ -39,8 +38,7 @@ final class SyncFlowTests: XCTestCase {
 
     func test_falls_back_to_rule_when_no_override() {
         var rule = SyncRule.new(notebookId: "f1", notebookName: "Work")
-        rule.titleStrategy = .template
-        rule.ocrMode = .handwrittenOnly
+        rule.updateRemarkable { $0.titleStrategy = .template; $0.ocrMode = .handwrittenOnly }
         let flow = SyncFlow(rule: rule, binding: markdownBinding())
 
         XCTAssertEqual(flow.titleStrategy, .template)

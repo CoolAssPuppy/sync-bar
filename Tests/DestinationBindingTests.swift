@@ -56,15 +56,15 @@ final class DestinationBindingTests: XCTestCase {
     func test_rule_scope_includes_whole_folder_by_default() {
         let rule = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
         XCTAssertTrue(rule.syncsEntireFolder)
-        XCTAssertTrue(rule.includes(fileId: "any-document"))
+        XCTAssertTrue(rule.includes(itemId: "any-document"))
     }
 
     func test_rule_scoped_to_selected_notebooks_includes_only_those() {
         var rule = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
-        rule.selectedFileIds = ["journal"]
+        rule.updateRemarkable { $0.selectedFileIds = ["journal"] }
         XCTAssertFalse(rule.syncsEntireFolder)
-        XCTAssertTrue(rule.includes(fileId: "journal"))
-        XCTAssertFalse(rule.includes(fileId: "shopping-list"))
+        XCTAssertTrue(rule.includes(itemId: "journal"))
+        XCTAssertFalse(rule.includes(itemId: "shopping-list"))
     }
 
     func test_rule_without_selected_files_syncs_whole_folder_after_round_trip() throws {
@@ -73,9 +73,9 @@ final class DestinationBindingTests: XCTestCase {
         let original = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
         let data = try JSONEncoder().encode(original)
         let rule = try JSONDecoder().decode(SyncRule.self, from: data)
-        XCTAssertNil(rule.selectedFileIds)
+        XCTAssertNil(rule.remarkableConfig?.selectedFileIds)
         XCTAssertTrue(rule.syncsEntireFolder)
-        XCTAssertTrue(rule.includes(fileId: "anything"))
+        XCTAssertTrue(rule.includes(itemId: "anything"))
     }
 
     func test_tag_filter_accepts_only_matching_notes_on_any_destination() {

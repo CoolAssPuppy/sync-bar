@@ -19,15 +19,15 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
     var id: String { binding.id }
     var ruleId: String { rule.id }
 
-    var folderId: String { rule.rmNotebookId }
-    var folderName: String { rule.rmNotebookName }
+    var folderId: String { rule.remarkableConfig?.folderId ?? "" }
+    var folderName: String { rule.sourceSummary }
     var kind: DestinationKind { binding.kind }
     var destinationSummary: String { binding.configuration.summary }
 
     /// Per-sync where possible: title and OCR fall back to the rule's defaults
     /// but a binding override (which the editor writes) makes them per-sync.
-    var titleStrategy: TitleStrategy { binding.titleStrategyOverride ?? rule.titleStrategy }
-    var ocrMode: OcrMode { binding.ocrModeOverride ?? rule.ocrMode }
+    var titleStrategy: TitleStrategy { binding.titleStrategyOverride ?? rule.remarkableConfig?.titleStrategy ?? .firstLineOfOcr }
+    var ocrMode: OcrMode { binding.ocrModeOverride ?? rule.remarkableConfig?.ocrMode ?? .all }
     var requiredTags: [String] { binding.effectiveRequiredTags ?? [] }
 
     var isEnabled: Bool { binding.enabled && rule.enabled }

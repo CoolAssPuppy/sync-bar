@@ -193,32 +193,25 @@ struct SyncRule: Codable, Equatable, Identifiable, Hashable {
         self.destinations = destinations
     }
 
-    // MARK: Transitional reMarkable passthroughs
+    // MARK: reMarkable source access
     //
-    // These keep the (reMarkable-only) call sites compiling unchanged while
-    // consumers migrate to reading `source` directly. They are removed once the
-    // genericization migration lands; a non-reMarkable source reads through its
-    // own configuration instead.
+    // reMarkable is the only source today, and its editor/catalog code needs its
+    // typed fields. They're reached explicitly through the source case rather than
+    // projected onto SyncRule, so a future non-reMarkable rule can never read a
+    // misleading reMarkable default — exactly how destinations unwrap their config.
 
-    private var rmConfig: RemarkableSourceConfig {
-        get {
-            if case .remarkable(let config) = source { return config }
-            return RemarkableSourceConfig(folderId: "", folderName: "", titleStrategy: .firstLineOfOcr,
-                                          titleTemplate: nil, pageOrder: .chronological, ocrMode: .all,
-                                          ocrProviderOverride: nil, savePdfAttachment: true)
-        }
-        set { source = .remarkable(newValue) }
+    /// The reMarkable configuration when this rule's source is reMarkable.
+    var remarkableConfig: RemarkableSourceConfig? {
+        if case .remarkable(let config) = source { return config }
+        return nil
     }
 
-    var rmNotebookId: String { get { rmConfig.folderId } set { rmConfig.folderId = newValue } }
-    var rmNotebookName: String { get { rmConfig.folderName } set { rmConfig.folderName = newValue } }
-    var selectedFileIds: [String]? { get { rmConfig.selectedFileIds } set { rmConfig.selectedFileIds = newValue } }
-    var titleStrategy: TitleStrategy { get { rmConfig.titleStrategy } set { rmConfig.titleStrategy = newValue } }
-    var titleTemplate: String? { get { rmConfig.titleTemplate } set { rmConfig.titleTemplate = newValue } }
-    var pageOrder: PageOrder { get { rmConfig.pageOrder } set { rmConfig.pageOrder = newValue } }
-    var ocrMode: OcrMode { get { rmConfig.ocrMode } set { rmConfig.ocrMode = newValue } }
-    var ocrProviderOverride: OcrProviderChoice? { get { rmConfig.ocrProviderOverride } set { rmConfig.ocrProviderOverride = newValue } }
-    var savePdfAttachment: Bool { get { rmConfig.savePdfAttachment } set { rmConfig.savePdfAttachment = newValue } }
+    /// Mutates the reMarkable configuration in place. A no-op for other sources.
+    mutating func updateRemarkable(_ transform: (inout RemarkableSourceConfig) -> Void) {
+        guard case .remarkable(var config) = source else { return }
+        transform(&config)
+        source = .remarkable(config)
+    }
 
     /// Old-style memberwise initializer, kept so reMarkable construction sites
     /// (DemoData, `new(notebookId:notebookName:)`) build a `.remarkable` source
@@ -268,18 +261,15 @@ struct SyncRule: Codable, Equatable, Identifiable, Hashable {
 
     /// Whether this rule syncs every item in the scope (vs a hand-picked set).
     var syncsEntireFolder: Bool {
-        (selectedFileIds ?? []).isEmpty
+        (remarkableConfig?.selectedFileIds ?? []).isEmpty
     }
 
     /// Whether a given item is in this rule's scope. The whole scope is in scope
     /// when no specific items are selected.
     func includes(itemId: String) -> Bool {
-        guard let ids = selectedFileIds, !ids.isEmpty else { return true }
+        guard let ids = remarkableConfig?.selectedFileIds, !ids.isEmpty else { return true }
         return ids.contains(itemId)
     }
-
-    /// Transitional alias for `includes(itemId:)`.
-    func includes(fileId: String) -> Bool { includes(itemId: fileId) }
 
     /// Aggregated rollup across all destination bindings on this rule.
     var aggregateLastRunAt: Date? {

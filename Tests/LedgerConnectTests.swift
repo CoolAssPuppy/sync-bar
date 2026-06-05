@@ -28,7 +28,7 @@ final class LedgerConnectTests: XCTestCase {
         ledger.connect(folder: folder, configuration: markdown("/tmp/vault"))
 
         let rule = ledger.rule(forNotebookId: folder.id)
-        XCTAssertEqual(rule?.rmNotebookName, "Personal")
+        XCTAssertEqual(rule?.sourceSummary, "Personal")
         XCTAssertEqual(rule?.destinations.count, 1)
 
         if let rule { ledger.deleteRule(id: rule.id) }

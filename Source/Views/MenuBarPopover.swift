@@ -198,7 +198,7 @@ private struct SyncRuleCard: View {
             DestinationIconStack(kinds: rule.destinations.map(\.kind))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(rule.rmNotebookName)
+                Text(rule.sourceSummary)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.foreground)
                     .lineLimit(1)

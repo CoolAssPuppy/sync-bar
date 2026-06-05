@@ -33,6 +33,7 @@ extension Ledger {
         out += googleAccounts.map { ConnectedApp(id: $0.id, kind: .googleDocs, name: $0.displayName, defaultConfig: $0.defaultConfiguration) }
         out += markdownTargets.map { ConnectedApp(id: $0.id, kind: .markdownFolder, name: $0.displayName, defaultConfig: .markdownFolder($0.defaultConfiguration)) }
         out += appleNotesTargets.map { ConnectedApp(id: $0.id, kind: .appleNotes, name: "Apple Notes", defaultConfig: $0.defaultConfiguration) }
+        out += chromeTargets.map { ConnectedApp(id: $0.id, kind: .chrome, name: $0.displayName, defaultConfig: $0.defaultConfiguration) }
         return out
     }
 }

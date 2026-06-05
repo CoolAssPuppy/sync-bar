@@ -122,6 +122,117 @@ struct SyncStatusDot: View {
     }
 }
 
+/// The reMarkable source mark (today's only source; more to come).
+struct SourceMark: View {
+    var size: CGFloat = 28
+    @Environment(\.theme) private var theme
+    var body: some View {
+        let radius = size * 0.27
+        Image("Remarkable")
+            .resizable().interpolation(.high).scaledToFit()
+            .padding(size * 0.16)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.white))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+    }
+}
+
+/// One option in a `CustomDropdown`.
+struct DropdownOption: Identifiable {
+    let id: String
+    let icon: AnyView
+    let title: String
+    var subtitle: String? = nil
+}
+
+/// A full-width custom dropdown: the whole bar is the control, with a single
+/// chevron on the far right. Clicking expands a styled list inline (not the
+/// native macOS menu). Used for the From source and To destination.
+struct CustomDropdown: View {
+    let options: [DropdownOption]
+    let selectedId: String?
+    var placeholder: String
+    var placeholderIcon: AnyView
+    let onSelect: (String) -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var isOpen = false
+    @State private var hoverId: String?
+
+    private var selected: DropdownOption? { options.first { $0.id == selectedId } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                guard !options.isEmpty else { return }
+                withAnimation(.easeOut(duration: 0.16)) { isOpen.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    selected?.icon ?? placeholderIcon
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selected?.title ?? placeholder)
+                            .font(.system(size: 14.5, weight: .semibold))
+                            .foregroundStyle(selected == nil ? theme.muted : theme.foreground)
+                            .lineLimit(1)
+                        if let sub = selected?.subtitle {
+                            Text(sub).font(.system(size: 12)).foregroundStyle(theme.muted).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(theme.muted)
+                        .rotationEffect(.degrees(isOpen ? 180 : 0))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                Rectangle().fill(theme.divider).frame(height: 1)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(options) { opt in
+                            Button {
+                                onSelect(opt.id)
+                                withAnimation(.easeOut(duration: 0.16)) { isOpen = false }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    opt.icon
+                                    Text(opt.title)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(theme.foregroundSoft).lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    if opt.id == selectedId {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(theme.primary)
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(hoverId == opt.id ? theme.cardElevated : Color.clear)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                if hovering { hoverId = opt.id } else if hoverId == opt.id { hoverId = nil }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(maxHeight: 230)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .strokeBorder(isOpen ? theme.borderStrong : theme.border, lineWidth: 1))
+    }
+}
+
 /// A primary gold pill button matching the redesign (distinct from the shared
 /// AppPrimaryButton's gradient treatment).
 struct PillButton: View {

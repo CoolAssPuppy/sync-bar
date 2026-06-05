@@ -52,7 +52,7 @@ struct ConnectionsView: View {
             Text("Connections")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(theme.foreground)
-            Text("Your reMarkable, and the apps you sync to")
+            Text("Your data, wherever it is and needs to go")
                 .font(.system(size: 13))
                 .foregroundStyle(theme.muted)
         }
@@ -111,9 +111,9 @@ struct ConnectionsView: View {
 
     private var appsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Apps")
+            SectionLabel(text: "Destinations")
             if !ledger.hasAnyDestination {
-                Text("No apps connected yet.")
+                Text("No destinations connected yet.")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
                     .padding(.vertical, 4)
@@ -202,7 +202,7 @@ struct ConnectionsView: View {
                 }
                 .frame(width: 32, height: 32)
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                Text("Connect another app")
+                Text("Connect another destination")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.primary)
                 Text("Notion, Linear, Google Docs, Markdown, Apple Notes")

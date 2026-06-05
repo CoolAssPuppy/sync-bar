@@ -12,7 +12,7 @@
 import SwiftUI
 import AppKit
 
-enum ShellTab: Hashable { case syncs, connections, activity, settings }
+enum ShellTab: Hashable { case syncs, connections, activity }
 
 struct MainShellView: View {
     @ObservedObject var coordinator: SyncCoordinator
@@ -23,6 +23,7 @@ struct MainShellView: View {
     @State private var tab: ShellTab = .syncs
     @State private var editorTarget: SyncEditorTarget?
     @State private var isOnboarding = false
+    @State private var isSettingsOpen = false
 
     var body: some View {
         let theme = themeStore.palette
@@ -42,7 +43,7 @@ struct MainShellView: View {
         .onAppear { firstAppear() }
         .onReceive(NotificationCenter.default.publisher(for: .selectRemarkableView)) { _ in tab = .syncs }
         .onReceive(NotificationCenter.default.publisher(for: .remarkableUploadFinished)) { _ in refreshFolders() }
-        .onReceive(NotificationCenter.default.publisher(for: .openSettingsDrawer)) { _ in tab = .settings }
+        .onReceive(NotificationCenter.default.publisher(for: .openSettingsDrawer)) { _ in isSettingsOpen = true }
         .onReceive(NotificationCenter.default.publisher(for: .openSyncLog)) { _ in tab = .activity }
         .sheet(item: $editorTarget) { target in
             SyncEditorView(target: target, coordinator: coordinator, onClose: { editorTarget = nil })
@@ -65,6 +66,7 @@ struct MainShellView: View {
             }
             .animation(.easeOut(duration: 0.2), value: uploadCoordinator.isUploading)
             UploadBannerView()
+            SettingsDrawer(isPresented: $isSettingsOpen)
         }
     }
 
@@ -79,7 +81,6 @@ struct MainShellView: View {
             )
         case .connections: ConnectionsView()
         case .activity:    ActivityView()
-        case .settings:    SettingsScreen()
         }
     }
 
@@ -109,49 +110,12 @@ struct MainShellView: View {
 
             Spacer()
 
-            connectionStatus(theme: theme)
-                .padding(.bottom, 4)
-            RailItem(icon: "gearshape", label: "Settings", isActive: tab == .settings) { tab = .settings }
+            RailItem(icon: "gearshape", label: "Settings", isActive: false) { isSettingsOpen = true }
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 16)
         .frame(width: 236)
         .background(theme.surface)
-    }
-
-    private func connectionStatus(theme: ThemePalette) -> some View {
-        Button(action: { tab = .connections }) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(statusColor(theme))
-                    .frame(width: 7, height: 7)
-                    .shadow(color: statusColor(theme).opacity(0.6), radius: 4)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("reMarkable").font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.foreground)
-                    Text(statusText).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 11).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func statusColor(_ theme: ThemePalette) -> Color {
-        if ledger.remarkableAccount == nil { return theme.tertiary }
-        if ledger.remarkableNeedsRepair { return theme.destructive }
-        if coordinator.isSyncing { return theme.primary }
-        return theme.success
-    }
-
-    private var statusText: String {
-        if ledger.remarkableAccount == nil { return "Not paired" }
-        if ledger.remarkableNeedsRepair { return "Disconnected — re-pair" }
-        if coordinator.isSyncing { return "Syncing now…" }
-        return "Connected"
     }
 
     // MARK: Lifecycle / data

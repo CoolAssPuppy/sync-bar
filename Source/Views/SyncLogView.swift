@@ -97,26 +97,35 @@ private struct EventRow: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: badgeIcon(for: event.eventType))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(badgeColor(for: statusKind))
-                .frame(width: 16)
-                .help(statusHelp)
-
-            // Sync from → to (folder → destination).
-            Text(event.ruleName ?? event.eventType.label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(theme.foreground)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(2)
-
-            // The note (file), linked to its artifact when available.
-            filenameView
-                .layoutPriority(1)
+        HStack(spacing: 9) {
+            if isSyncRow {
+                SourceMark(size: 20)
+                Text(sourceFolderName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.foreground)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(2)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.tertiary)
+                destinationIcon
+                Text(destinationName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.foregroundSoft)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            } else {
+                Image(systemName: badgeIcon(for: event.eventType))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(badgeColor(for: statusKind))
+                    .frame(width: 16).help(statusHelp)
+                Text(event.ruleName ?? event.eventType.label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.foreground)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(2)
+            }
 
             Spacer(minLength: 8)
+
+            Circle().fill(badgeColor(for: statusKind)).frame(width: 6, height: 6).help(statusHelp)
 
             Text(Formatters.logRowLabel(for: event.occurredAt))
                 .font(.system(size: 10))
@@ -135,6 +144,34 @@ private struct EventRow: View {
                 .foregroundStyle(theme.tertiary)
                 .frame(width: 10)
                 .help(isExpanded ? "Hide details" : "Show details")
+        }
+    }
+
+    /// Sync-run events carry "folder → destination" in their name; reuse the
+    /// real source + destination icons for those rows.
+    private var isSyncRow: Bool { (event.ruleName ?? "").contains(" → ") }
+
+    private var sourceFolderName: String {
+        guard let name = event.ruleName, let r = name.range(of: " → ") else { return event.rmNotebookName ?? "" }
+        return String(name[..<r.lowerBound])
+    }
+
+    private var destinationName: String {
+        guard let name = event.ruleName, let r = name.range(of: " → ") else { return "" }
+        return String(name[r.upperBound...])
+    }
+
+    private var destinationKind: DestinationKind? {
+        guard let ruleId = event.ruleId, let rule = Ledger.shared.rules.first(where: { $0.id == ruleId }) else { return nil }
+        if let exact = rule.destinations.first(where: { $0.configuration.summary == destinationName }) { return exact.kind }
+        return rule.destinations.count == 1 ? rule.destinations.first?.kind : nil
+    }
+
+    @ViewBuilder private var destinationIcon: some View {
+        if let kind = destinationKind {
+            DestinationIcon(kind: kind, size: 20)
+        } else {
+            Image(systemName: "square.dashed").font(.system(size: 11)).foregroundStyle(theme.muted).frame(width: 20)
         }
     }
 

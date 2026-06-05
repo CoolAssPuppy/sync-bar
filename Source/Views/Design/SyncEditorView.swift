@@ -4,8 +4,9 @@
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
-//  The one place a Sync is created or edited: From a folder, To an app, How.
-//  Maps the single "Sync" object onto the underlying rule + binding.
+//  The one place a Sync is created or edited: From a Source folder, To a
+//  Destination, Customize the destination, and How it runs. Maps the single
+//  "Sync" object onto the underlying rule + binding.
 //
 
 import SwiftUI
@@ -16,7 +17,7 @@ enum SyncEditorTarget: Identifiable {
     var id: String { if case .edit(let f) = self { return f.id }; return "new" }
 }
 
-/// A connected destination account, normalized for the editor's "To" chips.
+/// A connected destination account, normalized for the editor's "To" dropdown.
 struct ConnectedApp: Identifiable {
     let id: String
     let kind: DestinationKind
@@ -48,28 +49,31 @@ struct SyncEditorView: View {
     @State private var folder: RmFolder?
     @State private var selectedFileIds: [String]?
     // To
-    @State private var config: DestinationConfiguration?
+    @State private var toKind: DestinationKind?
+    @State private var toAccountId: String?
+    // Customize — per-kind destination forms
+    @State private var localNotion = NotionFormState()
+    @State private var localLinear = LinearFormState()
+    @State private var localGoogle = GoogleFormState()
+    @State private var localAppleNotes = AppleNotesFormState()
+    @State private var localMarkdown = MarkdownFormState()
     // How
     @State private var titleStrategy: TitleStrategy = .firstLineOfOcr
     @State private var ocrMode: OcrMode = .all
     @State private var pageOrder: PageOrder = .chronological
     @State private var requiredTags: [String] = []
     @State private var savePdf = true
-
     // edit bookkeeping
     @State private var originalRuleId: String?
     @State private var originalBindingId: String?
     @State private var existingBinding: DestinationBinding?
-
-    // sheets
-    @State private var isAddingApp = false
-    @State private var isConfiguring = false
+    // scope sheet
     @State private var isChoosingScope = false
     @State private var scopeFiles: [RmFile] = []
     @State private var scopeLoading = false
 
     private var isEditing: Bool { originalBindingId != nil }
-    private var canSave: Bool { folder != nil && config != nil }
+    private var canSave: Bool { folder != nil && toKind != nil && destinationValid }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,18 +82,17 @@ struct SyncEditorView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     fromStep
                     toStep
+                    if toKind != nil { customizeStep }
                     howStep
                 }
                 .padding(24)
             }
             footer
         }
-        .frame(width: 680, height: 600)
+        .frame(width: 680, height: 640)
         .background(theme.surface)
         .environment(\.theme, theme)
         .onAppear(perform: load)
-        .sheet(isPresented: $isAddingApp) { AddDestinationSheet(isPresented: $isAddingApp) }
-        .sheet(isPresented: $isConfiguring) { configureSheet }
         .sheet(isPresented: $isChoosingScope) { scopeSheet }
     }
 
@@ -99,7 +102,7 @@ struct SyncEditorView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(isEditing ? "Edit sync" : "New sync").font(.system(size: 18, weight: .bold)).foregroundStyle(theme.foreground)
-                Text("From a folder, to an app, synced how.").font(.system(size: 12.5)).foregroundStyle(theme.muted)
+                Text("From a source, to a destination, synced how.").font(.system(size: 12.5)).foregroundStyle(theme.muted)
             }
             Spacer()
             Button(action: onClose) {
@@ -123,9 +126,7 @@ struct SyncEditorView: View {
             }
             Spacer()
             PillButton(title: "Cancel", filled: false, action: onClose)
-            PillButton(title: "Save sync", action: save)
-                .opacity(canSave ? 1 : 0.5)
-                .disabled(!canSave)
+            PillButton(title: "Save sync", action: save).opacity(canSave ? 1 : 0.5).disabled(!canSave)
         }
         .padding(20)
         .overlay(alignment: .top) { Rectangle().fill(theme.divider).frame(height: 1) }
@@ -136,36 +137,30 @@ struct SyncEditorView: View {
 
     private var fromStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("FROM", "which reMarkable folder")
-            HStack(spacing: 12) {
-                FolderGlyph(size: 34)
-                VStack(alignment: .leading, spacing: 2) {
-                    Menu {
-                        ForEach(ledger.folders) { f in Button(f.name) { selectFolder(f) } }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(folder?.name ?? "Choose a folder")
-                                .font(.system(size: 14.5, weight: .semibold))
-                                .foregroundStyle(folder == nil ? theme.muted : theme.foreground)
-                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.muted)
-                        }
-                    }.menuStyle(.borderlessButton).fixedSize()
+            stepLabel("FROM", "which source folder")
+            CustomDropdown(
+                options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(size: 26)), title: $0.name) },
+                selectedId: folder?.id,
+                placeholder: "Choose a folder",
+                placeholderIcon: AnyView(SourceMark(size: 26)),
+                onSelect: { id in if let f = ledger.folders.first(where: { $0.id == id }) { selectFolder(f) } }
+            )
+            if folder != nil {
+                HStack(spacing: 8) {
                     Text(scopeSummary).font(.system(size: 12)).foregroundStyle(theme.muted)
+                    Spacer()
+                    Button(action: openScope) {
+                        Text("Choose notebooks")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.primary)
+                    }.buttonStyle(.plain)
                 }
-                Spacer()
-                if folder != nil {
-                    AppSecondaryButton(title: "Choose notebooks") { openScope() }
-                }
+                .padding(.horizontal, 4)
             }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
         }
     }
 
     private var scopeSummary: String {
-        guard folder != nil else { return "Pick the folder to sync" }
-        guard let ids = selectedFileIds, !ids.isEmpty else { return "Syncing every notebook" }
+        guard let ids = selectedFileIds, !ids.isEmpty else { return "Syncing every notebook in this folder" }
         return "Syncing \(ids.count) selected notebook\(ids.count == 1 ? "" : "s")"
     }
 
@@ -173,50 +168,53 @@ struct SyncEditorView: View {
 
     private var toStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("TO", "pick a connected app, or connect a new one")
-            FlowLayout(spacing: 9) {
-                ForEach(ledger.connectedApps) { app in appChip(app) }
-                connectChip
-            }
-            if config != nil, folder != nil {
-                AppSecondaryButton(title: "Configure \(config!.kind.label)…", systemImage: "slider.horizontal.3") { isConfiguring = true }
-            }
+            stepLabel("TO", "which destination")
+            CustomDropdown(
+                options: ledger.connectedApps.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: $0.kind, size: 24)), title: $0.name) },
+                selectedId: toAccountId,
+                placeholder: ledger.hasAnyDestination ? "Choose a destination" : "Connect a destination first",
+                placeholderIcon: AnyView(placeholderDestIcon),
+                onSelect: { id in if let app = ledger.connectedApps.first(where: { $0.id == id }) { selectDestination(app) } }
+            )
         }
     }
 
-    private func appChip(_ app: ConnectedApp) -> some View {
-        let selected = config?.kind == app.kind && configMatches(app)
-        return Button(action: { selectApp(app) }) {
-            HStack(spacing: 8) {
-                DestinationIcon(kind: app.kind, size: 22)
-                Text(app.name).font(.system(size: 13.5, weight: selected ? .semibold : .medium))
-                    .foregroundStyle(selected ? theme.foreground : theme.foregroundSoft).lineLimit(1)
-                if selected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(theme.primary) }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? theme.primary.opacity(0.08) : Color.clear))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(selected ? theme.primary : theme.border, lineWidth: selected ? 1.5 : 1))
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain)
+    private var placeholderDestIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
+            Image(systemName: "square.dashed").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
+        }.frame(width: 26, height: 26)
     }
 
-    private var connectChip: some View {
-        Button(action: { isAddingApp = true }) {
-            HStack(spacing: 7) {
-                Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.primary)
-                Text("Connect new app").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(theme.primary)
-            }
-            .padding(.horizontal, 13).padding(.vertical, 9)
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])).foregroundStyle(theme.border))
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain)
+    // MARK: Customize (inline destination form)
+
+    private var customizeStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            stepLabel("CUSTOMIZE", "configure this destination and map fields")
+            VStack(spacing: 14) { destinationForm }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+    }
+
+    @ViewBuilder
+    private var destinationForm: some View {
+        switch toKind {
+        case .notion:         NotionForm(binding: $localNotion, workspaces: ledger.notionWorkspaces)
+        case .linear:         LinearForm(binding: $localLinear, accounts: ledger.linearAccounts)
+        case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
+        case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
+        case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
+        case .none:           EmptyView()
+        }
     }
 
     // MARK: How
 
     private var howStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("HOW", "every option for this sync, in one place")
+            stepLabel("HOW", "how the sync should work")
             VStack(spacing: 0) {
                 optionRow("Title each note") {
                     Segmented(selection: $titleStrategy, options: [(.fileName, "File name"), (.firstLineOfOcr, "First line"), (.template, "Template")])
@@ -231,18 +229,18 @@ struct SyncEditorView: View {
                         Button("Chronological") { pageOrder = .chronological }
                         Button("Reverse chronological") { pageOrder = .reverseChronological }
                     } label: {
-                        HStack(spacing: 6) {
-                            Text(pageOrder == .chronological ? "Chronological" : "Reverse").font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
-                            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.muted)
+                        HStack(spacing: 8) {
+                            Text(pageOrder == .chronological ? "Chronological" : "Reverse")
+                                .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
+                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.muted)
                         }
                         .padding(.horizontal, 12).frame(height: 30)
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                    }.menuStyle(.borderlessButton).fixedSize()
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 }
                 rowDivider
-                optionRow("Only notes tagged", align: .top) {
-                    RequiredTagsControl(requiredTags: $requiredTags)
-                }
+                optionRow("Only notes tagged", align: .top) { RequiredTagsControl(requiredTags: $requiredTags) }
                 rowDivider
                 optionRow("Attach original PDF", subtitle: "also send the page image alongside the text") {
                     Toggle("", isOn: $savePdf).labelsHidden().toggleStyle(.switch).tint(theme.primary)
@@ -276,18 +274,6 @@ struct SyncEditorView: View {
         .padding(.horizontal, 15).padding(.vertical, 12)
     }
 
-    @ViewBuilder private var configureSheet: some View {
-        if let folder, let config {
-            BindingEditorSheet(
-                kind: config.kind,
-                notebook: folder,
-                existingBinding: DestinationBinding(configuration: config),
-                onSave: { binding in self.config = binding.configuration; isConfiguring = false },
-                onCancel: { isConfiguring = false }
-            )
-        }
-    }
-
     @ViewBuilder private var scopeSheet: some View {
         VStack(spacing: 0) {
             HStack {
@@ -311,32 +297,98 @@ struct SyncEditorView: View {
         folder = ledger.folders.first(where: { $0.id == flow.folderId })
             ?? RmFolder(id: flow.folderId, name: flow.folderName, parentFolder: nil, lastModified: Date(), pageCount: 0)
         selectedFileIds = flow.rule.selectedFileIds
-        config = flow.binding.configuration
-        titleStrategy = flow.titleStrategy
-        ocrMode = flow.ocrMode
         pageOrder = flow.rule.pageOrder
         savePdf = flow.rule.savePdfAttachment
+        titleStrategy = flow.titleStrategy
+        ocrMode = flow.ocrMode
         requiredTags = flow.requiredTags
         existingBinding = flow.binding
         originalRuleId = flow.ruleId
         originalBindingId = flow.binding.id
+        toKind = flow.binding.kind
+        loadFormState(from: flow.binding.configuration)
+    }
+
+    private func loadFormState(from configuration: DestinationConfiguration) {
+        switch configuration {
+        case .notion(let cfg):
+            toAccountId = cfg.workspaceId
+            localNotion = NotionFormState(workspaceId: cfg.workspaceId, destinationId: cfg.destinationId,
+                                          destinationType: cfg.destinationType, destinationTitle: cfg.destinationTitle,
+                                          mappingRows: NotionFormState.mappingRows(from: cfg.propertyMappings))
+        case .linear(let cfg):
+            toAccountId = cfg.workspaceId
+            localLinear = LinearFormState(workspaceId: cfg.workspaceId, projectId: cfg.projectId ?? "",
+                                          projectName: cfg.projectName ?? "", defaultLabel: cfg.defaultLabel ?? "")
+        case .googleDocs(let cfg):
+            toAccountId = cfg.accountEmail
+            localGoogle = GoogleFormState(email: cfg.accountEmail, folderId: cfg.folderId ?? "",
+                                          folderName: cfg.folderName ?? "", appendMode: cfg.appendMode)
+        case .appleNotes(let cfg):
+            toAccountId = ledger.appleNotesTargets.first?.id
+            localAppleNotes = AppleNotesFormState(folderName: cfg.folderName)
+        case .markdownFolder(let cfg):
+            toAccountId = ledger.markdownTargets.first(where: { $0.folderPath == cfg.folderPath })?.id
+            localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
+                                              includeFrontmatter: cfg.includeFrontmatter)
+        }
     }
 
     private func selectFolder(_ f: RmFolder) { folder = f; selectedFileIds = nil }
 
-    private func selectApp(_ app: ConnectedApp) {
-        config = app.defaultConfig
+    private func selectDestination(_ app: ConnectedApp) {
+        toKind = app.kind
+        toAccountId = app.id
+        switch app.kind {
+        case .notion:     localNotion = NotionFormState(workspaceId: app.id)
+        case .linear:     localLinear = LinearFormState(workspaceId: app.id)
+        case .googleDocs: localGoogle = GoogleFormState(email: app.id)
+        case .appleNotes: localAppleNotes = AppleNotesFormState()
+        case .markdownFolder:
+            if case .markdownFolder(let cfg) = app.defaultConfig {
+                localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate, includeFrontmatter: cfg.includeFrontmatter)
+            }
+        }
     }
 
-    private func configMatches(_ app: ConnectedApp) -> Bool {
-        guard let config else { return false }
-        switch (config, app.defaultConfig) {
-        case (.notion(let a), .notion(let b)): return a.workspaceId == b.workspaceId
-        case (.linear(let a), .linear(let b)): return a.workspaceId == b.workspaceId
-        case (.googleDocs(let a), .googleDocs(let b)): return a.accountEmail == b.accountEmail
-        case (.markdownFolder(let a), .markdownFolder(let b)): return a.folderPath == b.folderPath
-        case (.appleNotes, .appleNotes): return true
-        default: return false
+    private var destinationValid: Bool {
+        switch toKind {
+        case .notion:         return !localNotion.workspaceId.isEmpty && !localNotion.destinationId.isEmpty
+        case .linear:         return !localLinear.workspaceId.isEmpty
+        case .googleDocs:     return !localGoogle.email.isEmpty
+        case .appleNotes:     return !localAppleNotes.folderName.isEmpty
+        case .markdownFolder: return !localMarkdown.folderPath.isEmpty
+        case .none:           return false
+        }
+    }
+
+    private func composedConfiguration() -> DestinationConfiguration? {
+        switch toKind {
+        case .notion:
+            return .notion(NotionDestinationConfig(
+                workspaceId: localNotion.workspaceId, destinationId: localNotion.destinationId,
+                destinationType: localNotion.destinationType, destinationTitle: localNotion.destinationTitle,
+                propertyMappings: localNotion.destinationType == .database ? NotionFormState.propertyMappings(from: localNotion.mappingRows) : [:]))
+        case .linear:
+            let team = ledger.linearAccounts.first(where: { $0.id == localLinear.workspaceId })
+            return .linear(LinearDestinationConfig(
+                workspaceId: localLinear.workspaceId, workspaceName: team?.name ?? "",
+                projectId: localLinear.projectId.isEmpty ? nil : localLinear.projectId,
+                projectName: localLinear.projectName.isEmpty ? nil : localLinear.projectName,
+                defaultLabel: localLinear.defaultLabel.isEmpty ? nil : localLinear.defaultLabel,
+                requiredTags: requiredTags.isEmpty ? nil : requiredTags.sorted()))
+        case .googleDocs:
+            return .googleDocs(GoogleDocsDestinationConfig(
+                accountEmail: localGoogle.email, folderId: localGoogle.folderId.isEmpty ? nil : localGoogle.folderId,
+                folderName: localGoogle.folderName.isEmpty ? nil : localGoogle.folderName, appendMode: localGoogle.appendMode))
+        case .appleNotes:
+            return .appleNotes(AppleNotesDestinationConfig(folderName: localAppleNotes.folderName))
+        case .markdownFolder:
+            return .markdownFolder(MarkdownFolderDestinationConfig(
+                folderPath: localMarkdown.folderPath,
+                fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{notebook}-page-{page_n}" : localMarkdown.fileNameTemplate,
+                includeFrontmatter: localMarkdown.includeFrontmatter))
+        case .none: return nil
         }
     }
 
@@ -351,13 +403,20 @@ struct SyncEditorView: View {
     }
 
     private func save() {
-        guard let folder, let config else { return }
-        var binding = existingBinding ?? DestinationBinding(configuration: config)
-        binding.configuration = config
-        binding.titleStrategyOverride = titleStrategy
-        binding.ocrModeOverride = ocrMode
-        binding.requiredTags = requiredTags.isEmpty ? nil : requiredTags
-        binding.enabled = true
+        guard let folder, let config = composedConfiguration() else { return }
+        var binding = DestinationBinding(
+            id: existingBinding?.id ?? UUID().uuidString,
+            enabled: existingBinding?.enabled ?? true,
+            configuration: config,
+            createdAt: existingBinding?.createdAt ?? Date(),
+            lastRunAt: existingBinding?.lastRunAt,
+            lastRunStatus: existingBinding?.lastRunStatus ?? .neverRun,
+            lastRunPagesSynced: existingBinding?.lastRunPagesSynced ?? 0,
+            lastRunError: existingBinding?.lastRunError,
+            ocrModeOverride: ocrMode,
+            titleStrategyOverride: titleStrategy,
+            requiredTags: requiredTags.isEmpty ? nil : requiredTags.sorted()
+        )
 
         if let origRuleId = originalRuleId, let origBindingId = originalBindingId {
             let sameFolder = ledger.rule(forNotebookId: folder.id)?.id == origRuleId
@@ -432,35 +491,5 @@ struct Segmented<T: Equatable>: View {
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.background))
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-    }
-}
-
-// MARK: - Simple wrap layout for chips
-
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? 600
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 { x = 0; y += rowHeight + spacing; rowHeight = 0 }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        return CGSize(width: maxWidth, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = bounds.width
-        var x: CGFloat = bounds.minX, y: CGFloat = bounds.minY, rowHeight: CGFloat = 0
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x + size.width > bounds.minX + maxWidth, x > bounds.minX { x = bounds.minX; y += rowHeight + spacing; rowHeight = 0 }
-            sub.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
     }
 }

@@ -84,6 +84,7 @@ enum DestinationRouter {
         case .googleDocs:     return GoogleDocsDestinationClient()
         case .appleNotes:     return AppleNotesDestinationClient()
         case .markdownFolder: return MarkdownDestinationClient()
+        case .chrome:         return ChromeBookmarkDestinationClient()
         }
     }
 }

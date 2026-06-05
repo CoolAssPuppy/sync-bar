@@ -19,6 +19,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case googleDocs
     case appleNotes
     case markdownFolder
+    case chrome
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .googleDocs:     return "Google Docs"
         case .appleNotes:     return "Apple Notes"
         case .markdownFolder: return "Markdown files"
+        case .chrome:         return "Chrome"
         }
     }
 
@@ -39,6 +41,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .googleDocs:     return "Google Drive documents"
         case .appleNotes:     return "iCloud Notes"
         case .markdownFolder: return "Local folder"
+        case .chrome:         return "Browser bookmarks"
         }
     }
 
@@ -50,6 +53,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .googleDocs:     return "doc.text.fill"
         case .appleNotes:     return "note.text"
         case .markdownFolder: return "folder.fill"
+        case .chrome:         return "globe"
         }
     }
 
@@ -63,6 +67,7 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .googleDocs:     return "Destinations/GoogleDocs"
         case .appleNotes:     return "Destinations/AppleNotes"
         case .markdownFolder: return "Destinations/Markdown"
+        case .chrome:         return "Destinations/Chrome"
         }
     }
 
@@ -70,8 +75,8 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
     /// and Markdown work out of the box on the user's machine.
     var requiresExternalAccount: Bool {
         switch self {
-        case .notion, .linear, .googleDocs: return true
-        case .appleNotes, .markdownFolder:  return false
+        case .notion, .linear, .googleDocs:         return true
+        case .appleNotes, .markdownFolder, .chrome: return false
         }
     }
 
@@ -82,8 +87,8 @@ enum DestinationKind: String, Codable, CaseIterable, Identifiable, Hashable {
     /// correctly on both, so they render in their own colors.
     var brandMarkIsMonochrome: Bool {
         switch self {
-        case .linear, .markdownFolder:        return true
-        case .notion, .googleDocs, .appleNotes: return false
+        case .linear, .markdownFolder:                   return true
+        case .notion, .googleDocs, .appleNotes, .chrome: return false
         }
     }
 }
@@ -179,6 +184,11 @@ struct MarkdownFolderDestinationConfig: Codable, Equatable, Hashable {
     var includeFrontmatter: Bool
 }
 
+struct ChromeDestinationConfig: Codable, Equatable, Hashable {
+    var profileDirName: String      // Chrome profile directory, e.g. "Default"
+    var targetFolderPath: [String]  // Chrome folder to write into, e.g. ["Bookmarks Bar", "From Safari"]
+}
+
 // MARK: - Polymorphic configuration
 
 enum DestinationConfiguration: Codable, Equatable, Hashable {
@@ -187,6 +197,7 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
     case googleDocs(GoogleDocsDestinationConfig)
     case appleNotes(AppleNotesDestinationConfig)
     case markdownFolder(MarkdownFolderDestinationConfig)
+    case chrome(ChromeDestinationConfig)
 
     var kind: DestinationKind {
         switch self {
@@ -195,6 +206,7 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
         case .googleDocs:     return .googleDocs
         case .appleNotes:     return .appleNotes
         case .markdownFolder: return .markdownFolder
+        case .chrome:         return .chrome
         }
     }
 
@@ -206,6 +218,7 @@ enum DestinationConfiguration: Codable, Equatable, Hashable {
         case .googleDocs(let config):     return [config.folderName, config.accountEmail].compactMap { $0 }.joined(separator: " · ")
         case .appleNotes(let config):     return config.folderName
         case .markdownFolder(let config): return (config.folderPath as NSString).lastPathComponent
+        case .chrome(let config):         return config.targetFolderPath.last ?? "Chrome"
         }
     }
 
@@ -324,6 +337,15 @@ struct AppleNotesTarget: Codable, Equatable, Identifiable, Hashable {
     var connectedAt: Date
 }
 
+/// A connected Google Chrome profile to write bookmarks into. Like Markdown and
+/// Apple Notes it's a marker — the target folder is chosen per sync.
+struct ChromeTarget: Codable, Equatable, Identifiable, Hashable {
+    var id: String
+    var displayName: String
+    var profileDirName: String      // "Default"
+    var connectedAt: Date
+}
+
 // MARK: - Default configuration for a connected destination
 //
 // The configuration a new connection inherits, shared by both the source-first
@@ -358,5 +380,11 @@ extension GoogleAccount {
 extension AppleNotesTarget {
     var defaultConfiguration: DestinationConfiguration {
         .appleNotes(AppleNotesDestinationConfig(folderName: folderName))
+    }
+}
+
+extension ChromeTarget {
+    var defaultConfiguration: DestinationConfiguration {
+        .chrome(ChromeDestinationConfig(profileDirName: profileDirName, targetFolderPath: ["Bookmarks Bar"]))
     }
 }

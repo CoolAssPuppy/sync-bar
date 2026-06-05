@@ -113,6 +113,19 @@ struct AddDestinationSheet: View {
         case .googleDocs:     googleFields
         case .appleNotes:     appleNotesFields
         case .markdownFolder: markdownFields
+        case .chrome:         chromeFields
+        }
+    }
+
+    private var chromeFields: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("""
+                Writes bookmarks into your Google Chrome profile. You choose which Chrome folder \
+                when you set up each sync. Chrome must be quit for the change to apply — otherwise \
+                it syncs the next time Chrome is closed.
+                """)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -222,6 +235,7 @@ struct AddDestinationSheet: View {
         case .googleDocs:     return isConnecting ? "Connecting…" : "Connect Google"
         case .appleNotes:     return "Connect Notes"
         case .markdownFolder: return "Connect Markdown"
+        case .chrome:         return "Connect Chrome"
         }
     }
 
@@ -245,6 +259,7 @@ struct AddDestinationSheet: View {
         case .googleDocs:     return AuthSecrets.isGoogleConfigured && !isConnecting
         case .appleNotes:     return true
         case .markdownFolder: return true
+        case .chrome:         return true
         }
     }
 
@@ -321,6 +336,19 @@ struct AddDestinationSheet: View {
                     id: "md-" + UUID().uuidString.prefix(8).lowercased(),
                     displayName: "Markdown",
                     folderPath: "",
+                    connectedAt: Date()
+                ))
+                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+            }
+            isPresented = false
+        case .chrome:
+            // A marker that Chrome is available; the profile + target folder are
+            // chosen per sync (in the sync editor), like Markdown and Apple Notes.
+            if ledger.chromeTargets.isEmpty {
+                ledger.upsertChromeTarget(ChromeTarget(
+                    id: "chrome-" + UUID().uuidString.prefix(8).lowercased(),
+                    displayName: "Chrome",
+                    profileDirName: "Default",
                     connectedAt: Date()
                 ))
                 Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])

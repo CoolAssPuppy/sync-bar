@@ -23,6 +23,7 @@ final class Ledger: ObservableObject {
     private static let googleAccountsKey    = "ledger.googleAccounts"
     private static let markdownTargetsKey   = "ledger.markdownTargets"
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
+    private static let chromeTargetsKey     = "ledger.chromeTargets"
     /// Bumped to `.v2` for the genericized SyncRule shape (a polymorphic
     /// `source: SourceConfiguration` instead of loose reMarkable fields). The old
     /// `ledger.rules` key is intentionally abandoned — a clean break, so pre-v1
@@ -44,6 +45,7 @@ final class Ledger: ObservableObject {
     @Published private(set) var googleAccounts: [GoogleAccount] = []
     @Published private(set) var markdownTargets: [MarkdownTarget] = []
     @Published private(set) var appleNotesTargets: [AppleNotesTarget] = []
+    @Published private(set) var chromeTargets: [ChromeTarget] = []
     @Published private(set) var rules: [SyncRule] = []
     @Published private(set) var events: [SyncEvent] = []
     @Published private(set) var folders: [RmFolder] = []
@@ -131,6 +133,7 @@ final class Ledger: ObservableObject {
         persist(value: googleAccounts, key: Self.googleAccountsKey)
         persist(value: markdownTargets, key: Self.markdownTargetsKey)
         persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
+        persist(value: chromeTargets, key: Self.chromeTargetsKey)
         persist(value: rules, key: Self.rulesKey)
         persist(value: events, key: Self.eventsKey)
         persist(value: folders, key: Self.foldersKey)
@@ -245,6 +248,22 @@ final class Ledger: ObservableObject {
                    // Only cascade if no surviving target claims that path.
                    let othersAtSamePath = (self?.markdownTargets ?? []).contains { $0.folderPath == removedPath }
                    return !othersAtSamePath
+               })
+    }
+
+    func upsertChromeTarget(_ target: ChromeTarget) {
+        upsert(target, in: \.chromeTargets, key: Self.chromeTargetsKey,
+               notification: .destinationsChanged)
+    }
+    func removeChromeTarget(id: String) {
+        let removedProfile = chromeTargets.first(where: { $0.id == id })?.profileDirName
+        remove(id: id, from: \.chromeTargets, key: Self.chromeTargetsKey,
+               notification: .destinationsChanged,
+               bindingMatches: { [weak self] config, _ in
+                   guard case .chrome(let cfg) = config,
+                         let removedProfile, cfg.profileDirName == removedProfile else { return false }
+                   let othersSameProfile = (self?.chromeTargets ?? []).contains { $0.profileDirName == removedProfile }
+                   return !othersSameProfile
                })
     }
 
@@ -605,6 +624,7 @@ final class Ledger: ObservableObject {
         googleAccounts    = decodeArray([GoogleAccount].self,   key: Self.googleAccountsKey,   defaults: defaults, decoder: decoder)
         markdownTargets   = decodeArray([MarkdownTarget].self,  key: Self.markdownTargetsKey,  defaults: defaults, decoder: decoder)
         appleNotesTargets = decodeArray([AppleNotesTarget].self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
+        chromeTargets     = decodeArray([ChromeTarget].self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
         events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
         folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)

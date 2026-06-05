@@ -213,6 +213,7 @@ struct SyncEditorView: View {
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
+        case .chrome:         EmptyView()   // real Chrome form lands with the source-aware editor
         case .none:           EmptyView()
         }
     }
@@ -357,6 +358,8 @@ struct SyncEditorView: View {
             toAccountId = ledger.markdownTargets.first?.id
             localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
                                               includeFrontmatter: cfg.includeFrontmatter)
+        case .chrome:
+            toAccountId = ledger.chromeTargets.first?.id
         }
     }
 
@@ -374,6 +377,8 @@ struct SyncEditorView: View {
             if case .markdownFolder(let cfg) = app.defaultConfig {
                 localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate, includeFrontmatter: cfg.includeFrontmatter)
             }
+        case .chrome:
+            break   // profile + target folder configured per sync (filled in B6)
         }
     }
 
@@ -384,6 +389,7 @@ struct SyncEditorView: View {
         case .googleDocs:     return !localGoogle.email.isEmpty
         case .appleNotes:     return !localAppleNotes.folderName.isEmpty
         case .markdownFolder: return !localMarkdown.folderPath.isEmpty
+        case .chrome:         return true
         case .none:           return false
         }
     }
@@ -414,6 +420,10 @@ struct SyncEditorView: View {
                 folderPath: localMarkdown.folderPath,
                 fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{notebook}-page-{page_n}" : localMarkdown.fileNameTemplate,
                 includeFrontmatter: localMarkdown.includeFrontmatter))
+        case .chrome:
+            return .chrome(ChromeDestinationConfig(
+                profileDirName: ledger.chromeTargets.first?.profileDirName ?? "Default",
+                targetFolderPath: ["Bookmarks Bar"]))
         case .none: return nil
         }
     }

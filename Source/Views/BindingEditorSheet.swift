@@ -51,6 +51,7 @@ struct BindingEditorSheet: View {
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
+        case .chrome:         EmptyView()   // Chrome is configured in the redesigned sync editor
         }
     }
 
@@ -153,6 +154,8 @@ struct BindingEditorSheet: View {
                     fileNameTemplate: cfg.fileNameTemplate,
                     includeFrontmatter: cfg.includeFrontmatter
                 ))
+            case .chrome:
+                break   // Chrome is edited in the redesigned sync editor
             }
         }
     }
@@ -166,6 +169,7 @@ struct BindingEditorSheet: View {
         case .googleDocs:     return !localGoogle.email.isEmpty
         case .appleNotes:     return !localAppleNotes.folderName.isEmpty
         case .markdownFolder: return !localMarkdown.folderPath.isEmpty
+        case .chrome:         return true
         }
     }
 
@@ -211,6 +215,8 @@ struct BindingEditorSheet: View {
                 fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{notebook}-page-{page_n}" : localMarkdown.fileNameTemplate,
                 includeFrontmatter: localMarkdown.includeFrontmatter
             ))
+        case .chrome:
+            configuration = .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"]))
         }
         let binding = DestinationBinding(
             id: existingBinding?.id ?? UUID().uuidString,

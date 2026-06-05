@@ -142,7 +142,7 @@ struct SyncEditorView: View {
                 options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(size: 26)), title: $0.name) },
                 selectedId: folder?.id,
                 placeholder: "Choose a Source",
-                placeholderIcon: AnyView(SourceMark(size: 26)),
+                placeholderIcon: AnyView(placeholderSourceIcon),
                 onSelect: { id in if let f = ledger.folders.first(where: { $0.id == id }) { selectFolder(f) } }
             )
             if folder != nil {
@@ -177,6 +177,13 @@ struct SyncEditorView: View {
                 onSelect: { id in if let app = ledger.connectedApps.first(where: { $0.id == id }) { selectDestination(app) } }
             )
         }
+    }
+
+    private var placeholderSourceIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
+            Image(systemName: "folder").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
+        }.frame(width: 26, height: 26)
     }
 
     private var placeholderDestIcon: some View {

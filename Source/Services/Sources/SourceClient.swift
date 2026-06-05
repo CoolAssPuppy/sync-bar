@@ -89,6 +89,7 @@ enum SourceRouter {
     static func client(for kind: SourceKind) -> SourceClient {
         switch kind {
         case .remarkable: return RemarkableSourceClient()
+        case .safari:     return SafariSourceClient()
         }
     }
 }

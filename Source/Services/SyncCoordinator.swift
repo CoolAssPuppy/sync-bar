@@ -46,6 +46,7 @@ final class SyncCoordinator: ObservableObject {
         self.sourceClientFor = sourceClient ?? { kind in
             switch kind {
             case .remarkable: return RemarkableSourceClient(remarkable: remarkable)
+            case .safari:     return SafariSourceClient()
             }
         }
 
@@ -253,6 +254,7 @@ final class SyncCoordinator: ObservableObject {
     private func reportSourceHealth(_ kind: SourceKind, error: Error?) {
         switch kind {
         case .remarkable: ledger.updateRemarkableHealth(error: error)
+        case .safari:     break   // Safari is a local file; no connection health to track.
         }
     }
 

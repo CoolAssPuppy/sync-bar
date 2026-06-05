@@ -14,12 +14,14 @@ import Foundation
 
 enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case remarkable
+    case safari
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .remarkable: return "reMarkable"
+        case .safari:     return "Safari"
         }
     }
 
@@ -27,6 +29,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var subtitle: String {
         switch self {
         case .remarkable: return "Tablet notebooks and documents"
+        case .safari:     return "Browser bookmarks"
         }
     }
 
@@ -34,6 +37,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .remarkable: return "rectangle.portrait.on.rectangle.portrait"
+        case .safari:     return "safari"
         }
     }
 
@@ -41,6 +45,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var assetName: String {
         switch self {
         case .remarkable: return "Remarkable"
+        case .safari:     return "Safari"
         }
     }
 
@@ -49,6 +54,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var brandMarkIsMonochrome: Bool {
         switch self {
         case .remarkable: return false
+        case .safari:     return false
         }
     }
 }
@@ -73,6 +79,19 @@ struct RemarkableSourceConfig: Codable, Equatable, Hashable {
     var savePdfAttachment: Bool
 }
 
+/// Safari bookmark source settings: which bookmark folder to pull from. The
+/// folder is the scope a rule targets; each bookmark under it becomes one item.
+struct SafariSourceConfig: Codable, Equatable, Hashable {
+    /// The chosen Safari folder's `WebBookmarkUUID`, or `SafariSourceConfig.allScopeId`
+    /// to sync every bookmark.
+    var folderId: String
+    var folderName: String
+    var includeReadingList: Bool = false
+
+    /// Sentinel scope id meaning "every bookmark, all folders" (Reading List excluded).
+    static let allScopeId = "__all_safari_bookmarks__"
+}
+
 // MARK: - Polymorphic configuration
 
 /// The source half of a sync, mirroring `DestinationConfiguration`. One case per
@@ -80,10 +99,12 @@ struct RemarkableSourceConfig: Codable, Equatable, Hashable {
 /// `SourceRouter` branch — the destination quartet's exact shape.
 enum SourceConfiguration: Codable, Equatable, Hashable {
     case remarkable(RemarkableSourceConfig)
+    case safari(SafariSourceConfig)
 
     var kind: SourceKind {
         switch self {
         case .remarkable: return .remarkable
+        case .safari:     return .safari
         }
     }
 
@@ -92,6 +113,7 @@ enum SourceConfiguration: Codable, Equatable, Hashable {
     var summary: String {
         switch self {
         case .remarkable(let config): return config.folderName
+        case .safari(let config):     return config.folderName
         }
     }
 }

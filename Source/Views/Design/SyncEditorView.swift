@@ -277,24 +277,22 @@ struct SyncEditorView: View {
     private var chromeForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             if sourceKind == .safari {
-                Text("Your Safari folders are mirrored into Chrome — Favorites into Chrome's Bookmarks Bar, Bookmarks Menu into Other Bookmarks, with subfolders recreated.")
-                    .font(.system(size: 12)).foregroundStyle(theme.muted)
                 Toggle(isOn: $chromeMirrorExactly) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Make Chrome exactly match Safari").font(.system(size: 12.5, weight: .medium))
-                        Text("Updates titles and deletes Chrome bookmarks that aren't in Safari (Bookmarks Bar + Other Bookmarks). Off = only add/update.")
+                        Text("Exactly match Safari").font(.system(size: 12.5, weight: .medium))
+                        Text("Safari is the source of truth and sync is unidirectional.")
                             .font(.system(size: 11)).foregroundStyle(theme.tertiary)
                     }
                 }
                 .toggleStyle(.switch).tint(theme.primary)
+                Text("Chrome must be quit for changes to apply.")
+                    .font(.system(size: 11)).foregroundStyle(theme.tertiary)
             } else {
                 Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
                     .font(.system(size: 12)).foregroundStyle(theme.muted)
                 TextField("From Safari", text: $chromeTargetFolder)
                     .textFieldStyle(.roundedBorder)
             }
-            Text("Chrome must be quit for the change to apply — otherwise it syncs next time Chrome is closed.")
-                .font(.system(size: 11)).foregroundStyle(theme.tertiary)
         }
     }
 

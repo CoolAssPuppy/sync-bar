@@ -29,6 +29,9 @@ final class SyncCoordinator: ObservableObject {
     /// a spy source; the default wraps the injected `remarkable` client so the
     /// reMarkable source still flows through whatever client a test provided.
     private let sourceClientFor: @MainActor (SourceKind) -> SourceClient
+    /// Resolves the destination client for a binding's kind. Injectable so tests
+    /// can pass a spy; defaults to the production `DestinationRouter`.
+    private let destinationClientFor: @MainActor (DestinationKind) -> DestinationClient
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
@@ -37,7 +40,8 @@ final class SyncCoordinator: ObservableObject {
          keychain: KeychainStore = .shared,
          remarkable: RemarkableClient = RemarkableClientFactory.make(),
          engine: RulesEngine = RulesEngine(),
-         sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil) {
+         sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil,
+         destinationClient: (@MainActor (DestinationKind) -> DestinationClient)? = nil) {
         self.ledger = ledger ?? Ledger.shared
         self.settings = settings ?? AppSettings.shared
         self.keychain = keychain
@@ -49,6 +53,7 @@ final class SyncCoordinator: ObservableObject {
             case .safari:     return SafariSourceClient()
             }
         }
+        self.destinationClientFor = destinationClient ?? { DestinationRouter.client(for: $0) }
 
         NotificationCenter.default.publisher(for: .syncIntervalChanged)
             .sink { [weak self] _ in self?.restartTimer() }
@@ -143,24 +148,27 @@ final class SyncCoordinator: ObservableObject {
         // ticks stay quiet so an idle account doesn't flood the log every interval.
         let explainSkips = (trigger == .manual)
 
-        guard ledger.remarkableAccount != nil else {
-            if explainSkips {
-                recordSkip(.noAccountPaired)
-            } else {
-                Log.sync.info("Skipping scheduled cycle: no reMarkable account paired.")
-            }
-            return
-        }
         guard !self.settings.pauseSyncing else {
             if explainSkips { recordSkip(.syncingPaused) }
             return
         }
 
-        let rules = ledger.rules.filter { rule in
+        let candidateRules = ledger.rules.filter { rule in
             rule.enabled && (ruleId == nil || rule.id == ruleId) && !rule.destinations.isEmpty
         }
-        guard !rules.isEmpty else {
+        guard !candidateRules.isEmpty else {
             if explainSkips { recordSkip(noWorkReason(forTargetedRuleId: ruleId), ruleId: ruleId) }
+            return
+        }
+
+        // reMarkable rules need a paired account; local sources (Safari) don't.
+        let rules = candidateRules.filter { $0.sourceKind != .remarkable || ledger.remarkableAccount != nil }
+        guard !rules.isEmpty else {
+            if explainSkips {
+                recordSkip(.noAccountPaired)
+            } else {
+                Log.sync.info("Skipping scheduled cycle: no reMarkable account paired.")
+            }
             return
         }
 
@@ -260,7 +268,7 @@ final class SyncCoordinator: ObservableObject {
 
     private func runBinding(rule: SyncRule, folderName: String, binding: DestinationBinding,
                             source: SourceClient, contents: [(item: SourceItem, content: NoteContent)]) async {
-        let client = DestinationRouter.client(for: binding.kind)
+        let client = destinationClientFor(binding.kind)
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunStarted))
 
         var notesSynced = 0

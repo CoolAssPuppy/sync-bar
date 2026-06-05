@@ -238,6 +238,60 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    // MARK: Safari → Chrome (a non-reMarkable source through the same pipeline)
+
+    /// A bookmark's URL flows from the source item through to the destination's
+    /// payload, end to end through the coordinator.
+    func test_bookmark_url_flows_through_to_destination_payload() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+
+        var rule = SyncRule(source: .safari(SafariSourceConfig(folderId: "all", folderName: "All bookmarks")))
+        rule.destinations = [DestinationBinding(configuration:
+            .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"])))]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let spy = SpyDestinationClient()
+        let source = StubBookmarkSource(items: [
+            SourceItem(id: "b1", name: "Apple", versionHash: "h1", createdAt: .distantPast, url: URL(string: "https://apple.com"))
+        ])
+        let coordinator = SyncCoordinator(sourceClient: { _ in source }, destinationClient: { _ in spy })
+
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 1)
+        XCTAssertEqual(spy.lastPayload?.url, URL(string: "https://apple.com"))
+        XCTAssertEqual(spy.lastPayload?.title, "Apple")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    /// A Safari source syncs even with no reMarkable account paired (the account
+    /// gate only applies to reMarkable rules).
+    func test_safari_rule_runs_without_remarkable_account() async {
+        let ledger = Ledger.shared
+        let savedAccount = ledger.remarkableAccount
+        ledger.setRemarkableAccount(nil)
+        defer { ledger.setRemarkableAccount(savedAccount) }
+
+        var rule = SyncRule(source: .safari(SafariSourceConfig(folderId: "all", folderName: "All bookmarks")))
+        rule.destinations = [DestinationBinding(configuration:
+            .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"])))]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let spy = SpyDestinationClient()
+        let source = StubBookmarkSource(items: [
+            SourceItem(id: "b1", name: "Swift", versionHash: "h1", createdAt: .distantPast, url: URL(string: "https://swift.org"))
+        ])
+        let coordinator = SyncCoordinator(sourceClient: { _ in source }, destinationClient: { _ in spy })
+
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 1, "Safari sync runs without a reMarkable account")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     // MARK: source scope (sync a whole folder, or only specific notebooks)
 
     func test_rule_scoped_to_specific_notebooks_syncs_only_those() async {
@@ -548,4 +602,28 @@ private final class SpySourceClient: SourceClient, @unchecked Sendable {
     func resolveTitle(for item: SourceItem, content: NoteContent,
                       config: SourceConfiguration, strategyOverride: TitleStrategy?) -> String { item.name }
     func shouldSkipAsEmpty(content: NoteContent, config: SourceConfiguration, ocrModeOverride: OcrMode?) -> Bool { false }
+}
+
+/// A bookmark-shaped source: canned items with URLs, empty content (no OCR).
+private struct StubBookmarkSource: SourceClient {
+    let kind: SourceKind = .safari
+    let items: [SourceItem]
+    func listScopes() async throws -> [SourceScope] { [] }
+    func listItems(config: SourceConfiguration) async throws -> [SourceItem] { items }
+    func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent { NoteContent(blocks: []) }
+    func resolveTitle(for item: SourceItem, content: NoteContent,
+                      config: SourceConfiguration, strategyOverride: TitleStrategy?) -> String { item.name }
+    func shouldSkipAsEmpty(content: NoteContent, config: SourceConfiguration, ocrModeOverride: OcrMode?) -> Bool { false }
+}
+
+/// Captures the payload the coordinator hands a destination.
+private final class SpyDestinationClient: DestinationClient, @unchecked Sendable {
+    let kind: DestinationKind = .chrome
+    private(set) var lastPayload: DestinationPayload?
+    func write(payload: DestinationPayload, configuration: DestinationConfiguration,
+               existingExternalId: String?) async throws -> DestinationWriteResult {
+        lastPayload = payload
+        return DestinationWriteResult(externalId: "spy-\(UUID().uuidString.prefix(6))",
+                                      externalURL: payload.url, notes: "spy")
+    }
 }

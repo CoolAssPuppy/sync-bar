@@ -121,9 +121,8 @@ struct MainShellView: View {
     // MARK: Lifecycle / data
 
     private func firstAppear() {
-        if ledger.remarkableAccount == nil && !ledger.hasAnyDestination {
-            isOnboarding = true
-        }
+        // First-run guidance now lives in the Syncs home hero ("Add your first
+        // Source"), so the dedicated onboarding screen isn't forced here.
         Task { await reconcilePairingThenRefresh() }
     }
 

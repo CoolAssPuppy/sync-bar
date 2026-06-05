@@ -48,7 +48,6 @@ struct SyncEditorView: View {
 
     // From
     @State private var sourceKind: SourceKind = .remarkable
-    @State private var safariAvailable = false
     @State private var folder: RmFolder?
     @State private var selectedFileIds: [String]?
     // From — Safari
@@ -91,10 +90,12 @@ struct SyncEditorView: View {
         }
     }
 
-    /// Source kinds the user can pick from: reMarkable always; Safari once Full
-    /// Disk Access is granted.
+    /// Source kinds the user can pick from — only the ones they've added.
     private var availableSourceKinds: [SourceKind] {
-        safariAvailable ? [.remarkable, .safari] : [.remarkable]
+        var kinds: [SourceKind] = []
+        if ledger.remarkableAccount != nil { kinds.append(.remarkable) }
+        if ledger.safariConnected { kinds.append(.safari) }
+        return kinds.isEmpty ? [.remarkable] : kinds
     }
 
     var body: some View {
@@ -397,8 +398,10 @@ struct SyncEditorView: View {
     // MARK: Logic
 
     private func load() {
-        safariAvailable = FullDiskAccessProbe.hasAccess()
-        guard case .edit(let flow) = target else { return }
+        guard case .edit(let flow) = target else {
+            sourceKind = availableSourceKinds.first ?? .remarkable
+            return
+        }
         existingBinding = flow.binding
         originalRuleId = flow.ruleId
         originalBindingId = flow.binding.id

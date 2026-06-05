@@ -17,6 +17,7 @@ struct ConnectionsView: View {
     @Environment(\.theme) private var theme
 
     @State private var isAddingApp = false
+    @State private var isAddingSource = false
     @State private var isRepairing = false
     @State private var linearTeamChoices: LinearTeamChoices?
     @State private var safariHasAccess = false
@@ -36,6 +37,9 @@ struct ConnectionsView: View {
         .background(theme.background)
         .onAppear { safariHasAccess = FullDiskAccessProbe.hasAccess() }
         .sheet(isPresented: $isAddingApp) { AddDestinationSheet(isPresented: $isAddingApp) }
+        .sheet(isPresented: $isAddingSource, onDismiss: { safariHasAccess = FullDiskAccessProbe.hasAccess() }) {
+            AddSourceSheet(isPresented: $isAddingSource)
+        }
         .sheet(isPresented: $isRepairing) {
             RemarkablePairPanel(title: "Re-pair your reMarkable", onClose: { isRepairing = false })
         }
@@ -64,42 +68,81 @@ struct ConnectionsView: View {
         .padding(.bottom, 14)
     }
 
+    // MARK: Section header with add control
+
+    /// A section header (e.g. "Sources") with a right-aligned "+" affordance.
+    private func sectionHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(alignment: .center) {
+            SectionLabel(text: title)
+            Spacer()
+            trailing()
+        }
+    }
+
+    /// The "+" glyph in the normal foreground color, used to add a source/destination.
+    private var addGlyph: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(theme.foreground)
+            .frame(width: 26, height: 26)
+            .contentShape(Rectangle())
+    }
+
     // MARK: Source
 
     private var sourceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Sources")
-            ConnectionCard(
-                icon: { AnyView(SourceMark(size: 38)) },
-                title: "reMarkable",
-                subtitle: sourceSubtitle,
-                status: sourceStatus,
-                trailing: {
-                    AnyView(HStack(spacing: 8) {
-                        PillButton(title: "Upload files", systemImage: "arrow.up.doc", filled: false) { presentUploadPanel() }
-                        PillButton(title: "Re-pair", filled: false) { isRepairing = true }
-                    })
+            sectionHeader("Sources") {
+                Button(action: { isAddingSource = true }) { addGlyph }.buttonStyle(.plain)
+            }
+            if ledger.remarkableAccount == nil && !ledger.safariConnected {
+                Text("No sources yet. Add one with the + above.")
+                    .font(.system(size: 13)).foregroundStyle(theme.muted).padding(.vertical, 4)
+            }
+            if ledger.remarkableAccount != nil {
+                ConnectionCard(
+                    icon: { AnyView(SourceMark(size: 38)) },
+                    title: "reMarkable",
+                    subtitle: sourceSubtitle,
+                    status: sourceStatus,
+                    trailing: {
+                        AnyView(HStack(spacing: 8) {
+                            PillButton(title: "Upload files", systemImage: "arrow.up.doc", filled: false) { presentUploadPanel() }
+                            PillButton(title: "Re-pair", filled: false) { isRepairing = true }
+                        })
+                    }
+                )
+            }
+            if ledger.safariConnected {
+                ConnectionCard(
+                    icon: { AnyView(SourceMark(kind: .safari, size: 38)) },
+                    title: "Safari",
+                    subtitle: safariHasAccess ? "Connected · bookmarks" : "Needs Full Disk Access to read bookmarks",
+                    status: safariHasAccess ? .connected : .error,
+                    trailing: {
+                        AnyView(HStack(spacing: 8) {
+                            if !safariHasAccess {
+                                PillButton(title: "Open Settings", filled: false) { FullDiskAccessProbe.openSystemSettings() }
+                                PillButton(title: "Re-check", filled: false) { safariHasAccess = FullDiskAccessProbe.hasAccess() }
+                            }
+                            Menu {
+                                Button("Disconnect", role: .destructive) { ledger.setSafariConnected(false) }
+                            } label: {
+                                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.muted)
+                                    .frame(width: 30, height: 30)
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                                    .contentShape(Rectangle())
+                            }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        })
+                    }
+                )
+                if !safariHasAccess {
+                    Text("After enabling Sync Bar under Full Disk Access, relaunch the app, then Re-check.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.tertiary)
+                        .padding(.horizontal, 4)
                 }
-            )
-            ConnectionCard(
-                icon: { AnyView(SourceMark(kind: .safari, size: 38)) },
-                title: "Safari",
-                subtitle: safariHasAccess ? "Connected · bookmarks" : "Needs Full Disk Access to read bookmarks",
-                status: safariHasAccess ? .connected : .none,
-                trailing: {
-                    AnyView(HStack(spacing: 8) {
-                        if !safariHasAccess {
-                            PillButton(title: "Open Settings", filled: false) { FullDiskAccessProbe.openSystemSettings() }
-                        }
-                        PillButton(title: "Re-check", filled: false) { safariHasAccess = FullDiskAccessProbe.hasAccess() }
-                    })
-                }
-            )
-            if !safariHasAccess {
-                Text("After enabling Sync Bar under Full Disk Access, relaunch the app, then Re-check.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(theme.tertiary)
-                    .padding(.horizontal, 4)
             }
         }
     }
@@ -120,7 +163,9 @@ struct ConnectionsView: View {
 
     private var appsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Destinations")
+            sectionHeader("Destinations") {
+                Button(action: { isAddingApp = true }) { addGlyph }.buttonStyle(.plain)
+            }
             if !ledger.hasAnyDestination {
                 Text("No destinations connected yet.")
                     .font(.system(size: 13))
@@ -168,7 +213,6 @@ struct ConnectionsView: View {
                         rename: nil, reconnect: nil,
                         disconnect: { ledger.removeChromeTarget(id: target.id) })
             }
-            connectAnother
         }
     }
 
@@ -207,36 +251,6 @@ struct ConnectionsView: View {
                 )
             }
         )
-    }
-
-    private var connectAnother: some View {
-        Button(action: { isAddingApp = true }) {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.cardInset)
-                    Image(systemName: "plus").font(.system(size: 15, weight: .bold)).foregroundStyle(theme.primary)
-                }
-                .frame(width: 32, height: 32)
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                Text("Connect another destination")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(theme.primary)
-                Text("Notion, Linear, Google Docs, Chrome, Markdown, Apple Notes")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(theme.tertiary)
-                    .lineLimit(1)
-                Spacer()
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 13)
-            .background(
-                RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                    .foregroundStyle(theme.border)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: Actions

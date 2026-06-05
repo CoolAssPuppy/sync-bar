@@ -20,8 +20,10 @@ struct SyncsHomeView: View {
 
     @ObservedObject private var ledger = Ledger.shared
     @Environment(\.theme) private var theme
+    @State private var isAddingSource = false
 
     private var flows: [SyncFlow] { ledger.syncFlows }
+    private var hasAnySource: Bool { ledger.remarkableAccount != nil || ledger.safariConnected }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +32,7 @@ struct SyncsHomeView: View {
             content
         }
         .background(theme.background)
+        .sheet(isPresented: $isAddingSource) { AddSourceSheet(isPresented: $isAddingSource) }
     }
 
     // MARK: Header
@@ -55,7 +58,7 @@ struct SyncsHomeView: View {
 
     private var subtitle: String {
         let count = flows.count
-        if count == 0 { return ledger.remarkableAccount == nil ? "Connect your reMarkable to begin" : "No syncs yet" }
+        if count == 0 { return hasAnySource ? "No syncs yet" : "Add a source to begin" }
         let last = flows.compactMap(\.lastRunAt).max()
         let active = "\(count) sync\(count == 1 ? "" : "s")"
         if coordinator.isSyncing { return "\(active) · syncing now" }
@@ -67,8 +70,8 @@ struct SyncsHomeView: View {
 
     @ViewBuilder
     private var content: some View {
-        if ledger.remarkableAccount == nil {
-            pairPrompt
+        if !hasAnySource {
+            sourcesHero
         } else if flows.isEmpty {
             emptyState
         } else {
@@ -117,25 +120,30 @@ struct SyncsHomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var pairPrompt: some View {
+    private var sourcesHero: some View {
         VStack(spacing: 16) {
             Spacer()
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous).fill(theme.card)
-                Image(systemName: "pencil.tip.crop.circle.badge.plus")
-                    .font(.system(size: 34, weight: .light))
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 30, weight: .light))
                     .foregroundStyle(theme.primary)
             }
             .frame(width: 92, height: 92)
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             VStack(spacing: 6) {
-                Text("Connect your reMarkable")
+                Text("Sync Bar syncs your information from Sources to Destinations")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Pair your tablet in Connections, then make a sync.")
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+                Text("Start by adding a source — your reMarkable, or Safari bookmarks.")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
             }
+            PillButton(title: "Add your first Source", systemImage: "plus") { isAddingSource = true }
+                .padding(.top, 2)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

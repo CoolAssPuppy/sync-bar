@@ -24,6 +24,7 @@ final class Ledger: ObservableObject {
     private static let markdownTargetsKey   = "ledger.markdownTargets"
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
     private static let chromeTargetsKey     = "ledger.chromeTargets"
+    private static let safariConnectedKey   = "ledger.safariConnected"
     /// Bumped to `.v2` for the genericized SyncRule shape (a polymorphic
     /// `source: SourceConfiguration` instead of loose reMarkable fields). The old
     /// `ledger.rules` key is intentionally abandoned — a clean break, so pre-v1
@@ -46,6 +47,9 @@ final class Ledger: ObservableObject {
     @Published private(set) var markdownTargets: [MarkdownTarget] = []
     @Published private(set) var appleNotesTargets: [AppleNotesTarget] = []
     @Published private(set) var chromeTargets: [ChromeTarget] = []
+    /// Whether the user has added Safari as a source. Safari needs no account —
+    /// just Full Disk Access — so this is a simple "added it" flag, not a record.
+    @Published private(set) var safariConnected: Bool = false
     @Published private(set) var rules: [SyncRule] = []
     @Published private(set) var events: [SyncEvent] = []
     @Published private(set) var folders: [RmFolder] = []
@@ -134,6 +138,7 @@ final class Ledger: ObservableObject {
         persist(value: markdownTargets, key: Self.markdownTargetsKey)
         persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
         persist(value: chromeTargets, key: Self.chromeTargetsKey)
+        store.set(safariConnected, forKey: Self.safariConnectedKey)
         persist(value: rules, key: Self.rulesKey)
         persist(value: events, key: Self.eventsKey)
         persist(value: folders, key: Self.foldersKey)
@@ -249,6 +254,13 @@ final class Ledger: ObservableObject {
                    let othersAtSamePath = (self?.markdownTargets ?? []).contains { $0.folderPath == removedPath }
                    return !othersAtSamePath
                })
+    }
+
+    func setSafariConnected(_ value: Bool) {
+        guard safariConnected != value else { return }
+        safariConnected = value
+        store.set(value, forKey: Self.safariConnectedKey)
+        NotificationCenter.default.post(name: .foldersChanged, object: nil)
     }
 
     func upsertChromeTarget(_ target: ChromeTarget) {
@@ -625,6 +637,7 @@ final class Ledger: ObservableObject {
         markdownTargets   = decodeArray([MarkdownTarget].self,  key: Self.markdownTargetsKey,  defaults: defaults, decoder: decoder)
         appleNotesTargets = decodeArray([AppleNotesTarget].self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
         chromeTargets     = decodeArray([ChromeTarget].self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
+        safariConnected   = defaults.bool(forKey: Self.safariConnectedKey)
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
         events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
         folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)

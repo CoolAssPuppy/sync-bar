@@ -101,7 +101,7 @@ struct ConnectionsView: View {
             }
             if ledger.remarkableAccount != nil {
                 ConnectionCard(
-                    icon: { AnyView(SourceMark(size: 38)) },
+                    icon: { AnyView(SourceIcon(size: 38)) },
                     title: "reMarkable",
                     subtitle: sourceSubtitle,
                     status: sourceStatus,
@@ -115,7 +115,7 @@ struct ConnectionsView: View {
             }
             if ledger.safariConnected {
                 ConnectionCard(
-                    icon: { AnyView(SourceMark(kind: .safari, size: 38)) },
+                    icon: { AnyView(SourceIcon(kind: .safari, size: 38)) },
                     title: "Safari",
                     subtitle: safariHasAccess ? "Connected · bookmarks" : "Needs Full Disk Access to read bookmarks",
                     status: safariHasAccess ? .connected : .error,

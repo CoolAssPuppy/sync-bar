@@ -7,7 +7,7 @@
 //  A source is a place Sync Bar pulls notes FROM. reMarkable is the only one
 //  today, but the kind is modeled separately from the data layer so adding a
 //  new source is a matter of a new case plus its brand mark - the UI already
-//  renders any SourceKind through SourceIcon / SourceMark.
+//  renders any SourceKind through SourceIcon / BrandIcon.
 //
 
 import Foundation
@@ -54,6 +54,16 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     var brandMarkIsMonochrome: Bool {
         switch self {
         case .remarkable: return false
+        case .safari:     return false
+        }
+    }
+
+    /// Whether the mark is a bare logo that needs a white chip behind it
+    /// (reMarkable). App-icon sources (Safari) carry their own background and
+    /// render bare and full-size, like destination icons.
+    var rendersOnChip: Bool {
+        switch self {
+        case .remarkable: return true
         case .safari:     return false
         }
     }

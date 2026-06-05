@@ -89,9 +89,9 @@ struct MainShellView: View {
     private func rail(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(theme.primary)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable().interpolation(.high).scaledToFit()
+                    .frame(width: 24, height: 24)
                 Text("Sync Bar").font(.system(size: 15, weight: .bold)).foregroundStyle(theme.foreground)
             }
             .padding(.horizontal, 8)

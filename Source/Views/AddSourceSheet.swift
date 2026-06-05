@@ -139,7 +139,7 @@ private struct SourceKindTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    SourceMark(kind: kind, size: 28)
+                    SourceIcon(kind: kind, size: 28)
                     Spacer(minLength: 0)
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.primary).font(.system(size: 13))

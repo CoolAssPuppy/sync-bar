@@ -163,7 +163,7 @@ struct SyncEditorView: View {
             stepLabel("FROM", "which source")
             if availableSourceKinds.count > 1 {
                 CustomDropdown(
-                    options: availableSourceKinds.map { DropdownOption(id: $0.rawValue, icon: AnyView(SourceMark(kind: $0, size: 26)), title: $0.label) },
+                    options: availableSourceKinds.map { DropdownOption(id: $0.rawValue, icon: AnyView(SourceIcon(kind: $0, size: 26)), title: $0.label) },
                     selectedId: sourceKind.rawValue,
                     placeholder: "Choose a Source",
                     placeholderIcon: AnyView(placeholderSourceIcon),
@@ -180,7 +180,7 @@ struct SyncEditorView: View {
     private var remarkableScopePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             CustomDropdown(
-                options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(size: 26)), title: $0.name) },
+                options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(size: 26)), title: $0.name) },
                 selectedId: folder?.id,
                 placeholder: "Choose a folder",
                 placeholderIcon: AnyView(placeholderSourceIcon),
@@ -202,7 +202,7 @@ struct SyncEditorView: View {
 
     private var safariScopePicker: some View {
         CustomDropdown(
-            options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
+            options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
             selectedId: safariScopeId,
             placeholder: safariScopes.isEmpty ? "Loading bookmarks…" : "Choose a bookmark folder",
             placeholderIcon: AnyView(placeholderSourceIcon),

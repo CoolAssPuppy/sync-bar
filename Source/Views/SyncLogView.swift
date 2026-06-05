@@ -99,7 +99,7 @@ private struct EventRow: View {
     private var header: some View {
         HStack(spacing: 9) {
             if isSyncRow {
-                SourceMark(size: 20)
+                SourceIcon(size: 20)
                 Text(sourceFolderName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(theme.foreground)

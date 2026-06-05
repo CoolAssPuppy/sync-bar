@@ -264,32 +264,71 @@ struct AppIconButton: View {
 /// Renders the bundled brand asset for a destination, falling back to the
 /// SF Symbol if the asset file is missing. Centralises the lookup so the
 /// rest of the app doesn't branch on `Image(_:) vs Image(systemName:)`.
-struct DestinationIcon: View {
-    let kind: DestinationKind
-    var size: CGFloat = 18
+/// The atomic brand icon for either side of a sync. Renders the bundled asset
+/// (or an SF Symbol fallback), full-size and transparent by default. App-icon
+/// marks that need contrast (reMarkable's bare logo) sit on a white chip;
+/// self-contained app icons (Safari, Chrome) render bare. `SourceIcon` and
+/// `DestinationIcon` are thin wrappers over this, so a role "arrow" badge could
+/// later be overlaid on both uniformly.
+struct BrandIcon: View {
+    let assetName: String
+    let systemImage: String
+    var isMonochrome: Bool = false
+    var onChip: Bool = false
+    var size: CGFloat = 26
 
     @Environment(\.theme) private var theme
 
     var body: some View {
-        let bundleImage = NSImage(named: kind.assetName)
-        Group {
-            if let bundleImage, bundleImage.isValid {
-                // Monochrome marks (Linear) render as a template tinted to the
-                // foreground so they adapt to the theme; full-color and two-tone
-                // marks render in their own colors (tint is ignored there).
-                Image(nsImage: bundleImage)
-                    .renderingMode(kind.brandMarkIsMonochrome ? .template : .original)
+        // Monochrome marks (Linear) render as a template tinted to the
+        // foreground so they adapt to the theme; full-color and two-tone marks
+        // render in their own colors (tint is ignored there).
+        let mark = Group {
+            if let image = NSImage(named: assetName), image.isValid {
+                Image(nsImage: image)
+                    .renderingMode(isMonochrome ? .template : .original)
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
                     .foregroundStyle(theme.foreground)
             } else {
-                Image(systemName: kind.systemImage)
-                    .font(.system(size: size * 0.7, weight: .medium))
-                    .foregroundStyle(theme.foreground)
+                Image(systemName: systemImage)
+                    .font(.system(size: size * (onChip ? 0.5 : 0.7), weight: .medium))
+                    .foregroundStyle(onChip ? theme.primary : theme.foreground)
             }
         }
-        .frame(width: size, height: size)
+        if onChip {
+            let radius = size * 0.27
+            mark
+                .padding(size * 0.16)
+                .frame(width: size, height: size)
+                .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.white))
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        } else {
+            mark.frame(width: size, height: size)
+        }
+    }
+}
+
+/// A source's brand icon.
+struct SourceIcon: View {
+    var kind: SourceKind = .remarkable
+    var size: CGFloat = 28
+
+    var body: some View {
+        BrandIcon(assetName: kind.assetName, systemImage: kind.systemImage,
+                  isMonochrome: kind.brandMarkIsMonochrome, onChip: kind.rendersOnChip, size: size)
+    }
+}
+
+/// A destination's brand icon.
+struct DestinationIcon: View {
+    let kind: DestinationKind
+    var size: CGFloat = 18
+
+    var body: some View {
+        BrandIcon(assetName: kind.assetName, systemImage: kind.systemImage,
+                  isMonochrome: kind.brandMarkIsMonochrome, onChip: false, size: size)
     }
 }
 

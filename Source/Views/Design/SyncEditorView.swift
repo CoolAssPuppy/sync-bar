@@ -278,14 +278,17 @@ struct SyncEditorView: View {
     private var chromeForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             if sourceKind == .safari {
-                Toggle(isOn: $chromeMirrorExactly) {
+                HStack(alignment: .center, spacing: 14) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Exactly match Safari").font(.system(size: 12.5, weight: .medium))
+                        Text("Exactly match Safari")
+                            .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
                         Text("Safari is the source of truth and sync is unidirectional.")
                             .font(.system(size: 11)).foregroundStyle(theme.tertiary)
                     }
+                    Spacer(minLength: 12)
+                    Toggle("", isOn: $chromeMirrorExactly)
+                        .labelsHidden().toggleStyle(.switch).tint(theme.primary)
                 }
-                .toggleStyle(.switch).tint(theme.primary)
                 Text("Chrome must be quit for changes to apply.")
                     .font(.system(size: 11)).foregroundStyle(theme.tertiary)
             } else {

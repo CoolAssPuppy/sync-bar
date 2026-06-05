@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let cometAnimationKey = "syncbar.comet"
 
     let coordinator = SyncCoordinator()
+    let taskCoordinator = TaskSyncCoordinator()
     private let launchAtLogin = LaunchAtLoginManager.shared
     private let updater = UpdaterManager.shared
 
@@ -126,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func syncNowMenuAction() { coordinator.syncNow(ruleId: nil) }
+    @objc private func syncNowMenuAction() { coordinator.syncNow(ruleId: nil); taskCoordinator.syncAll() }
     @objc private func openMainWindowAction() { showMainWindow() }
     @objc private func openSettingsDrawerAction() {
         showMainWindow()
@@ -192,6 +193,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let actions = MenuBarPopoverActions(
             syncNow: { [weak self] ruleId, bindingId in
                 self?.coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
+                // "Sync all" (no specific rule) also reconciles the two-way syncs.
+                if ruleId == nil && bindingId == nil { self?.taskCoordinator.syncAll() }
+            },
+            syncTask: { [weak self] sync in
+                Task { await self?.taskCoordinator.run(sync) }
             },
             openMainWindow: { [weak self] in
                 self?.popover?.performClose(nil)
@@ -222,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             quit: { NSApp.terminate(nil) }
         )
-        let view = MenuBarPopover(coordinator: coordinator, actions: actions)
+        let view = MenuBarPopover(coordinator: coordinator, taskCoordinator: taskCoordinator, actions: actions)
         popover.contentViewController = NSHostingController(rootView: view)
         return popover
     }
@@ -241,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.contentView = NSHostingView(rootView: MainShellView(coordinator: coordinator))
+        window.contentView = NSHostingView(rootView: MainShellView(coordinator: coordinator, taskCoordinator: taskCoordinator))
         window.title = "Sync Bar"
         window.toolbar = nil
         window.titlebarAppearsTransparent = true

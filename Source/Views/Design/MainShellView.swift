@@ -16,11 +16,11 @@ enum ShellTab: Hashable { case syncs, connections, activity }
 
 struct MainShellView: View {
     @ObservedObject var coordinator: SyncCoordinator
+    @ObservedObject var taskCoordinator: TaskSyncCoordinator
     @ObservedObject private var themeStore = ThemeStore.shared
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var uploadCoordinator = UploadCoordinator.shared
 
-    @StateObject private var taskCoordinator = TaskSyncCoordinator()
     @State private var tab: ShellTab = .syncs
     @State private var editorTarget: SyncEditorTarget?
     @State private var isOnboarding = false

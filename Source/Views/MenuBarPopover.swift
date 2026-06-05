@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MenuBarPopoverActions {
     var syncNow: (String?, String?) -> Void   // ruleId, bindingId
+    var syncTask: (TaskSync) -> Void           // run one two-way sync
     var openMainWindow: () -> Void
     var openSettings: () -> Void
     var openNotionUrl: (URL) -> Void
@@ -19,6 +20,7 @@ struct MenuBarPopoverActions {
 
 struct MenuBarPopover: View {
     @ObservedObject var coordinator: SyncCoordinator
+    @ObservedObject var taskCoordinator: TaskSyncCoordinator
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var themeStore = ThemeStore.shared
     @ObservedObject private var settings = AppSettings.shared
@@ -83,19 +85,21 @@ struct MenuBarPopover: View {
         .background(theme.surface)
     }
 
+    private var totalSyncs: Int { ledger.rules.count + ledger.taskSyncs.count }
+
     private var headerStatusText: String {
         if settings.pauseSyncing { return "Syncing paused" }
-        switch ledger.rules.count {
-        case 0:  return "No rules configured"
-        case 1:  return "1 rule configured"
-        default: return "\(ledger.rules.count) rules configured"
+        switch totalSyncs {
+        case 0:  return "No syncs configured"
+        case 1:  return "1 sync configured"
+        default: return "\(totalSyncs) syncs configured"
         }
     }
 
     private func statusDotColor(theme: ThemePalette) -> Color {
         if settings.pauseSyncing { return theme.warning }
-        if coordinator.isSyncing  { return theme.primary }
-        if ledger.rules.isEmpty   { return theme.tertiary }
+        if coordinator.isSyncing || taskCoordinator.isSyncing { return theme.primary }
+        if totalSyncs == 0 { return theme.tertiary }
         return theme.success
     }
 
@@ -103,10 +107,11 @@ struct MenuBarPopover: View {
 
     @ViewBuilder
     private var content: some View {
-        // Cap the dropdown at the 10 most recent syncs so it never grows
-        // unwieldy; the full list lives in the main window.
+        // Cap the dropdown at 10 syncs so it never grows unwieldy; the full list
+        // lives in the main window. One-way flows first, then two-way task syncs.
         let flows = Array(ledger.syncFlows.prefix(10))
-        if flows.isEmpty {
+        let taskSyncs = Array(ledger.taskSyncs.prefix(max(0, 10 - flows.count)))
+        if flows.isEmpty && taskSyncs.isEmpty {
             EmptyRulesState(onOpen: actions.openMainWindow)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
@@ -118,6 +123,14 @@ struct MenuBarPopover: View {
                         flow: flow,
                         isActive: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
                         onSyncNow: { actions.syncNow(flow.ruleId, flow.binding.id) },
+                        onOpenWindow: actions.openMainWindow
+                    )
+                }
+                ForEach(taskSyncs) { sync in
+                    MenuTaskRow(
+                        sync: sync,
+                        isActive: taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id,
+                        onSyncNow: { actions.syncTask(sync) },
                         onOpenWindow: actions.openMainWindow
                     )
                 }
@@ -367,5 +380,51 @@ private struct MenuSyncRow: View {
         if isActive { return "Syncing now…" }
         if let last = flow.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
         return flow.destinationSummary
+    }
+}
+
+// MARK: - Menu two-way task sync row
+
+private struct MenuTaskRow: View {
+    let sync: TaskSync
+    let isActive: Bool
+    let onSyncNow: () -> Void
+    let onOpenWindow: () -> Void
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SyncStatusDot(status: isActive ? .running : sync.lastRunStatus, isSyncing: isActive)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(sync.remindersListName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground).lineLimit(1)
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.tertiary)
+                    Text(sync.notionDatabaseName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.foreground).lineLimit(1)
+                }
+                Text(secondary).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            AppIconButton(systemName: "arrow.triangle.2.circlepath",
+                          help: "Sync this now", spinOnTap: true) { onSyncNow() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture { onOpenWindow() }
+    }
+
+    private var secondary: String {
+        if isActive { return "Syncing now…" }
+        if let last = sync.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
+        return "Two-way"
     }
 }

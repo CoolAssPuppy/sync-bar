@@ -85,13 +85,42 @@ Until then, the mock client returns six sample notebooks ("Q2 planning", "Meetin
 make bootstrap   # one-time: generates SyncBar.xcodeproj and resolves deps
 make build       # debug build → build/Build/Products/Debug/SyncBar.app
 make run         # build + launch
-make release     # release build (no signing pipeline yet)
-make test        # unit tests (31 passing today)
+make release     # local Release build only (full signed pipeline is scripts/release.sh — see "Releasing")
+make test        # unit tests
 make lint        # SwiftLint with the config under .swiftlint.yml
 make clean       # nuke build/ and the generated xcodeproj
 ```
 
 The first launch creates the welcome screen because no accounts exist. Subsequent launches stay in the menu bar; click the icon to bring the popover up, or use ⌘, while the main window is open to slide the settings drawer down from the top.
+
+## Releasing
+
+Cutting a signed, notarized release is one command from the repo root:
+
+```
+./scripts/release.sh <version> "<release notes HTML>"
+```
+
+The notes are list items; the script wraps them in a `<ul>`. Example:
+
+```
+./scripts/release.sh 1.0.1 "<li>Bug fixes.</li><li>More sources coming soon!</li>"
+```
+
+It does the whole thing in order: bumps `MARKETING_VERSION` to `<version>` and auto-increments `CURRENT_PROJECT_VERSION`, regenerates the project, archives and exports a Developer ID build, notarizes and staples the app and DMG, Sparkle-signs the DMG, prepends a new `<item>` to `dist/appcast.xml`, uploads the DMG (plus a stable `SyncBar-latest.dmg` alias) and the appcast to Cloudflare R2, then verifies the live URLs and the Dub shortlink.
+
+Run it on `main` after merging, since it edits tracked files. When it finishes, commit the two it changed:
+
+```
+git add project.yml dist/appcast.xml
+git commit -m "Release <version>"
+```
+
+One-time prerequisites (the script preflights and bails if any are missing); see `scripts/SPARKLE.md` for setup:
+
+- `doppler` logged in with access to the `sync-bar/prd` config (Cloudflare R2 credentials and the Sparkle signing key).
+- A `notarytool` keychain profile named `agent-server` (override with `NOTARY_PROFILE`).
+- `create-dmg`, `wrangler`, and `xcodegen` on `PATH`, plus the Sparkle `sign_update` tool at `~/bin/sparkle/sign_update`.
 
 ## Project layout
 

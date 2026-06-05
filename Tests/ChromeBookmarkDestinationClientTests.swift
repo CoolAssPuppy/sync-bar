@@ -64,17 +64,43 @@ final class ChromeBookmarkDestinationClientTests: XCTestCase {
         XCTAssertEqual(second.notes, "Already in Chrome")
     }
 
-    func test_refuses_to_write_file_while_chrome_running() async throws {
+    func test_uses_applescript_path_when_chrome_running() async throws {
         let file = try writeChromeFixture()
         defer { try? FileManager.default.removeItem(at: file) }
-        let client = ChromeBookmarkDestinationClient(bookmarksURLOverride: file, chromeRunningOverride: true)
+        let box = ScriptBox()
+        let client = ChromeBookmarkDestinationClient(
+            bookmarksURLOverride: file,
+            chromeRunningOverride: true,
+            appleScriptRunner: { box.source = $0 }   // stub: never touch a real Chrome
+        )
 
-        do {
-            _ = try await client.write(payload: payload("https://a.com", title: "A"),
-                                       configuration: config(["Bookmarks Bar"]), existingExternalId: nil)
-            XCTFail("expected a throw while Chrome is running (B3 has no live path yet)")
-        } catch {
-            // Expected: the JSON path refuses to write under a running Chrome.
-        }
+        let result = try await client.write(payload: payload("https://a.com", title: "Apple & Co"),
+                                            configuration: config(["Bookmarks Bar", "From Safari"]),
+                                            existingExternalId: nil)
+
+        XCTAssertNotNil(result.externalId)
+        let source = box.source ?? ""
+        XCTAssertTrue(source.contains("Google Chrome"))
+        XCTAssertTrue(source.contains("https://a.com"))
+        XCTAssertTrue(source.contains("From Safari"))
+        XCTAssertTrue(source.contains("\\\"") || source.contains("Apple & Co"), "title is embedded (and escaped)")
+        // The file is NOT touched on the live path (no new node written by us).
+        let store = try ChromeBookmarksStore(data: try Data(contentsOf: file))
+        XCTAssertNil(store.guid(forURL: "https://a.com", inFolderPath: ["Bookmarks Bar", "From Safari"]))
     }
+
+    func test_applescript_source_finds_or_creates_nested_folders() {
+        let source = ChromeBookmarkDestinationClient.appleScriptSource(
+            title: "T", url: "https://t.com", folderPath: ["Other", "Imported", "Deep"])
+        XCTAssertTrue(source.contains("other bookmarks"))
+        XCTAssertTrue(source.contains("whose title is \"Imported\""))
+        XCTAssertTrue(source.contains("whose title is \"Deep\""))
+        XCTAssertTrue(source.contains("make new bookmark item"))
+    }
+}
+
+/// Reference holder so the @Sendable AppleScript-runner stub can record the
+/// generated source (write() awaits the runner before we read it).
+private final class ScriptBox: @unchecked Sendable {
+    var source: String?
 }

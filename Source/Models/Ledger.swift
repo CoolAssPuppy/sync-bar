@@ -25,6 +25,9 @@ final class Ledger: ObservableObject {
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
     private static let chromeTargetsKey     = "ledger.chromeTargets"
     private static let safariConnectedKey   = "ledger.safariConnected"
+    private static let remindersConnectedKey = "ledger.remindersConnected"
+    private static let taskSyncsKey         = "ledger.taskSyncs"
+    private static let taskSyncStateKey     = "ledger.taskSyncState"
     /// Bumped to `.v2` for the genericized SyncRule shape (a polymorphic
     /// `source: SourceConfiguration` instead of loose reMarkable fields). The old
     /// `ledger.rules` key is intentionally abandoned — a clean break, so pre-v1
@@ -50,6 +53,13 @@ final class Ledger: ObservableObject {
     /// Whether the user has added Safari as a source. Safari needs no account —
     /// just Full Disk Access — so this is a simple "added it" flag, not a record.
     @Published private(set) var safariConnected: Bool = false
+    /// Whether the user has granted Reminders access and added it as a source.
+    /// Like Safari, Reminders needs no account — just a TCC grant — so this is a
+    /// simple "added it" flag gating the two-way editor.
+    @Published private(set) var remindersConnected: Bool = false
+    /// Bidirectional Reminders <-> Notion syncs. First-class records (not
+    /// flattened from rules + bindings), since reconciliation runs both ways.
+    @Published private(set) var taskSyncs: [TaskSync] = []
     @Published private(set) var rules: [SyncRule] = []
     @Published private(set) var events: [SyncEvent] = []
     @Published private(set) var folders: [RmFolder] = []
@@ -65,6 +75,13 @@ final class Ledger: ObservableObject {
     /// binding+file, keyed by `"<bindingId>|<pageId>"`. Lets the next sync update
     /// that same note in place rather than creating a duplicate.
     private var syncedExternalIds: [String: String] = [:]
+
+    /// The identity-map + last-synced baseline for each two-way task sync, keyed
+    /// by `TaskSync.id` → its `[TaskLink]`. The three-way merge needs both the id
+    /// pair (Reminder ↔ Notion page) and the baseline value to tell which side
+    /// changed which field since last cycle. Not `@Published`: it churns during
+    /// reconciliation and no view observes it.
+    private var taskSyncState: [String: [TaskLink]] = [:]
 
     private static let maxEventsRetained = 500
     private static let persistDebounceMs: UInt64 = 250_000_000  // 250 ms
@@ -139,6 +156,9 @@ final class Ledger: ObservableObject {
         persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
         persist(value: chromeTargets, key: Self.chromeTargetsKey)
         store.set(safariConnected, forKey: Self.safariConnectedKey)
+        store.set(remindersConnected, forKey: Self.remindersConnectedKey)
+        persist(value: taskSyncs, key: Self.taskSyncsKey)
+        persist(value: taskSyncState, key: Self.taskSyncStateKey)
         persist(value: rules, key: Self.rulesKey)
         persist(value: events, key: Self.eventsKey)
         persist(value: folders, key: Self.foldersKey)
@@ -150,7 +170,8 @@ final class Ledger: ObservableObject {
     /// (rather than the @Published arrays) refresh after a wholesale store swap.
     private func broadcastChanged() {
         for name: Notification.Name in [.remarkableAccountChanged, .notionWorkspacesChanged,
-                                        .destinationsChanged, .rulesChanged, .eventsChanged, .foldersChanged] {
+                                        .destinationsChanged, .rulesChanged, .eventsChanged, .foldersChanged,
+                                        .taskSyncsChanged] {
             NotificationCenter.default.post(name: name, object: nil)
         }
     }
@@ -261,6 +282,67 @@ final class Ledger: ObservableObject {
         safariConnected = value
         store.set(value, forKey: Self.safariConnectedKey)
         NotificationCenter.default.post(name: .foldersChanged, object: nil)
+    }
+
+    func setRemindersConnected(_ value: Bool) {
+        guard remindersConnected != value else { return }
+        remindersConnected = value
+        store.set(value, forKey: Self.remindersConnectedKey)
+        NotificationCenter.default.post(name: .foldersChanged, object: nil)
+    }
+
+    // MARK: Task syncs (two-way Reminders <-> Notion)
+
+    func upsertTaskSync(_ taskSync: TaskSync) {
+        var copy = taskSync
+        copy.updatedAt = Date()
+        if let index = taskSyncs.firstIndex(where: { $0.id == taskSync.id }) {
+            taskSyncs[index] = copy
+        } else {
+            taskSyncs.append(copy)
+        }
+        persistTaskSyncs()
+        NotificationCenter.default.post(name: .taskSyncsChanged, object: nil)
+    }
+
+    /// Removes a task sync and forgets its baseline links so a future re-create
+    /// starts fresh (re-pairs from scratch) rather than reusing stale identities.
+    func removeTaskSync(id: String) {
+        guard taskSyncs.contains(where: { $0.id == id }) else { return }
+        taskSyncs.removeAll { $0.id == id }
+        if taskSyncState.removeValue(forKey: id) != nil { persistTaskSyncState() }
+        persistTaskSyncs()
+        NotificationCenter.default.post(name: .taskSyncsChanged, object: nil)
+    }
+
+    /// Updates a task sync's run result after a cycle.
+    func updateTaskSyncRunResult(id: String, status: RuleRunStatus, runAt: Date, error: String? = nil) {
+        guard let index = taskSyncs.firstIndex(where: { $0.id == id }) else { return }
+        var sync = taskSyncs[index]
+        let unchanged = sync.lastRunStatus == status && sync.lastRunAt == runAt && sync.lastRunError == error
+        guard !unchanged else { return }
+        sync.lastRunStatus = status
+        sync.lastRunAt = runAt
+        sync.lastRunError = error
+        taskSyncs[index] = sync
+        persistTaskSyncs()
+        NotificationCenter.default.post(name: .taskSyncsChanged, object: nil)
+    }
+
+    /// The baseline links (Reminder ↔ Notion page + last-synced value) for a sync.
+    func taskLinks(forSyncId id: String) -> [TaskLink] {
+        taskSyncState[id] ?? []
+    }
+
+    /// Replaces the baseline links for a sync after a reconciliation cycle.
+    func setTaskLinks(_ links: [TaskLink], forSyncId id: String) {
+        guard taskSyncState[id] != links else { return }
+        if links.isEmpty {
+            taskSyncState.removeValue(forKey: id)
+        } else {
+            taskSyncState[id] = links
+        }
+        persistTaskSyncState()
     }
 
     func upsertChromeTarget(_ target: ChromeTarget) {
@@ -491,11 +573,13 @@ final class Ledger: ObservableObject {
     /// external id) so the next cycle resyncs all notes to all destinations.
     /// Does not touch the visible event log.
     func resetSyncDatabase() {
-        guard !syncedPageHashes.isEmpty || !syncedExternalIds.isEmpty else { return }
+        guard !syncedPageHashes.isEmpty || !syncedExternalIds.isEmpty || !taskSyncState.isEmpty else { return }
         syncedPageHashes = [:]
         syncedExternalIds = [:]
+        taskSyncState = [:]
         persistSyncedHashes()
         persistSyncedExternalIds()
+        persistTaskSyncState()
     }
 
     /// Drops every page hash and external id recorded for the given bindings.
@@ -638,6 +722,8 @@ final class Ledger: ObservableObject {
         appleNotesTargets = decodeArray([AppleNotesTarget].self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
         chromeTargets     = decodeArray([ChromeTarget].self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
         safariConnected   = defaults.bool(forKey: Self.safariConnectedKey)
+        remindersConnected = defaults.bool(forKey: Self.remindersConnectedKey)
+        taskSyncs         = decodeArray([TaskSync].self,        key: Self.taskSyncsKey,        defaults: defaults, decoder: decoder)
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
         events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
         folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)
@@ -649,6 +735,10 @@ final class Ledger: ObservableObject {
         if let data = defaults.data(forKey: Self.syncedExternalIdsKey),
            let value = try? decoder.decode([String: String].self, from: data) {
             syncedExternalIds = value
+        }
+        if let data = defaults.data(forKey: Self.taskSyncStateKey),
+           let value = try? decoder.decode([String: [TaskLink]].self, from: data) {
+            taskSyncState = value
         }
 
         stripLeakedTestData(defaults: defaults)
@@ -714,4 +804,6 @@ final class Ledger: ObservableObject {
     private func persistFolders()     { persist(value: folders, key: Self.foldersKey) }
     private func persistSyncedHashes()  { persistDebounced({ [weak self] in self?.syncedPageHashes ?? [:] }, key: Self.syncedPageHashesKey) }
     private func persistSyncedExternalIds() { persistDebounced({ [weak self] in self?.syncedExternalIds ?? [:] }, key: Self.syncedExternalIdsKey) }
+    private func persistTaskSyncs()     { persistDebounced({ [weak self] in self?.taskSyncs ?? [] }, key: Self.taskSyncsKey) }
+    private func persistTaskSyncState() { persistDebounced({ [weak self] in self?.taskSyncState ?? [:] }, key: Self.taskSyncStateKey) }
 }

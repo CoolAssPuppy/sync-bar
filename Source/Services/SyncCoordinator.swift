@@ -119,6 +119,13 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
+    /// The targetable scopes for a source kind (reMarkable folders, Safari
+    /// bookmark folders), for the editor's source picker. Returns empty on error
+    /// (e.g. Safari without Full Disk Access) so the UI shows its own empty state.
+    func scopes(for kind: SourceKind) async -> [SourceScope] {
+        (try? await sourceClientFor(kind).listScopes()) ?? []
+    }
+
     private func restartTimer() {
         timerTask?.cancel()
         guard self.settings.syncIntervalSeconds > 0,

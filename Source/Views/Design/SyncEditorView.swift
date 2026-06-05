@@ -46,8 +46,14 @@ struct SyncEditorView: View {
     @Environment(\.theme) private var theme
 
     // From
+    @State private var sourceKind: SourceKind = .remarkable
+    @State private var safariAvailable = false
     @State private var folder: RmFolder?
     @State private var selectedFileIds: [String]?
+    // From — Safari
+    @State private var safariScopes: [SourceScope] = []
+    @State private var safariScopeId: String?
+    @State private var safariScopeName: String = ""
     // To
     @State private var toKind: DestinationKind?
     @State private var toAccountId: String?
@@ -57,6 +63,7 @@ struct SyncEditorView: View {
     @State private var localGoogle = GoogleFormState()
     @State private var localAppleNotes = AppleNotesFormState()
     @State private var localMarkdown = MarkdownFormState()
+    @State private var chromeTargetFolder: String = "From Safari"
     // How
     @State private var titleStrategy: TitleStrategy = .firstLineOfOcr
     @State private var ocrMode: OcrMode = .all
@@ -73,7 +80,20 @@ struct SyncEditorView: View {
     @State private var scopeLoading = false
 
     private var isEditing: Bool { originalBindingId != nil }
-    private var canSave: Bool { folder != nil && toKind != nil && destinationValid }
+    private var canSave: Bool { hasSourceSelected && toKind != nil && destinationValid }
+
+    private var hasSourceSelected: Bool {
+        switch sourceKind {
+        case .remarkable: return folder != nil
+        case .safari:     return safariScopeId != nil
+        }
+    }
+
+    /// Source kinds the user can pick from: reMarkable always; Safari once Full
+    /// Disk Access is granted.
+    private var availableSourceKinds: [SourceKind] {
+        safariAvailable ? [.remarkable, .safari] : [.remarkable]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,7 +103,7 @@ struct SyncEditorView: View {
                     fromStep
                     toStep
                     if toKind != nil { customizeStep }
-                    howStep
+                    if sourceKind == .remarkable { howStep }
                 }
                 .padding(24)
             }
@@ -137,11 +157,29 @@ struct SyncEditorView: View {
 
     private var fromStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("FROM", "which source folder")
+            stepLabel("FROM", "which source")
+            if availableSourceKinds.count > 1 {
+                CustomDropdown(
+                    options: availableSourceKinds.map { DropdownOption(id: $0.rawValue, icon: AnyView(SourceMark(kind: $0, size: 26)), title: $0.label) },
+                    selectedId: sourceKind.rawValue,
+                    placeholder: "Choose a Source",
+                    placeholderIcon: AnyView(placeholderSourceIcon),
+                    onSelect: { id in if let kind = SourceKind(rawValue: id) { selectSourceKind(kind) } }
+                )
+            }
+            switch sourceKind {
+            case .remarkable: remarkableScopePicker
+            case .safari:     safariScopePicker
+            }
+        }
+    }
+
+    private var remarkableScopePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
             CustomDropdown(
                 options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(size: 26)), title: $0.name) },
                 selectedId: folder?.id,
-                placeholder: "Choose a Source",
+                placeholder: "Choose a folder",
                 placeholderIcon: AnyView(placeholderSourceIcon),
                 onSelect: { id in if let f = ledger.folders.first(where: { $0.id == id }) { selectFolder(f) } }
             )
@@ -157,6 +195,21 @@ struct SyncEditorView: View {
                 .padding(.horizontal, 4)
             }
         }
+    }
+
+    private var safariScopePicker: some View {
+        CustomDropdown(
+            options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
+            selectedId: safariScopeId,
+            placeholder: safariScopes.isEmpty ? "Loading bookmarks…" : "Choose a bookmark folder",
+            placeholderIcon: AnyView(placeholderSourceIcon),
+            onSelect: { id in
+                if let scope = safariScopes.first(where: { $0.id == id }) {
+                    safariScopeId = scope.id
+                    safariScopeName = scope.name
+                }
+            }
+        )
     }
 
     private var scopeSummary: String {
@@ -213,8 +266,19 @@ struct SyncEditorView: View {
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
-        case .chrome:         EmptyView()   // real Chrome form lands with the source-aware editor
+        case .chrome:         chromeForm
         case .none:           EmptyView()
+        }
+    }
+
+    private var chromeForm: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
+                .font(.system(size: 12)).foregroundStyle(theme.muted)
+            TextField("From Safari", text: $chromeTargetFolder)
+                .textFieldStyle(.roundedBorder)
+            Text("Chrome must be quit for the change to apply — otherwise it syncs next time Chrome is closed.")
+                .font(.system(size: 11)).foregroundStyle(theme.tertiary)
         }
     }
 
@@ -318,20 +382,50 @@ struct SyncEditorView: View {
     // MARK: Logic
 
     private func load() {
+        safariAvailable = FullDiskAccessProbe.hasAccess()
         guard case .edit(let flow) = target else { return }
-        folder = ledger.folders.first(where: { $0.id == flow.folderId })
-            ?? RmFolder(id: flow.folderId, name: flow.folderName, parentFolder: nil, lastModified: Date(), pageCount: 0)
-        selectedFileIds = flow.rule.remarkableConfig?.selectedFileIds
-        pageOrder = flow.rule.remarkableConfig?.pageOrder ?? .chronological
-        savePdf = flow.rule.remarkableConfig?.savePdfAttachment ?? true
-        titleStrategy = flow.titleStrategy
-        ocrMode = flow.ocrMode
-        requiredTags = flow.requiredTags
         existingBinding = flow.binding
         originalRuleId = flow.ruleId
         originalBindingId = flow.binding.id
         toKind = flow.binding.kind
+        requiredTags = flow.requiredTags
+
+        switch flow.rule.source {
+        case .remarkable(let cfg):
+            sourceKind = .remarkable
+            folder = ledger.folders.first(where: { $0.id == cfg.folderId })
+                ?? RmFolder(id: cfg.folderId, name: cfg.folderName, parentFolder: nil, lastModified: Date(), pageCount: 0)
+            selectedFileIds = cfg.selectedFileIds
+            pageOrder = cfg.pageOrder
+            savePdf = cfg.savePdfAttachment
+            titleStrategy = flow.titleStrategy
+            ocrMode = flow.ocrMode
+        case .safari(let cfg):
+            sourceKind = .safari
+            safariScopeId = cfg.folderId
+            safariScopeName = cfg.folderName
+            loadSafariScopes()
+        }
         loadFormState(from: flow.binding.configuration)
+    }
+
+    private func selectSourceKind(_ kind: SourceKind) {
+        guard kind != sourceKind else { return }
+        sourceKind = kind
+        switch kind {
+        case .remarkable:
+            folder = nil; selectedFileIds = nil
+        case .safari:
+            safariScopeId = nil; safariScopeName = ""
+            loadSafariScopes()
+        }
+    }
+
+    private func loadSafariScopes() {
+        Task {
+            let scopes = await coordinator.scopes(for: .safari)
+            await MainActor.run { safariScopes = scopes }
+        }
     }
 
     private func loadFormState(from configuration: DestinationConfiguration) {
@@ -358,8 +452,9 @@ struct SyncEditorView: View {
             toAccountId = ledger.markdownTargets.first?.id
             localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
                                               includeFrontmatter: cfg.includeFrontmatter)
-        case .chrome:
+        case .chrome(let cfg):
             toAccountId = ledger.chromeTargets.first?.id
+            chromeTargetFolder = cfg.targetFolderPath.count > 1 ? (cfg.targetFolderPath.last ?? "") : ""
         }
     }
 
@@ -421,9 +516,10 @@ struct SyncEditorView: View {
                 fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{notebook}-page-{page_n}" : localMarkdown.fileNameTemplate,
                 includeFrontmatter: localMarkdown.includeFrontmatter))
         case .chrome:
+            let sub = chromeTargetFolder.trimmingCharacters(in: .whitespacesAndNewlines)
             return .chrome(ChromeDestinationConfig(
                 profileDirName: ledger.chromeTargets.first?.profileDirName ?? "Default",
-                targetFolderPath: ["Bookmarks Bar"]))
+                targetFolderPath: sub.isEmpty ? ["Bookmarks Bar"] : ["Bookmarks Bar", sub]))
         case .none: return nil
         }
     }
@@ -439,8 +535,17 @@ struct SyncEditorView: View {
     }
 
     private func save() {
-        guard let folder, let config = composedConfiguration() else { return }
-        var binding = DestinationBinding(
+        guard let config = composedConfiguration() else { return }
+        let binding = makeBinding(config: config)
+        switch sourceKind {
+        case .remarkable: saveRemarkable(binding: binding)
+        case .safari:     saveSafari(binding: binding)
+        }
+        onClose()
+    }
+
+    private func makeBinding(config: DestinationConfiguration) -> DestinationBinding {
+        DestinationBinding(
             id: existingBinding?.id ?? UUID().uuidString,
             enabled: existingBinding?.enabled ?? true,
             configuration: config,
@@ -449,17 +554,21 @@ struct SyncEditorView: View {
             lastRunStatus: existingBinding?.lastRunStatus ?? .neverRun,
             lastRunPagesSynced: existingBinding?.lastRunPagesSynced ?? 0,
             lastRunError: existingBinding?.lastRunError,
-            ocrModeOverride: ocrMode,
-            titleStrategyOverride: titleStrategy,
+            // Title/OCR overrides are reMarkable concepts; bookmarks don't carry them.
+            ocrModeOverride: sourceKind == .remarkable ? ocrMode : nil,
+            titleStrategyOverride: sourceKind == .remarkable ? titleStrategy : nil,
             requiredTags: requiredTags.isEmpty ? nil : requiredTags.sorted()
         )
+    }
 
+    private func saveRemarkable(binding: DestinationBinding) {
+        guard let folder else { return }
         if let origRuleId = originalRuleId, let origBindingId = originalBindingId {
             let sameFolder = ledger.rule(forNotebookId: folder.id)?.id == origRuleId
             if sameFolder {
                 applyRuleLevel(folderId: folder.id)
                 ledger.updateBinding(ruleId: origRuleId, binding: binding)
-                onClose(); return
+                return
             }
             ledger.removeBinding(ruleId: origRuleId, bindingId: origBindingId)
             if let old = ledger.rules.first(where: { $0.id == origRuleId }), old.destinations.isEmpty {
@@ -467,7 +576,22 @@ struct SyncEditorView: View {
             }
         }
         addBinding(to: folder, binding)
-        onClose()
+    }
+
+    private func saveSafari(binding: DestinationBinding) {
+        guard let scopeId = safariScopeId else { return }
+        let source = SourceConfiguration.safari(SafariSourceConfig(folderId: scopeId, folderName: safariScopeName))
+        if let origRuleId = originalRuleId {
+            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
+                rule.source = source
+                ledger.upsertRule(rule)
+            }
+            ledger.updateBinding(ruleId: origRuleId, binding: binding)
+        } else {
+            var rule = SyncRule(source: source)
+            rule.destinations = [binding]
+            ledger.upsertRule(rule)
+        }
     }
 
     private func addBinding(to folder: RmFolder, _ binding: DestinationBinding) {

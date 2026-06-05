@@ -19,6 +19,7 @@ struct ConnectionsView: View {
     @State private var isAddingApp = false
     @State private var isRepairing = false
     @State private var linearTeamChoices: LinearTeamChoices?
+    @State private var safariHasAccess = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +34,7 @@ struct ConnectionsView: View {
             }
         }
         .background(theme.background)
+        .onAppear { safariHasAccess = FullDiskAccessProbe.hasAccess() }
         .sheet(isPresented: $isAddingApp) { AddDestinationSheet(isPresented: $isAddingApp) }
         .sheet(isPresented: $isRepairing) {
             RemarkablePairPanel(title: "Re-pair your reMarkable", onClose: { isRepairing = false })
@@ -66,7 +68,7 @@ struct ConnectionsView: View {
 
     private var sourceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "Source")
+            SectionLabel(text: "Sources")
             ConnectionCard(
                 icon: { AnyView(SourceMark(size: 38)) },
                 title: "reMarkable",
@@ -79,6 +81,26 @@ struct ConnectionsView: View {
                     })
                 }
             )
+            ConnectionCard(
+                icon: { AnyView(SourceMark(kind: .safari, size: 38)) },
+                title: "Safari",
+                subtitle: safariHasAccess ? "Connected · bookmarks" : "Needs Full Disk Access to read bookmarks",
+                status: safariHasAccess ? .connected : .none,
+                trailing: {
+                    AnyView(HStack(spacing: 8) {
+                        if !safariHasAccess {
+                            PillButton(title: "Open Settings", filled: false) { FullDiskAccessProbe.openSystemSettings() }
+                        }
+                        PillButton(title: "Re-check", filled: false) { safariHasAccess = FullDiskAccessProbe.hasAccess() }
+                    })
+                }
+            )
+            if !safariHasAccess {
+                Text("After enabling Sync Bar under Full Disk Access, relaunch the app, then Re-check.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.tertiary)
+                    .padding(.horizontal, 4)
+            }
         }
     }
 
@@ -140,6 +162,12 @@ struct ConnectionsView: View {
                         rename: nil, reconnect: nil,
                         disconnect: { ledger.removeAppleNotesTarget(id: target.id) })
             }
+            ForEach(ledger.chromeTargets) { target in
+                appCard(kind: .chrome, name: "Chrome", subtitle: "Profile: \(target.profileDirName)",
+                        matches: { if case .chrome = $0 { return true }; return false },
+                        rename: nil, reconnect: nil,
+                        disconnect: { ledger.removeChromeTarget(id: target.id) })
+            }
             connectAnother
         }
     }
@@ -193,7 +221,7 @@ struct ConnectionsView: View {
                 Text("Connect another destination")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.primary)
-                Text("Notion, Linear, Google Docs, Markdown, Apple Notes")
+                Text("Notion, Linear, Google Docs, Chrome, Markdown, Apple Notes")
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.tertiary)
                     .lineLimit(1)

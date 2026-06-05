@@ -17,7 +17,6 @@ struct SyncsHomeView: View {
     @ObservedObject var taskCoordinator: TaskSyncCoordinator
     var onNew: () -> Void
     var onEdit: (SyncFlow) -> Void
-    var onNewTask: () -> Void
     var onEditTask: (TaskSync) -> Void
     var onRefresh: () -> Void
 
@@ -31,10 +30,6 @@ struct SyncsHomeView: View {
         ledger.remarkableAccount != nil || ledger.safariConnected || ledger.remindersConnected
     }
     private var hasAnySync: Bool { !flows.isEmpty || !taskSyncs.isEmpty }
-    /// A two-way sync needs both a Reminders grant and a connected Notion workspace.
-    private var canCreateTaskSync: Bool {
-        ledger.remindersConnected && !ledger.notionWorkspaces.isEmpty
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,27 +55,11 @@ struct SyncsHomeView: View {
             }
             Spacer()
             AppIconButton(systemName: "arrow.clockwise", help: "Sync all", spinOnTap: true) { syncAll() }
-            newButton
+            PillButton(title: "New sync", systemImage: "plus") { onNew() }
         }
         .padding(.horizontal, 28)
         .padding(.top, 26)
         .padding(.bottom, 18)
-    }
-
-    /// One-way "New sync"; when a two-way sync is possible, a menu offers both.
-    @ViewBuilder private var newButton: some View {
-        if canCreateTaskSync {
-            Menu {
-                Button("One-way sync") { onNew() }
-                Button("Two-way sync (Reminders ↔ Notion)") { onNewTask() }
-            } label: {
-                PillButton(title: "New sync", systemImage: "plus") {}
-                    .allowsHitTesting(false)
-            }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        } else {
-            PillButton(title: "New sync", systemImage: "plus") { onNew() }
-        }
     }
 
     private func syncAll() {

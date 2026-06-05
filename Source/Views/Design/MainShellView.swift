@@ -23,7 +23,6 @@ struct MainShellView: View {
     @StateObject private var taskCoordinator = TaskSyncCoordinator()
     @State private var tab: ShellTab = .syncs
     @State private var editorTarget: SyncEditorTarget?
-    @State private var taskEditorTarget: TaskSyncEditorTarget?
     @State private var isOnboarding = false
     @State private var isSettingsOpen = false
 
@@ -49,10 +48,6 @@ struct MainShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openSyncLog)) { _ in tab = .activity }
         .sheet(item: $editorTarget) { target in
             SyncEditorView(target: target, coordinator: coordinator, onClose: { editorTarget = nil })
-        }
-        .sheet(item: $taskEditorTarget) { target in
-            TaskSyncEditorView(target: target, onClose: { taskEditorTarget = nil })
-                .environment(\.theme, themeStore.palette)
         }
     }
 
@@ -84,8 +79,7 @@ struct MainShellView: View {
                 taskCoordinator: taskCoordinator,
                 onNew: { editorTarget = .new },
                 onEdit: { editorTarget = .edit($0) },
-                onNewTask: { taskEditorTarget = .new },
-                onEditTask: { taskEditorTarget = .edit($0) },
+                onEditTask: { editorTarget = .editTask($0) },
                 onRefresh: refreshFolders
             )
         case .connections: ConnectionsView()

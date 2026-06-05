@@ -4,9 +4,10 @@
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
-//  The one place a Sync is created or edited: From a Source folder, To a
-//  Destination, Customize the destination, and How it runs. Maps the single
-//  "Sync" object onto the underlying rule + binding.
+//  The one place a Sync is created or edited: From a Source, To a Destination,
+//  Customize, and How. Most syncs are one-way (a source folder → a write-only
+//  destination); a Reminders source paired with a Notion database is two-way,
+//  shown with a ⇄ arrow and mapped field-by-field. Both are "just a sync" here.
 //
 
 import SwiftUI
@@ -14,7 +15,14 @@ import SwiftUI
 enum SyncEditorTarget: Identifiable {
     case new
     case edit(SyncFlow)
-    var id: String { if case .edit(let f) = self { return f.id }; return "new" }
+    case editTask(TaskSync)
+    var id: String {
+        switch self {
+        case .new:             return "new"
+        case .edit(let f):     return f.id
+        case .editTask(let s): return "task-" + s.id
+        }
+    }
 }
 
 /// A connected destination account, normalized for the editor's "To" dropdown.
@@ -38,6 +46,14 @@ extension Ledger {
     }
 }
 
+/// What the editor's FROM step is pointed at. Reminders isn't a one-way
+/// SourceClind, so it rides alongside the SourceKinds as its own case.
+private enum EditorSource: Equatable {
+    case kind(SourceKind)
+    case reminders
+    var id: String { if case .kind(let k) = self { return k.rawValue }; return "reminders" }
+}
+
 struct SyncEditorView: View {
     let target: SyncEditorTarget
     @ObservedObject var coordinator: SyncCoordinator
@@ -47,16 +63,32 @@ struct SyncEditorView: View {
     @Environment(\.theme) private var theme
 
     // From
-    @State private var sourceKind: SourceKind = .remarkable
+    @State private var source: EditorSource = .kind(.remarkable)
     @State private var folder: RmFolder?
     @State private var selectedFileIds: [String]?
     // From — Safari
     @State private var safariScopes: [SourceScope] = []
     @State private var safariScopeId: String?
     @State private var safariScopeName: String = ""
+    // From — Reminders (two-way)
+    @State private var reminderLists: [ReminderList] = []
+    @State private var reminderListId: String?
+    @State private var reminderListName: String = ""
     // To
     @State private var toKind: DestinationKind?
     @State private var toAccountId: String?
+    // To — Notion database (two-way)
+    @State private var taskWorkspaceId: String?
+    @State private var taskDatabases: [NotionDestination] = []
+    @State private var taskDatabaseId: String?
+    @State private var taskDatabaseName: String = ""
+    @State private var taskSchema: [NotionDatabaseProperty] = []
+    @State private var dueProperty: String = ""
+    @State private var statusProperty: String = ""
+    @State private var doneValue: String = ""
+    @State private var notDoneValue: String = ""
+    @State private var notesProperty: String = ""
+    @State private var originalTaskSyncId: String?
     // Customize — per-kind destination forms
     @State private var localNotion = NotionFormState()
     @State private var localLinear = LinearFormState()
@@ -80,22 +112,33 @@ struct SyncEditorView: View {
     @State private var scopeFiles: [RmFile] = []
     @State private var scopeLoading = false
 
-    private var isEditing: Bool { originalBindingId != nil }
-    private var canSave: Bool { hasSourceSelected && toKind != nil && destinationValid }
+    private let remindersClient: RemindersClient = EventKitRemindersClient()
+
+    private var isReminders: Bool { source == .reminders }
+    private var sourceKind: SourceKind? { if case .kind(let k) = source { return k }; return nil }
+    private var isEditing: Bool { originalBindingId != nil || originalTaskSyncId != nil }
+
+    private var canSave: Bool {
+        guard hasSourceSelected else { return false }
+        if isReminders { return taskWorkspaceId != nil && taskDatabaseId != nil && taskTitleProperty != nil }
+        return toKind != nil && destinationValid
+    }
 
     private var hasSourceSelected: Bool {
-        switch sourceKind {
-        case .remarkable: return folder != nil
-        case .safari:     return safariScopeId != nil
+        switch source {
+        case .kind(.remarkable): return folder != nil
+        case .kind(.safari):     return safariScopeId != nil
+        case .reminders:         return reminderListId != nil
         }
     }
 
-    /// Source kinds the user can pick from — only the ones they've added.
-    private var availableSourceKinds: [SourceKind] {
-        var kinds: [SourceKind] = []
-        if ledger.remarkableAccount != nil { kinds.append(.remarkable) }
-        if ledger.safariConnected { kinds.append(.safari) }
-        return kinds.isEmpty ? [.remarkable] : kinds
+    /// Sources the user can pick from — only the ones they've added.
+    private var availableSources: [EditorSource] {
+        var out: [EditorSource] = []
+        if ledger.remarkableAccount != nil { out.append(.kind(.remarkable)) }
+        if ledger.safariConnected { out.append(.kind(.safari)) }
+        if ledger.remindersConnected { out.append(.reminders) }
+        return out.isEmpty ? [.kind(.remarkable)] : out
     }
 
     var body: some View {
@@ -104,9 +147,14 @@ struct SyncEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     fromStep
-                    toStep
-                    if toKind != nil { customizeStep }
-                    if sourceKind == .remarkable { howStep }
+                    if isReminders {
+                        notionDatabaseStep
+                        if taskDatabaseId != nil { mapStep }
+                    } else {
+                        toStep
+                        if toKind != nil { customizeStep }
+                        if sourceKind == .remarkable { howStep }
+                    }
                 }
                 .padding(24)
             }
@@ -125,7 +173,9 @@ struct SyncEditorView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(isEditing ? "Edit sync" : "New sync").font(.system(size: 18, weight: .bold)).foregroundStyle(theme.foreground)
-                Text("From a source, to a destination, synced how.").font(.system(size: 12.5)).foregroundStyle(theme.muted)
+                Text(isReminders ? "A Reminders list and a Notion database, kept in sync both ways."
+                                 : "From a source, to a destination, synced how.")
+                    .font(.system(size: 12.5)).foregroundStyle(theme.muted)
             }
             Spacer()
             Button(action: onClose) {
@@ -161,18 +211,19 @@ struct SyncEditorView: View {
     private var fromStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("FROM", "which source")
-            if availableSourceKinds.count > 1 {
+            if availableSources.count > 1 {
                 CustomDropdown(
-                    options: availableSourceKinds.map { DropdownOption(id: $0.rawValue, icon: AnyView(SourceIcon(kind: $0, size: 26)), title: $0.label) },
-                    selectedId: sourceKind.rawValue,
+                    options: availableSources.map { DropdownOption(id: $0.id, icon: sourceMenuIcon($0), title: sourceLabel($0)) },
+                    selectedId: source.id,
                     placeholder: "Choose a Source",
                     placeholderIcon: AnyView(placeholderSourceIcon),
-                    onSelect: { id in if let kind = SourceKind(rawValue: id) { selectSourceKind(kind) } }
+                    onSelect: { id in selectSource(forId: id) }
                 )
             }
-            switch sourceKind {
-            case .remarkable: remarkableScopePicker
-            case .safari:     safariScopePicker
+            switch source {
+            case .kind(.remarkable): remarkableScopePicker
+            case .kind(.safari):     safariScopePicker
+            case .reminders:         remindersListPicker
             }
         }
     }
@@ -215,12 +266,25 @@ struct SyncEditorView: View {
         )
     }
 
+    private var remindersListPicker: some View {
+        CustomDropdown(
+            options: reminderLists.map { DropdownOption(id: $0.id, icon: AnyView(remindersGlyph), title: $0.name) },
+            selectedId: reminderListId,
+            placeholder: reminderLists.isEmpty ? "No Reminders lists found" : "Choose a list",
+            placeholderIcon: AnyView(placeholderSourceIcon),
+            onSelect: { id in
+                reminderListId = id
+                reminderListName = reminderLists.first { $0.id == id }?.name ?? ""
+            }
+        )
+    }
+
     private var scopeSummary: String {
         guard let ids = selectedFileIds, !ids.isEmpty else { return "Syncing every notebook in this folder" }
         return "Syncing \(ids.count) selected notebook\(ids.count == 1 ? "" : "s")"
     }
 
-    // MARK: To
+    // MARK: To (one-way destination)
 
     private var toStep: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -235,6 +299,118 @@ struct SyncEditorView: View {
         }
     }
 
+    // MARK: To (two-way Notion database)
+
+    private var notionDatabaseStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("TO").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
+                Image(systemName: "arrow.left.arrow.right").font(.system(size: 11, weight: .bold)).foregroundStyle(theme.primary)
+                Text("which Notion database (two-way)").font(.system(size: 12)).foregroundStyle(theme.tertiary)
+            }
+            if ledger.notionWorkspaces.count > 1 {
+                CustomDropdown(
+                    options: ledger.notionWorkspaces.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.workspaceName) },
+                    selectedId: taskWorkspaceId,
+                    placeholder: "Choose a workspace",
+                    placeholderIcon: AnyView(DestinationIcon(kind: .notion, size: 24)),
+                    onSelect: { id in selectTaskWorkspace(id) }
+                )
+            }
+            CustomDropdown(
+                options: taskDatabases.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.title) },
+                selectedId: taskDatabaseId,
+                placeholder: taskDatabases.isEmpty ? "Loading databases…" : "Choose a database",
+                placeholderIcon: AnyView(placeholderDestIcon),
+                onSelect: { id in selectTaskDatabase(id) }
+            )
+        }
+    }
+
+    // MARK: Map (two-way fields)
+
+    private var taskTitleProperty: String? { taskSchema.first { $0.type == "title" }?.name }
+    private var statusType: String? { taskSchema.first { $0.name == statusProperty }?.type }
+    private var statusOptions: [String] { taskSchema.first { $0.name == statusProperty }?.options ?? [] }
+    private var needsStatusOptions: Bool { statusType == "status" || statusType == "select" }
+    private func taskPropertyNames(ofTypes types: [String]) -> [String] {
+        taskSchema.filter { types.contains($0.type) }.map(\.name)
+    }
+
+    private var mapStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            stepLabel("MAP", "connect Reminders fields to Notion columns")
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    Text("REMINDERS").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(theme.tertiary)
+                    Spacer(minLength: 12)
+                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.tertiary)
+                    Spacer(minLength: 12)
+                    Text("NOTION").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(theme.tertiary)
+                }
+                .padding(.horizontal, 15).padding(.vertical, 9)
+                rowDivider
+                mapRow("Title") {
+                    Text(taskTitleProperty ?? "No title column")
+                        .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
+                }
+                rowDivider
+                mapRow("Due date") { propertyMenu(selection: $dueProperty, options: taskPropertyNames(ofTypes: ["date"])) }
+                rowDivider
+                mapRow("Status") {
+                    propertyMenu(selection: $statusProperty, options: taskPropertyNames(ofTypes: ["status", "select", "checkbox"]),
+                                 onChange: { _ in doneValue = ""; notDoneValue = "" })
+                }
+                if needsStatusOptions {
+                    rowDivider
+                    mapRow("Done means") { optionMenu(selection: $doneValue, options: statusOptions) }
+                    rowDivider
+                    mapRow("Not done means") { optionMenu(selection: $notDoneValue, options: statusOptions, noneLabel: "Leave as-is") }
+                }
+                rowDivider
+                mapRow("Notes") { propertyMenu(selection: $notesProperty, options: taskPropertyNames(ofTypes: ["rich_text"])) }
+            }
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+    }
+
+    private func propertyMenu(selection: Binding<String>, options: [String], onChange: ((String) -> Void)? = nil) -> some View {
+        Menu {
+            Button("None") { selection.wrappedValue = ""; onChange?("") }
+            ForEach(options, id: \.self) { name in Button(name) { selection.wrappedValue = name; onChange?(name) } }
+        } label: { menuLabel(selection.wrappedValue.isEmpty ? "None" : selection.wrappedValue) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+    }
+
+    private func optionMenu(selection: Binding<String>, options: [String], noneLabel: String = "None") -> some View {
+        Menu {
+            Button(noneLabel) { selection.wrappedValue = "" }
+            ForEach(options, id: \.self) { name in Button(name) { selection.wrappedValue = name } }
+        } label: { menuLabel(selection.wrappedValue.isEmpty ? noneLabel : selection.wrappedValue) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+    }
+
+    private func menuLabel(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.muted)
+        }
+        .padding(.horizontal, 12).frame(height: 30)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+    }
+
+    private func mapRow<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 14) {
+            Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
+            Spacer(minLength: 12)
+            trailing()
+        }
+        .padding(.horizontal, 15).padding(.vertical, 12)
+    }
+
+    // MARK: Icons
+
     private var placeholderSourceIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
@@ -247,6 +423,23 @@ struct SyncEditorView: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
             Image(systemName: "square.dashed").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
         }.frame(width: 26, height: 26)
+    }
+
+    private var remindersGlyph: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
+            Image(systemName: "checklist").font(.system(size: 14, weight: .medium)).foregroundStyle(theme.primary)
+        }.frame(width: 26, height: 26)
+    }
+
+    private func sourceLabel(_ s: EditorSource) -> String {
+        switch s { case .kind(let k): return k.label; case .reminders: return "Reminders" }
+    }
+    private func sourceMenuIcon(_ s: EditorSource) -> AnyView {
+        switch s {
+        case .kind(let k): return AnyView(SourceIcon(kind: k, size: 26))
+        case .reminders:   return AnyView(remindersGlyph)
+        }
     }
 
     // MARK: Customize (inline destination form)
@@ -400,10 +593,19 @@ struct SyncEditorView: View {
     // MARK: Logic
 
     private func load() {
-        guard case .edit(let flow) = target else {
-            sourceKind = availableSourceKinds.first ?? .remarkable
-            return
+        switch target {
+        case .new:
+            source = availableSources.first ?? .kind(.remarkable)
+            if isReminders { loadReminderLists(); taskWorkspaceId = ledger.notionWorkspaces.first?.id; loadTaskDatabases() }
+            else if sourceKind == .safari { loadSafariScopes() }
+        case .edit(let flow):
+            loadOneWay(flow)
+        case .editTask(let sync):
+            loadTask(sync)
         }
+    }
+
+    private func loadOneWay(_ flow: SyncFlow) {
         existingBinding = flow.binding
         originalRuleId = flow.ruleId
         originalBindingId = flow.binding.id
@@ -412,7 +614,7 @@ struct SyncEditorView: View {
 
         switch flow.rule.source {
         case .remarkable(let cfg):
-            sourceKind = .remarkable
+            source = .kind(.remarkable)
             folder = ledger.folders.first(where: { $0.id == cfg.folderId })
                 ?? RmFolder(id: cfg.folderId, name: cfg.folderName, parentFolder: nil, lastModified: Date(), pageCount: 0)
             selectedFileIds = cfg.selectedFileIds
@@ -421,7 +623,7 @@ struct SyncEditorView: View {
             titleStrategy = flow.titleStrategy
             ocrMode = flow.ocrMode
         case .safari(let cfg):
-            sourceKind = .safari
+            source = .kind(.safari)
             safariScopeId = cfg.folderId
             safariScopeName = cfg.folderName
             loadSafariScopes()
@@ -429,15 +631,36 @@ struct SyncEditorView: View {
         loadFormState(from: flow.binding.configuration)
     }
 
-    private func selectSourceKind(_ kind: SourceKind) {
-        guard kind != sourceKind else { return }
-        sourceKind = kind
-        switch kind {
-        case .remarkable:
-            folder = nil; selectedFileIds = nil
-        case .safari:
-            safariScopeId = nil; safariScopeName = ""
-            loadSafariScopes()
+    private func loadTask(_ sync: TaskSync) {
+        source = .reminders
+        originalTaskSyncId = sync.id
+        reminderListId = sync.remindersListId
+        reminderListName = sync.remindersListName
+        taskWorkspaceId = sync.notionWorkspaceId
+        taskDatabaseId = sync.notionDatabaseId
+        taskDatabaseName = sync.notionDatabaseName
+        dueProperty = sync.fieldMapping.dueDateProperty ?? ""
+        statusProperty = sync.fieldMapping.statusProperty ?? ""
+        doneValue = sync.fieldMapping.statusDoneValue ?? ""
+        notDoneValue = sync.fieldMapping.statusNotDoneValue ?? ""
+        notesProperty = sync.fieldMapping.notesProperty ?? ""
+        loadReminderLists()
+        loadTaskDatabases()
+        loadTaskSchema()
+    }
+
+    private func selectSource(forId id: String) {
+        let next: EditorSource = (id == "reminders") ? .reminders : (SourceKind(rawValue: id).map { .kind($0) } ?? .kind(.remarkable))
+        guard next != source else { return }
+        source = next
+        switch next {
+        case .kind(.remarkable): folder = nil; selectedFileIds = nil
+        case .kind(.safari):     safariScopeId = nil; safariScopeName = ""; loadSafariScopes()
+        case .reminders:
+            reminderListId = nil; reminderListName = ""
+            loadReminderLists()
+            if taskWorkspaceId == nil { taskWorkspaceId = ledger.notionWorkspaces.first?.id }
+            loadTaskDatabases()
         }
     }
 
@@ -445,6 +668,45 @@ struct SyncEditorView: View {
         Task {
             let scopes = await coordinator.scopes(for: .safari)
             await MainActor.run { safariScopes = scopes }
+        }
+    }
+
+    private func loadReminderLists() {
+        Task {
+            let lists = await remindersClient.lists()
+            await MainActor.run { reminderLists = lists }
+        }
+    }
+
+    private func selectTaskWorkspace(_ id: String) {
+        guard id != taskWorkspaceId else { return }
+        taskWorkspaceId = id
+        taskDatabaseId = nil; taskDatabaseName = ""; taskSchema = []
+        loadTaskDatabases()
+    }
+
+    private func loadTaskDatabases() {
+        guard let taskWorkspaceId else { return }
+        Task {
+            let client = NotionClientFactory.make(workspaceId: taskWorkspaceId)
+            let all = (try? await client.listDestinations(workspaceId: taskWorkspaceId)) ?? []
+            await MainActor.run { taskDatabases = all.filter { $0.type == .database } }
+        }
+    }
+
+    private func selectTaskDatabase(_ id: String) {
+        taskDatabaseId = id
+        taskDatabaseName = taskDatabases.first { $0.id == id }?.title ?? ""
+        dueProperty = ""; statusProperty = ""; doneValue = ""; notDoneValue = ""; notesProperty = ""
+        loadTaskSchema()
+    }
+
+    private func loadTaskSchema() {
+        guard let taskWorkspaceId, let taskDatabaseId else { return }
+        Task {
+            let client = NotionClientFactory.make(workspaceId: taskWorkspaceId)
+            let props = (try? await client.databaseSchema(destinationId: taskDatabaseId, workspaceId: taskWorkspaceId)) ?? []
+            await MainActor.run { taskSchema = props }
         }
     }
 
@@ -467,8 +729,6 @@ struct SyncEditorView: View {
             toAccountId = ledger.appleNotesTargets.first?.id
             localAppleNotes = AppleNotesFormState(folderName: cfg.folderName)
         case .markdownFolder(let cfg):
-            // One generic Markdown connection; the folder lives on this sync's
-            // config, so bind to that single target rather than matching by path.
             toAccountId = ledger.markdownTargets.first?.id
             localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
                                               includeFrontmatter: cfg.includeFrontmatter)
@@ -494,7 +754,7 @@ struct SyncEditorView: View {
                 localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate, includeFrontmatter: cfg.includeFrontmatter)
             }
         case .chrome:
-            break   // profile + target folder configured per sync (filled in B6)
+            break
         }
     }
 
@@ -557,13 +817,33 @@ struct SyncEditorView: View {
     }
 
     private func save() {
+        if isReminders { saveTaskSync(); onClose(); return }
         guard let config = composedConfiguration() else { return }
         let binding = makeBinding(config: config)
-        switch sourceKind {
-        case .remarkable: saveRemarkable(binding: binding)
-        case .safari:     saveSafari(binding: binding)
+        switch source {
+        case .kind(.remarkable): saveRemarkable(binding: binding)
+        case .kind(.safari):     saveSafari(binding: binding)
+        case .reminders:         break
         }
         onClose()
+    }
+
+    private func saveTaskSync() {
+        guard let reminderListId, let taskWorkspaceId, let taskDatabaseId, let taskTitleProperty else { return }
+        let mapping = TaskFieldMapping(
+            titleProperty: taskTitleProperty,
+            dueDateProperty: dueProperty.isEmpty ? nil : dueProperty,
+            statusProperty: statusProperty.isEmpty ? nil : statusProperty,
+            statusPropertyType: statusProperty.isEmpty ? nil : statusType,
+            statusDoneValue: doneValue.isEmpty ? nil : doneValue,
+            statusNotDoneValue: notDoneValue.isEmpty ? nil : notDoneValue,
+            notesProperty: notesProperty.isEmpty ? nil : notesProperty)
+        let sync = TaskSync(
+            id: originalTaskSyncId ?? UUID().uuidString,
+            remindersListId: reminderListId, remindersListName: reminderListName,
+            notionWorkspaceId: taskWorkspaceId, notionDatabaseId: taskDatabaseId, notionDatabaseName: taskDatabaseName,
+            fieldMapping: mapping)
+        ledger.upsertTaskSync(sync)
     }
 
     private func makeBinding(config: DestinationConfiguration) -> DestinationBinding {
@@ -576,7 +856,6 @@ struct SyncEditorView: View {
             lastRunStatus: existingBinding?.lastRunStatus ?? .neverRun,
             lastRunPagesSynced: existingBinding?.lastRunPagesSynced ?? 0,
             lastRunError: existingBinding?.lastRunError,
-            // Title/OCR overrides are reMarkable concepts; bookmarks don't carry them.
             ocrModeOverride: sourceKind == .remarkable ? ocrMode : nil,
             titleStrategyOverride: sourceKind == .remarkable ? titleStrategy : nil,
             requiredTags: requiredTags.isEmpty ? nil : requiredTags.sorted()
@@ -644,6 +923,11 @@ struct SyncEditorView: View {
     }
 
     private func deleteSync() {
+        if let taskId = originalTaskSyncId {
+            ledger.removeTaskSync(id: taskId)
+            onClose()
+            return
+        }
         guard let origRuleId = originalRuleId, let origBindingId = originalBindingId else { return }
         ledger.removeBinding(ruleId: origRuleId, bindingId: origBindingId)
         if let old = ledger.rules.first(where: { $0.id == origRuleId }), old.destinations.isEmpty {

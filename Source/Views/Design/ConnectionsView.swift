@@ -107,10 +107,10 @@ struct ConnectionsView: View {
                     subtitle: sourceSubtitle,
                     status: sourceStatus,
                     trailing: {
-                        AnyView(HStack(spacing: 8) {
-                            PillButton(title: "Upload files", systemImage: "arrow.up.doc", filled: false) { presentUploadPanel() }
-                            PillButton(title: "Re-pair", filled: false) { isRepairing = true }
-                        })
+                        AnyView(AppActionMenu(actions: [
+                            AppMenuAction(title: "Upload files", systemImage: "arrow.up.doc") { presentUploadPanel() },
+                            AppMenuAction(title: "Re-pair", systemImage: "qrcode.viewfinder") { isRepairing = true }
+                        ]))
                     }
                 )
             }
@@ -121,29 +121,9 @@ struct ConnectionsView: View {
                     subtitle: safariHasAccess ? "Connected · bookmarks" : "Needs Full Disk Access to read bookmarks",
                     status: safariHasAccess ? .connected : .error,
                     trailing: {
-                        AnyView(HStack(spacing: 8) {
-                            if !safariHasAccess {
-                                PillButton(title: "Open Settings", filled: false) { FullDiskAccessProbe.openSystemSettings() }
-                                PillButton(title: "Re-check", filled: false) { safariHasAccess = FullDiskAccessProbe.hasAccess() }
-                            }
-                            Menu {
-                                Button("Disconnect", role: .destructive) { ledger.setSafariConnected(false) }
-                            } label: {
-                                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.muted)
-                                    .frame(width: 30, height: 30)
-                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                                    .contentShape(Rectangle())
-                            }
-                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        })
+                        AnyView(AppActionMenu(actions: safariActions))
                     }
                 )
-                if !safariHasAccess {
-                    Text("After enabling Sync Bar under Full Disk Access, relaunch the app, then Re-check.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(theme.tertiary)
-                        .padding(.horizontal, 4)
-                }
             }
             if ledger.remindersConnected {
                 ConnectionCard(
@@ -152,24 +132,30 @@ struct ConnectionsView: View {
                     subtitle: remindersHasAccess ? "Connected · two-way with Notion" : "Needs Reminders access",
                     status: remindersHasAccess ? .connected : .error,
                     trailing: {
-                        AnyView(HStack(spacing: 8) {
-                            if !remindersHasAccess {
-                                PillButton(title: "Grant access", filled: false) { requestRemindersAccess() }
-                            }
-                            Menu {
-                                Button("Disconnect", role: .destructive) { ledger.setRemindersConnected(false) }
-                            } label: {
-                                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.muted)
-                                    .frame(width: 30, height: 30)
-                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                                    .contentShape(Rectangle())
-                            }
-                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        })
+                        AnyView(AppActionMenu(actions: remindersActions))
                     }
                 )
             }
         }
+    }
+
+    private var safariActions: [AppMenuAction] {
+        var actions: [AppMenuAction] = []
+        if !safariHasAccess {
+            actions.append(AppMenuAction(title: "Open Settings", systemImage: "gearshape") { FullDiskAccessProbe.openSystemSettings() })
+            actions.append(AppMenuAction(title: "Re-check", systemImage: "arrow.clockwise") { safariHasAccess = FullDiskAccessProbe.hasAccess() })
+        }
+        actions.append(AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) { ledger.setSafariConnected(false) })
+        return actions
+    }
+
+    private var remindersActions: [AppMenuAction] {
+        var actions: [AppMenuAction] = []
+        if !remindersHasAccess {
+            actions.append(AppMenuAction(title: "Grant access", systemImage: "checklist") { requestRemindersAccess() })
+        }
+        actions.append(AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) { ledger.setRemindersConnected(false) })
+        return actions
     }
 
     private var remindersGlyph: some View {
@@ -275,24 +261,12 @@ struct ConnectionsView: View {
             subtitle: detail,
             status: count > 0 ? .connected : .idle,
             trailing: {
-                AnyView(
-                    Menu {
-                        if let reconnect {
-                            Button("Reconnect") { Task { await reconnect() } }
-                        }
-                        Button("Disconnect", role: .destructive, action: disconnect)
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(theme.muted)
-                            .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                            .contentShape(Rectangle())
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                )
+                var actions: [AppMenuAction] = []
+                if let reconnect {
+                    actions.append(AppMenuAction(title: "Reconnect", systemImage: "arrow.clockwise") { Task { await reconnect() } })
+                }
+                actions.append(AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true, action: disconnect))
+                return AnyView(AppActionMenu(actions: actions))
             }
         )
     }

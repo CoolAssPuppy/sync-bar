@@ -48,7 +48,7 @@ struct SyncsHomeView: View {
                     .foregroundStyle(theme.muted)
             }
             Spacer()
-            AppIconButton(systemName: "arrow.clockwise", help: "Refresh folders", spinOnTap: true) { onRefresh() }
+            AppIconButton(systemName: "arrow.clockwise", help: "Sync all", spinOnTap: true) { coordinator.syncNow() }
             PillButton(title: "New sync", systemImage: "plus") { onNew() }
         }
         .padding(.horizontal, 28)

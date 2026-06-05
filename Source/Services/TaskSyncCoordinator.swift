@@ -83,7 +83,8 @@ final class TaskSyncCoordinator: ObservableObject {
         }
 
         let links = ledger.taskLinks(forSyncId: sync.id)
-        let plan = TaskSyncEngine.plan(reminders: reminders, notionRows: notionRows, links: links)
+        let plan = TaskSyncEngine.plan(reminders: reminders, notionRows: notionRows,
+                                       links: links, rules: sync.activeRules)
 
         // 2) Execute the plan, accumulating the next baseline link set.
         var newLinks = plan.unchangedLinks

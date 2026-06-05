@@ -57,12 +57,22 @@ struct TaskSyncPlan: Equatable, Sendable {
 enum TaskSyncEngine {
 
     /// Decides the plan for one cycle. `reminders`/`notionRows` are the current
-    /// state of both sides; `links` are the baselines from the last cycle.
+    /// state of both sides; `links` are the baselines from the last cycle. `rules`
+    /// filter which tasks belong on each side.
     static func plan(reminders: [ReminderRecord],
                      notionRows: [NotionRow],
                      links: [TaskLink],
+                     rules: TaskSyncRules = TaskSyncRules(),
                      calendar: Calendar = .current) -> TaskSyncPlan {
         var plan = TaskSyncPlan()
+
+        let excluded = Set(rules.excludedNotionStatuses)
+        // A Notion row whose status is excluded shouldn't live in Reminders. The
+        // row stays in Notion — we only ever remove the reminder, never archive.
+        func isExcluded(_ n: NotionRow) -> Bool {
+            guard let status = n.rawStatus else { return false }
+            return excluded.contains(status)
+        }
 
         let remindersById = Dictionary(reminders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Archived Notion rows count as "gone" for delete propagation.
@@ -73,7 +83,7 @@ enum TaskSyncEngine {
         var linkedReminderIds = Set<String>()
         var linkedNotionIds = Set<String>()
 
-        // 1) Reconcile existing links (merge, delete, or carry forward).
+        // 1) Reconcile existing links (merge, delete, filter, or carry forward).
         for link in links {
             linkedReminderIds.insert(link.reminderId)
             linkedNotionIds.insert(link.notionPageId)
@@ -83,6 +93,12 @@ enum TaskSyncEngine {
 
             switch (reminder, notion) {
             case let (r?, n?):
+                if isExcluded(n) {
+                    // Filtered out → remove the reminder, keep the Notion row, drop
+                    // the link. If it leaves the excluded status later it re-creates.
+                    plan.deletions.append(PairDeletion(reminderId: r.id, notionPageId: nil))
+                    break
+                }
                 let reminderLater = isReminderLater(r, n)
                 let merged = merge(reminder: r.task, notion: n.task, baseline: link.baseline,
                                    reminderLater: reminderLater, calendar: calendar)
@@ -100,8 +116,12 @@ enum TaskSyncEngine {
                 // Notion side gone → the task was deleted there; delete the reminder.
                 plan.deletions.append(PairDeletion(reminderId: r.id, notionPageId: nil))
             case (nil, .some(let n)):
-                // Reminder gone → archive the Notion page.
-                plan.deletions.append(PairDeletion(reminderId: nil, notionPageId: n.pageId))
+                // Reminder gone. If the row is excluded, the filter already removed
+                // it — just drop the link (don't archive, don't recreate). Otherwise
+                // the user deleted the reminder → archive the Notion page.
+                if !isExcluded(n) {
+                    plan.deletions.append(PairDeletion(reminderId: nil, notionPageId: n.pageId))
+                }
             case (nil, nil):
                 // Both gone — nothing to do; the link simply drops.
                 break
@@ -114,24 +134,33 @@ enum TaskSyncEngine {
         var claimedNotion = Set<String>()
 
         for r in unpairedReminders {
+            // Pair against any matching row first (even excluded ones) so an
+            // excluded match removes the reminder instead of duplicating it.
             if let n = unpairedNotion.first(where: { !claimedNotion.contains($0.pageId)
                 && r.task.pairs(with: $0.task, calendar: calendar) }) {
                 claimedNotion.insert(n.pageId)
-                // First-sync pair: no baseline, so any differing field is resolved
-                // by latest-edit-wins.
-                let reminderLater = isReminderLater(r, n)
-                let merged = merge(reminder: r.task, notion: n.task, baseline: nil,
-                                   reminderLater: reminderLater, calendar: calendar)
-                plan.matches.append(PairResolution(
-                    reminderId: r.id, notionPageId: n.pageId, merged: merged,
-                    applyToReminder: !r.task.fieldsEqual(to: merged, calendar: calendar),
-                    applyToNotion: !n.task.fieldsEqual(to: merged, calendar: calendar)))
+                if isExcluded(n) {
+                    plan.deletions.append(PairDeletion(reminderId: r.id, notionPageId: nil))
+                } else {
+                    let reminderLater = isReminderLater(r, n)
+                    let merged = merge(reminder: r.task, notion: n.task, baseline: nil,
+                                       reminderLater: reminderLater, calendar: calendar)
+                    plan.matches.append(PairResolution(
+                        reminderId: r.id, notionPageId: n.pageId, merged: merged,
+                        applyToReminder: !r.task.fieldsEqual(to: merged, calendar: calendar),
+                        applyToNotion: !n.task.fieldsEqual(to: merged, calendar: calendar)))
+                }
+            } else if rules.excludeCompletedReminders && r.task.isCompleted {
+                // A completed reminder with no Notion counterpart isn't imported.
+                continue
             } else {
                 plan.createInNotion.append(ReminderToCreate(reminderId: r.id, task: r.task))
             }
         }
 
         for n in unpairedNotion where !claimedNotion.contains(n.pageId) {
+            // Excluded rows are kept out of Reminders.
+            if isExcluded(n) { continue }
             plan.createInReminders.append(NotionRowToCreate(notionPageId: n.pageId, task: n.task))
         }
 

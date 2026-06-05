@@ -21,6 +21,9 @@ struct NotionRow: Equatable, Hashable, Sendable {
     var task: CanonicalTask
     var lastEditedTime: Date
     var archived: Bool
+    /// The raw status/select option name (independent of the done-value mapping),
+    /// so filter rules can exclude specific states. nil for checkbox or unmapped.
+    var rawStatus: String? = nil
 }
 
 /// The Notion side of a TaskSync. A protocol so the coordinator's tests can
@@ -109,7 +112,8 @@ struct RealNotionTaskClient: NotionTaskClient {
             let archived = result["archived"] as? Bool ?? false
             let lastEdited = parseDate(result["last_edited_time"]) ?? Date.distantPast
             let task = canonicalTask(fromProperties: props, mapping: mapping)
-            return NotionRow(pageId: id, task: task, lastEditedTime: lastEdited, archived: archived)
+            return NotionRow(pageId: id, task: task, lastEditedTime: lastEdited, archived: archived,
+                             rawStatus: statusName(props: props, mapping: mapping))
         }
         let hasMore = root["has_more"] as? Bool ?? false
         let next = hasMore ? (root["next_cursor"] as? String) : nil
@@ -127,6 +131,14 @@ struct RealNotionTaskClient: NotionTaskClient {
                              due: due,
                              isCompleted: isCompleted,
                              notes: (notes?.isEmpty ?? true) ? nil : notes)
+    }
+
+    /// The raw status/select option name on a row (not compared to any done
+    /// value), used by filter rules. nil for a checkbox column or no status.
+    static func statusName(props: [String: Any], mapping: TaskFieldMapping) -> String? {
+        guard let name = mapping.statusProperty, let value = props[name] as? [String: Any] else { return nil }
+        return (value["status"] as? [String: Any])?["name"] as? String
+            ?? (value["select"] as? [String: Any])?["name"] as? String
     }
 
     /// Reads completion from the status column, robust to whichever shape it has

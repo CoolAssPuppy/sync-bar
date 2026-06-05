@@ -88,6 +88,8 @@ struct SyncEditorView: View {
     @State private var doneValue: String = ""
     @State private var notDoneValue: String = ""
     @State private var notesProperty: String = ""
+    @State private var excludedStatuses: Set<String> = []
+    @State private var excludeCompletedReminders = false
     @State private var originalTaskSyncId: String?
     // Customize — per-kind destination forms
     @State private var localNotion = NotionFormState()
@@ -149,7 +151,7 @@ struct SyncEditorView: View {
                     fromStep
                     if isReminders {
                         notionDatabaseStep
-                        if taskDatabaseId != nil { mapStep }
+                        if taskDatabaseId != nil { mapStep; rulesStep }
                     } else {
                         toStep
                         if toKind != nil { customizeStep }
@@ -373,6 +375,60 @@ struct SyncEditorView: View {
             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
             .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
         }
+    }
+
+    /// Statuses offered as exclusion chips — the live options plus any already
+    /// stored (so a saved exclusion still shows even if the schema shifted).
+    private var exclusionChoices: [String] {
+        Array(Set(statusOptions).union(excludedStatuses)).sorted()
+    }
+
+    private var rulesStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            stepLabel("RULES", "what to keep out of each side")
+            VStack(alignment: .leading, spacing: 0) {
+                if !exclusionChoices.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Keep these Notion statuses out of Reminders")
+                            .font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
+                            ForEach(exclusionChoices, id: \.self) { status in
+                                statusChip(status)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(15)
+                    rowDivider
+                }
+                HStack(spacing: 14) {
+                    Text("Don't add completed reminders to Notion")
+                        .font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
+                    Spacer(minLength: 12)
+                    Toggle("", isOn: $excludeCompletedReminders).labelsHidden().toggleStyle(.switch).tint(theme.primary)
+                }
+                .padding(.horizontal, 15).padding(.vertical, 12)
+            }
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+    }
+
+    private func statusChip(_ status: String) -> some View {
+        let isOn = excludedStatuses.contains(status)
+        return Button {
+            if isOn { excludedStatuses.remove(status) } else { excludedStatuses.insert(status) }
+        } label: {
+            Text(status)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isOn ? theme.primaryForeground : theme.foregroundSoft)
+                .lineLimit(1)
+                .padding(.horizontal, 11).frame(height: 28)
+                .frame(maxWidth: .infinity)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(isOn ? theme.primary : theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(isOn ? Color.clear : theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func propertyMenu(selection: Binding<String>, options: [String], onChange: ((String) -> Void)? = nil) -> some View {
@@ -644,6 +700,8 @@ struct SyncEditorView: View {
         doneValue = sync.fieldMapping.statusDoneValue ?? ""
         notDoneValue = sync.fieldMapping.statusNotDoneValue ?? ""
         notesProperty = sync.fieldMapping.notesProperty ?? ""
+        excludedStatuses = Set(sync.activeRules.excludedNotionStatuses)
+        excludeCompletedReminders = sync.activeRules.excludeCompletedReminders
         loadReminderLists()
         loadTaskDatabases()
         loadTaskSchema()
@@ -838,11 +896,13 @@ struct SyncEditorView: View {
             statusDoneValue: doneValue.isEmpty ? nil : doneValue,
             statusNotDoneValue: notDoneValue.isEmpty ? nil : notDoneValue,
             notesProperty: notesProperty.isEmpty ? nil : notesProperty)
+        let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
+                                  excludeCompletedReminders: excludeCompletedReminders)
         let sync = TaskSync(
             id: originalTaskSyncId ?? UUID().uuidString,
             remindersListId: reminderListId, remindersListName: reminderListName,
             notionWorkspaceId: taskWorkspaceId, notionDatabaseId: taskDatabaseId, notionDatabaseName: taskDatabaseName,
-            fieldMapping: mapping)
+            fieldMapping: mapping, rules: rules)
         ledger.upsertTaskSync(sync)
     }
 

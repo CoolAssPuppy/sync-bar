@@ -108,6 +108,24 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// Filter rules for a two-way sync — which tasks to keep out of one side.
+/// Excluded Notion statuses are removed from Reminders (the row stays in Notion);
+/// if a task later leaves those statuses it's recreated in Reminders. Completed
+/// reminders can be kept from creating new Notion rows.
+struct TaskSyncRules: Codable, Equatable, Hashable, Sendable {
+    /// Notion status/select option names that should NOT live in Reminders.
+    var excludedNotionStatuses: [String]
+    /// When true, a completed reminder with no Notion counterpart won't create one.
+    var excludeCompletedReminders: Bool
+
+    init(excludedNotionStatuses: [String] = [], excludeCompletedReminders: Bool = false) {
+        self.excludedNotionStatuses = excludedNotionStatuses
+        self.excludeCompletedReminders = excludeCompletedReminders
+    }
+
+    var isActive: Bool { !excludedNotionStatuses.isEmpty || excludeCompletedReminders }
+}
+
 /// One bidirectional sync: a Reminders list paired with a Notion task database,
 /// plus how their fields map. The two-way analog of a SyncFlow, but stored
 /// directly (not flattened from a rule + binding).
@@ -120,11 +138,16 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
     var notionDatabaseId: String
     var notionDatabaseName: String
     var fieldMapping: TaskFieldMapping
+    /// Filter rules. Optional so older persisted syncs (no rules key) still decode.
+    var rules: TaskSyncRules?
     var createdAt: Date
     var updatedAt: Date
     var lastRunAt: Date?
     var lastRunStatus: RuleRunStatus
     var lastRunError: String?
+
+    /// The active rules, defaulting to "no filtering" when none are stored.
+    var activeRules: TaskSyncRules { rules ?? TaskSyncRules() }
 
     init(id: String = UUID().uuidString,
          enabled: Bool = true,
@@ -134,6 +157,7 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
          notionDatabaseId: String,
          notionDatabaseName: String,
          fieldMapping: TaskFieldMapping,
+         rules: TaskSyncRules? = nil,
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
          lastRunAt: Date? = nil,
@@ -147,6 +171,7 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
         self.notionDatabaseId = notionDatabaseId
         self.notionDatabaseName = notionDatabaseName
         self.fieldMapping = fieldMapping
+        self.rules = rules
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastRunAt = lastRunAt

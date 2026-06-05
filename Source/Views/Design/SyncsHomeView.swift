@@ -174,7 +174,7 @@ private struct SyncRowView: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 10) {
-                        FolderGlyph(size: 30)
+                        SourceMark(size: 30)
                         Text(flow.folderName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground)

@@ -9,28 +9,7 @@
 //
 
 import SwiftUI
-
-/// The gold folder chip that stands for a reMarkable source folder.
-struct FolderGlyph: View {
-    var size: CGFloat = 30
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        let radius = size * 0.27
-        ZStack {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(theme.primary.opacity(0.10))
-            Image(systemName: "folder.fill")
-                .font(.system(size: size * 0.44, weight: .medium))
-                .foregroundStyle(theme.primary)
-        }
-        .frame(width: size, height: size)
-        .overlay(
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(theme.primary.opacity(0.22), lineWidth: 1)
-        )
-    }
-}
+import AppKit
 
 /// One left-rail navigation item.
 struct RailItem: View {
@@ -122,18 +101,33 @@ struct SyncStatusDot: View {
     }
 }
 
-/// The reMarkable source mark (today's only source; more to come).
+/// A source's brand mark on a white chip. Generic over SourceKind so new
+/// sources render without touching call sites; defaults to reMarkable, today's
+/// only source. Falls back to the kind's SF Symbol when the asset is missing.
 struct SourceMark: View {
+    var kind: SourceKind = .remarkable
     var size: CGFloat = 28
     @Environment(\.theme) private var theme
+
     var body: some View {
         let radius = size * 0.27
-        Image("Remarkable")
-            .resizable().interpolation(.high).scaledToFit()
-            .padding(size * 0.16)
-            .frame(width: size, height: size)
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.white))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        Group {
+            if let image = NSImage(named: kind.assetName), image.isValid {
+                Image(nsImage: image)
+                    .renderingMode(kind.brandMarkIsMonochrome ? .template : .original)
+                    .resizable().interpolation(.high).scaledToFit()
+                    .foregroundStyle(theme.foreground)
+                    .padding(size * 0.16)
+            } else {
+                Image(systemName: kind.systemImage)
+                    .font(.system(size: size * 0.5, weight: .medium))
+                    .foregroundStyle(theme.primary)
+                    .padding(size * 0.16)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.white))
+        .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
     }
 }
 

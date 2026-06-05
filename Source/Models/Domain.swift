@@ -158,31 +158,88 @@ enum OcrProviderChoice: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// A sync rule binds one reMarkable folder to zero or more destinations.
-/// Adding the first destination turns the rule "active"; removing all of
-/// them leaves the rule as a saved shell the user can re-attach later.
-/// The `rmNotebookId`/`rmNotebookName` fields hold a *folder* id and name;
-/// they keep their legacy persisted names until the v0.3 `SourceScope`
-/// migration replaces them with folder-or-notebook scoping.
+/// A sync rule binds one source (a reMarkable folder today) to zero or more
+/// destinations. Adding the first destination turns the rule "active"; removing
+/// all of them leaves the rule as a saved shell the user can re-attach later.
+/// The source half is polymorphic (`SourceConfiguration`), mirroring how
+/// destinations are modeled, so new source kinds drop in without reshaping the
+/// rule.
 struct SyncRule: Codable, Equatable, Identifiable, Hashable {
     var id: String
     var enabled: Bool
-    var rmNotebookId: String
-    var rmNotebookName: String
-    /// Which documents in the folder to sync. `nil`/empty means the whole folder
-    /// (current and future documents); a non-empty set scopes the rule to just
-    /// those `RmFile` ids (e.g. "sync only my journal"). Optional so rules
-    /// persisted before this field still decode (missing key -> whole folder).
-    var selectedFileIds: [String]? = nil
-    var titleStrategy: TitleStrategy
-    var titleTemplate: String?
-    var pageOrder: PageOrder
-    var ocrMode: OcrMode
-    var ocrProviderOverride: OcrProviderChoice?
-    var savePdfAttachment: Bool
+    var source: SourceConfiguration
     var createdAt: Date
     var updatedAt: Date
     var destinations: [DestinationBinding]
+
+    /// Generic source accessors, preferred going forward over the reMarkable
+    /// passthroughs below.
+    var sourceKind: SourceKind { source.kind }
+    var sourceSummary: String { source.summary }
+
+    // MARK: Generic init
+
+    init(id: String = UUID().uuidString,
+         enabled: Bool = true,
+         source: SourceConfiguration,
+         createdAt: Date = Date(),
+         updatedAt: Date = Date(),
+         destinations: [DestinationBinding] = []) {
+        self.id = id
+        self.enabled = enabled
+        self.source = source
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.destinations = destinations
+    }
+
+    // MARK: Transitional reMarkable passthroughs
+    //
+    // These keep the (reMarkable-only) call sites compiling unchanged while
+    // consumers migrate to reading `source` directly. They are removed once the
+    // genericization migration lands; a non-reMarkable source reads through its
+    // own configuration instead.
+
+    private var rmConfig: RemarkableSourceConfig {
+        get {
+            if case .remarkable(let config) = source { return config }
+            return RemarkableSourceConfig(folderId: "", folderName: "", titleStrategy: .firstLineOfOcr,
+                                          titleTemplate: nil, pageOrder: .chronological, ocrMode: .all,
+                                          ocrProviderOverride: nil, savePdfAttachment: true)
+        }
+        set { source = .remarkable(newValue) }
+    }
+
+    var rmNotebookId: String { get { rmConfig.folderId } set { rmConfig.folderId = newValue } }
+    var rmNotebookName: String { get { rmConfig.folderName } set { rmConfig.folderName = newValue } }
+    var selectedFileIds: [String]? { get { rmConfig.selectedFileIds } set { rmConfig.selectedFileIds = newValue } }
+    var titleStrategy: TitleStrategy { get { rmConfig.titleStrategy } set { rmConfig.titleStrategy = newValue } }
+    var titleTemplate: String? { get { rmConfig.titleTemplate } set { rmConfig.titleTemplate = newValue } }
+    var pageOrder: PageOrder { get { rmConfig.pageOrder } set { rmConfig.pageOrder = newValue } }
+    var ocrMode: OcrMode { get { rmConfig.ocrMode } set { rmConfig.ocrMode = newValue } }
+    var ocrProviderOverride: OcrProviderChoice? { get { rmConfig.ocrProviderOverride } set { rmConfig.ocrProviderOverride = newValue } }
+    var savePdfAttachment: Bool { get { rmConfig.savePdfAttachment } set { rmConfig.savePdfAttachment = newValue } }
+
+    /// Old-style memberwise initializer, kept so reMarkable construction sites
+    /// (DemoData, `new(notebookId:notebookName:)`) build a `.remarkable` source
+    /// without change. Transitional, alongside the passthroughs above.
+    init(id: String, enabled: Bool,
+         rmNotebookId: String, rmNotebookName: String,
+         selectedFileIds: [String]? = nil,
+         titleStrategy: TitleStrategy, titleTemplate: String?,
+         pageOrder: PageOrder, ocrMode: OcrMode,
+         ocrProviderOverride: OcrProviderChoice?, savePdfAttachment: Bool,
+         createdAt: Date, updatedAt: Date, destinations: [DestinationBinding]) {
+        self.id = id
+        self.enabled = enabled
+        self.source = .remarkable(RemarkableSourceConfig(
+            folderId: rmNotebookId, folderName: rmNotebookName, selectedFileIds: selectedFileIds,
+            titleStrategy: titleStrategy, titleTemplate: titleTemplate, pageOrder: pageOrder,
+            ocrMode: ocrMode, ocrProviderOverride: ocrProviderOverride, savePdfAttachment: savePdfAttachment))
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.destinations = destinations
+    }
 
     static func new(notebookId: String, notebookName: String) -> SyncRule {
         let now = Date()
@@ -203,17 +260,26 @@ struct SyncRule: Codable, Equatable, Identifiable, Hashable {
         )
     }
 
-    /// Whether this rule syncs every document in the folder (vs a hand-picked set).
+    /// Build a new rule targeting a source scope. The generic entry point the
+    /// "Choose a Source" flow uses; reMarkable is the only kind today.
+    static func new(scope: SourceScope) -> SyncRule {
+        new(notebookId: scope.id, notebookName: scope.name)
+    }
+
+    /// Whether this rule syncs every item in the scope (vs a hand-picked set).
     var syncsEntireFolder: Bool {
         (selectedFileIds ?? []).isEmpty
     }
 
-    /// Whether a given document is in this rule's scope. The whole folder is in
-    /// scope when no specific documents are selected.
-    func includes(fileId: String) -> Bool {
+    /// Whether a given item is in this rule's scope. The whole scope is in scope
+    /// when no specific items are selected.
+    func includes(itemId: String) -> Bool {
         guard let ids = selectedFileIds, !ids.isEmpty else { return true }
-        return ids.contains(fileId)
+        return ids.contains(itemId)
     }
+
+    /// Transitional alias for `includes(itemId:)`.
+    func includes(fileId: String) -> Bool { includes(itemId: fileId) }
 
     /// Aggregated rollup across all destination bindings on this rule.
     var aggregateLastRunAt: Date? {

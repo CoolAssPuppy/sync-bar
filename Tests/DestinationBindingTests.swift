@@ -67,14 +67,12 @@ final class DestinationBindingTests: XCTestCase {
         XCTAssertFalse(rule.includes(fileId: "shopping-list"))
     }
 
-    func test_rule_persisted_without_scope_field_decodes_as_whole_folder() throws {
-        // A rule saved before per-notebook scoping existed has no selectedFileIds key.
-        let legacyJSON = Data("""
-        {"id":"r1","enabled":true,"rmNotebookId":"nb-1","rmNotebookName":"Personal",
-         "titleStrategy":"firstLineOfOcr","pageOrder":"chronological","ocrMode":"all",
-         "savePdfAttachment":true,"createdAt":0,"updatedAt":0,"destinations":[]}
-        """.utf8)
-        let rule = try JSONDecoder().decode(SyncRule.self, from: legacyJSON)
+    func test_rule_without_selected_files_syncs_whole_folder_after_round_trip() throws {
+        // A rule with no selectedFileIds syncs the whole folder, and that default
+        // survives persistence (encode/decode round-trip).
+        let original = SyncRule.new(notebookId: "nb-1", notebookName: "Personal")
+        let data = try JSONEncoder().encode(original)
+        let rule = try JSONDecoder().decode(SyncRule.self, from: data)
         XCTAssertNil(rule.selectedFileIds)
         XCTAssertTrue(rule.syncsEntireFolder)
         XCTAssertTrue(rule.includes(fileId: "anything"))

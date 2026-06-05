@@ -79,20 +79,31 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     var titleProperty: String
     var dueDateProperty: String?
     var statusProperty: String?
-    /// The status/select option (or, for a checkbox property, ignored) that means
-    /// "done". When the status property is a checkbox this is left nil.
+    /// The Notion column type backing completion: "checkbox", "status", or
+    /// "select". Captured from the live schema in the editor so writes know which
+    /// JSON shape to use without re-fetching. A checkbox ignores the done/not-done
+    /// option names below.
+    var statusPropertyType: String?
+    /// The status/select option that means "done". Unused for a checkbox column.
     var statusDoneValue: String?
+    /// The status/select option that means "not done", written when a task flips
+    /// back to incomplete. When nil, an incomplete task leaves the column as-is.
+    var statusNotDoneValue: String?
     var notesProperty: String?
 
     init(titleProperty: String,
          dueDateProperty: String? = nil,
          statusProperty: String? = nil,
+         statusPropertyType: String? = nil,
          statusDoneValue: String? = nil,
+         statusNotDoneValue: String? = nil,
          notesProperty: String? = nil) {
         self.titleProperty = titleProperty
         self.dueDateProperty = dueDateProperty
         self.statusProperty = statusProperty
+        self.statusPropertyType = statusPropertyType
         self.statusDoneValue = statusDoneValue
+        self.statusNotDoneValue = statusNotDoneValue
         self.notesProperty = notesProperty
     }
 }

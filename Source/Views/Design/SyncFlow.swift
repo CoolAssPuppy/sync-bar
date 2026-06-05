@@ -79,11 +79,22 @@ extension Ledger {
             .sorted { ($0.lastRunAt ?? .distantPast) > ($1.lastRunAt ?? .distantPast) }
     }
 
-    /// Count of destination accounts connected (any kind).
+    /// Count of destination accounts connected (any kind). Must mirror
+    /// `connectedApps`, the editor's "To" list, so the two never disagree.
     var connectedAppCount: Int {
         notionWorkspaces.count + linearAccounts.count + googleAccounts.count
-            + markdownTargets.count + appleNotesTargets.count
+            + markdownTargets.count + appleNotesTargets.count + chromeTargets.count
     }
 
     var hasAnyDestination: Bool { connectedAppCount > 0 }
+
+    /// Count of connected sources (reMarkable, Safari, Reminders) — the account-
+    /// less ones are simple "added it" flags.
+    var connectedSourceCount: Int {
+        (remarkableAccount != nil ? 1 : 0) + (safariConnected ? 1 : 0) + (remindersConnected ? 1 : 0)
+    }
+
+    /// Everything shown on the Connections screen: sources + destinations. This
+    /// is what the "Connections" rail badge should reflect.
+    var connectionCount: Int { connectedSourceCount + connectedAppCount }
 }

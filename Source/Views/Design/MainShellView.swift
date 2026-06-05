@@ -112,7 +112,7 @@ struct MainShellView: View {
                          badge: ledger.syncFlows.isEmpty ? nil : "\(ledger.syncFlows.count)",
                          isActive: tab == .syncs) { tab = .syncs }
                 RailItem(icon: "link", label: "Connections",
-                         badge: ledger.hasAnyDestination ? "\(ledger.connectedAppCount)" : nil,
+                         badge: ledger.connectionCount > 0 ? "\(ledger.connectionCount)" : nil,
                          isActive: tab == .connections) { tab = .connections }
                 RailItem(icon: "waveform.path.ecg", label: "Activity", isActive: tab == .activity) { tab = .activity }
             }

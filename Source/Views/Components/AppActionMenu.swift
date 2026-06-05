@@ -26,14 +26,18 @@ struct AppActionMenu: View {
 
     var body: some View {
         Button { isOpen.toggle() } label: {
-            Image(systemName: "ellipsis.vertical")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(theme.muted)
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .rotationEffect(.degrees(90))
+                .foregroundStyle(theme.foregroundSoft)
                 .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(theme.card)
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("More actions")
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             VStack(spacing: 2) {
                 ForEach(actions) { action in
@@ -58,8 +62,10 @@ private struct AppActionRow: View {
 
     var body: some View {
         Button {
-            dismiss()
+            // Run the action first, then close — closing first can tear the row
+            // down before the tap's action fires.
             action.action()
+            dismiss()
         } label: {
             HStack(spacing: 10) {
                 if let systemImage = action.systemImage {

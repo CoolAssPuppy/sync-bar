@@ -151,7 +151,9 @@ struct ConnectionsView: View {
 
     private var remindersActions: [AppMenuAction] {
         var actions: [AppMenuAction] = []
-        if !remindersHasAccess {
+        if remindersHasAccess {
+            actions.append(AppMenuAction(title: "Re-check access", systemImage: "arrow.clockwise") { refreshAccessStatus() })
+        } else {
             actions.append(AppMenuAction(title: "Grant access", systemImage: "checklist") { requestRemindersAccess() })
         }
         actions.append(AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) { ledger.setRemindersConnected(false) })

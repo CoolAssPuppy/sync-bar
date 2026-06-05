@@ -141,7 +141,7 @@ struct SyncEditorView: View {
             CustomDropdown(
                 options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceMark(size: 26)), title: $0.name) },
                 selectedId: folder?.id,
-                placeholder: "Choose a folder",
+                placeholder: "Choose a Source",
                 placeholderIcon: AnyView(SourceMark(size: 26)),
                 onSelect: { id in if let f = ledger.folders.first(where: { $0.id == id }) { selectFolder(f) } }
             )
@@ -172,7 +172,7 @@ struct SyncEditorView: View {
             CustomDropdown(
                 options: ledger.connectedApps.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: $0.kind, size: 24)), title: $0.name) },
                 selectedId: toAccountId,
-                placeholder: ledger.hasAnyDestination ? "Choose a destination" : "Connect a destination first",
+                placeholder: ledger.hasAnyDestination ? "Choose a Destination" : "Connect a destination first",
                 placeholderIcon: AnyView(placeholderDestIcon),
                 onSelect: { id in if let app = ledger.connectedApps.first(where: { $0.id == id }) { selectDestination(app) } }
             )

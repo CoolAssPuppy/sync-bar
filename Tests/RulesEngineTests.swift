@@ -8,67 +8,40 @@
 import XCTest
 @testable import SyncBar
 
+/// The engine is now source-agnostic: it only combines the generic signals
+/// (enabled, unchanged, suppressed-as-empty). Title resolution and the
+/// "is this content empty?" decision are source-specific and covered in
+/// RemarkableSourceClientTests.
 final class RulesEngineTests: XCTestCase {
     private let engine = RulesEngine()
 
-    func test_unchanged_file_skips() {
-        let rule = makeRule()
-        let file = makeFile(versionHash: "abc")
-        let directive = engine.evaluate(rule: rule, file: file, folderName: "Work", ocrText: "hi", previouslySyncedHash: "abc")
+    func test_unchanged_item_skips() {
+        let directive = engine.evaluate(enabled: true, itemVersionHash: "abc",
+                                        previouslySyncedHash: "abc", suppressedAsEmpty: false)
         XCTAssertEqual(directive, .skip(reason: .unchanged))
     }
 
     func test_disabled_rule_skips() {
-        var rule = makeRule()
-        rule.enabled = false
-        let directive = engine.evaluate(rule: rule, file: makeFile(), folderName: "Work", ocrText: "hi", previouslySyncedHash: nil)
+        let directive = engine.evaluate(enabled: false, itemVersionHash: "abc",
+                                        previouslySyncedHash: nil, suppressedAsEmpty: false)
         XCTAssertEqual(directive, .skip(reason: .ruleDisabled))
     }
 
-    func test_file_name_title() {
-        var rule = makeRule()
-        rule.titleStrategy = .fileName
-        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Sprint plan"), folderName: "Work", ocrText: nil)
-        XCTAssertEqual(title, "Sprint plan")
+    func test_suppressed_as_empty_skips() {
+        let directive = engine.evaluate(enabled: true, itemVersionHash: "v1",
+                                        previouslySyncedHash: nil, suppressedAsEmpty: true)
+        XCTAssertEqual(directive, .skip(reason: .ocrSkippedAndEmpty))
     }
 
-    func test_first_line_uses_ocr_when_present() {
-        var rule = makeRule()
-        rule.titleStrategy = .firstLineOfOcr
-        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Note"), folderName: "Work", ocrText: "Sprint planning\nMore notes")
-        XCTAssertEqual(title, "Sprint planning")
+    func test_changed_item_proceeds() {
+        let directive = engine.evaluate(enabled: true, itemVersionHash: "v2",
+                                        previouslySyncedHash: "v1", suppressedAsEmpty: false)
+        XCTAssertEqual(directive, .proceed)
     }
 
-    func test_first_line_falls_back_to_file_name_when_ocr_empty() {
-        var rule = makeRule()
-        rule.titleStrategy = .firstLineOfOcr
-        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Untitled note"), folderName: "Work", ocrText: nil)
-        XCTAssertEqual(title, "Untitled note")
-    }
-
-    func test_template_resolves_folder_and_note() {
-        var rule = makeRule()
-        rule.titleStrategy = .template
-        rule.titleTemplate = "{folder_name} / {notebook}"
-        let title = engine.resolveTitle(rule: rule, file: makeFile(name: "Standup"), folderName: "Work", ocrText: nil)
-        XCTAssertEqual(title, "Work / Standup")
-    }
-
-    // MARK: Helpers
-
-    private func makeRule() -> SyncRule {
-        SyncRule.new(notebookId: "folder-1", notebookName: "Work")
-    }
-
-    private func makeFile(name: String = "Note", versionHash: String = "v1") -> RmFile {
-        RmFile(
-            id: "file-1",
-            name: name,
-            folderId: "folder-1",
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            lastModified: Date(timeIntervalSince1970: 1_700_001_000),
-            pageCount: 2,
-            versionHash: versionHash
-        )
+    func test_first_sync_proceeds() {
+        let directive = engine.evaluate(enabled: true, itemVersionHash: "v1",
+                                        previouslySyncedHash: nil, suppressedAsEmpty: false)
+        XCTAssertEqual(directive, .proceed)
     }
 }

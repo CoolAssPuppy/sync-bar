@@ -66,6 +66,14 @@ protocol SourceClient: Sendable {
                       content: NoteContent,
                       config: SourceConfiguration,
                       strategyOverride: TitleStrategy?) -> String
+
+    /// Whether an item that produced this content should be skipped as "empty".
+    /// Source-specific: reMarkable suppresses only when OCR mode is "none" and the
+    /// page is blank; sources without such a notion never suppress. `ocrModeOverride`
+    /// is the destination binding's optional override of the rule-level OCR mode.
+    func shouldSkipAsEmpty(content: NoteContent,
+                           config: SourceConfiguration,
+                           ocrModeOverride: OcrMode?) -> Bool
 }
 
 // MARK: - Routing

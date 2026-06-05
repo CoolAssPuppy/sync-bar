@@ -12,11 +12,14 @@ import Foundation
 /// future migration code use the same string.
 let defaultTitleTemplate = "{folder_name} – {notebook}"
 
-/// Pure logic. Decides what to do with a given file (note) for a given rule.
-/// A rule targets a folder; each file in it becomes one note.
+/// Pure logic. The source-agnostic decision of whether one item should sync now.
+/// Title resolution and "is this content empty?" are source-specific and live on
+/// the `SourceClient` (e.g. `RemarkableSourceClient`); the engine only combines
+/// the generic signals: rule enabled, content unchanged, and a source-provided
+/// "suppress as empty" flag.
 struct RulesEngine {
     enum Directive: Equatable {
-        case create(title: String)
+        case proceed
         case skip(reason: SkipReason)
     }
 
@@ -26,44 +29,20 @@ struct RulesEngine {
         case ocrSkippedAndEmpty
     }
 
-    func evaluate(rule: SyncRule, file: RmFile, folderName: String, ocrText: String?, previouslySyncedHash: String?) -> Directive {
-        guard rule.enabled else { return .skip(reason: .ruleDisabled) }
+    func evaluate(enabled: Bool,
+                  itemVersionHash: String,
+                  previouslySyncedHash: String?,
+                  suppressedAsEmpty: Bool) -> Directive {
+        guard enabled else { return .skip(reason: .ruleDisabled) }
 
-        if let lastHash = previouslySyncedHash, lastHash == file.versionHash {
+        if let lastHash = previouslySyncedHash, lastHash == itemVersionHash {
             return .skip(reason: .unchanged)
         }
 
-        let text = (ocrText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if rule.ocrMode == .none && (text.isEmpty || text == "[blank page]") {
+        if suppressedAsEmpty {
             return .skip(reason: .ocrSkippedAndEmpty)
         }
 
-        return .create(title: resolveTitle(rule: rule, file: file, folderName: folderName, ocrText: ocrText))
-    }
-
-    func resolveTitle(rule: SyncRule, file: RmFile, folderName: String, ocrText: String?) -> String {
-        switch rule.titleStrategy {
-        case .fileName:
-            return file.name.isEmpty ? folderName : file.name
-        case .firstLineOfOcr:
-            if let firstLine = ocrText?
-                .split(separator: "\n", omittingEmptySubsequences: true)
-                .first
-                .map(String.init)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !firstLine.isEmpty, firstLine != "[blank page]" {
-                return firstLine
-            }
-            return file.name.isEmpty ? folderName : file.name
-        case .template:
-            let context = TitleTemplateContext(
-                notebook: file.name,
-                pageNumber: 1,
-                date: file.createdAt,
-                title: file.name,
-                folderName: folderName
-            )
-            return context.apply(to: rule.titleTemplate ?? defaultTitleTemplate)
-        }
+        return .proceed
     }
 }

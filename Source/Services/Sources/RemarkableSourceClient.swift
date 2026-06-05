@@ -112,4 +112,16 @@ struct RemarkableSourceClient: SourceClient {
             return context.apply(to: cfg.titleTemplate ?? defaultTitleTemplate)
         }
     }
+
+    /// reMarkable skips an item only when OCR is turned off (`ocrMode == .none`)
+    /// and the page came back blank — the exact gate the old `RulesEngine.evaluate`
+    /// applied, with the binding's OCR-mode override honored.
+    func shouldSkipAsEmpty(content: NoteContent,
+                           config: SourceConfiguration,
+                           ocrModeOverride: OcrMode?) -> Bool {
+        guard case .remarkable(let cfg) = config else { return false }
+        let mode = ocrModeOverride ?? cfg.ocrMode
+        let text = content.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return mode == .none && (text.isEmpty || text == "[blank page]")
+    }
 }

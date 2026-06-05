@@ -209,6 +209,35 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    /// The coordinator is source-agnostic: given an injected source client it
+    /// lists items, produces content, resolves titles, and fans them to the
+    /// destination — without any reMarkable specifics.
+    func test_coordinator_drives_injected_source_client() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule.new(notebookId: "nb-spy", notebookName: "Spy")
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let spy = SpySourceClient(items: [
+            SourceItem(id: "s1", name: "Spied note", versionHash: "h1", createdAt: Date(), tags: [])
+        ])
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy })
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertEqual(binding?.lastRunStatus, .success)
+        XCTAssertEqual(binding?.lastRunPagesSynced, 1)
+        XCTAssertTrue(spy.contentCalled, "coordinator must produce content via the source client")
+
+        let written = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        XCTAssertTrue(written.contains { $0.pathExtension == "md" }, "expected a written note, got: \(written)")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     // MARK: source scope (sync a whole folder, or only specific notebooks)
 
     func test_rule_scoped_to_specific_notebooks_syncs_only_those() async {
@@ -498,4 +527,25 @@ private struct ScriptedRemarkableClient: RemarkableClient {
         progress(1.0)
         return RmUploadResult(documentId: "uploaded", visibleName: fileURL.lastPathComponent)
     }
+}
+
+/// A source client double that records whether the coordinator produced content
+/// through it. Returns canned items/content so the coordinator's source-agnostic
+/// path can be exercised without reMarkable.
+private final class SpySourceClient: SourceClient, @unchecked Sendable {
+    let kind: SourceKind = .remarkable
+    let items: [SourceItem]
+    private(set) var contentCalled = false
+
+    init(items: [SourceItem]) { self.items = items }
+
+    func listScopes() async throws -> [SourceScope] { [] }
+    func listItems(config: SourceConfiguration) async throws -> [SourceItem] { items }
+    func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent {
+        contentCalled = true
+        return NoteContent(blocks: [.paragraph("from spy")], provider: "spy", model: nil)
+    }
+    func resolveTitle(for item: SourceItem, content: NoteContent,
+                      config: SourceConfiguration, strategyOverride: TitleStrategy?) -> String { item.name }
+    func shouldSkipAsEmpty(content: NoteContent, config: SourceConfiguration, ocrModeOverride: OcrMode?) -> Bool { false }
 }

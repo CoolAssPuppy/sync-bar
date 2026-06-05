@@ -25,6 +25,10 @@ final class SyncCoordinator: ObservableObject {
     private let keychain: KeychainStore
     private let remarkable: RemarkableClient
     private let engine: RulesEngine
+    /// Resolves the source client for a rule's kind. Injectable so tests can pass
+    /// a spy source; the default wraps the injected `remarkable` client so the
+    /// reMarkable source still flows through whatever client a test provided.
+    private let sourceClientFor: @MainActor (SourceKind) -> SourceClient
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
@@ -32,12 +36,18 @@ final class SyncCoordinator: ObservableObject {
          settings: AppSettings? = nil,
          keychain: KeychainStore = .shared,
          remarkable: RemarkableClient = RemarkableClientFactory.make(),
-         engine: RulesEngine = RulesEngine()) {
+         engine: RulesEngine = RulesEngine(),
+         sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil) {
         self.ledger = ledger ?? Ledger.shared
         self.settings = settings ?? AppSettings.shared
         self.keychain = keychain
         self.remarkable = remarkable
         self.engine = engine
+        self.sourceClientFor = sourceClient ?? { kind in
+            switch kind {
+            case .remarkable: return RemarkableSourceClient(remarkable: remarkable)
+            }
+        }
 
         NotificationCenter.default.publisher(for: .syncIntervalChanged)
             .sink { [weak self] _ in self?.restartTimer() }
@@ -176,13 +186,15 @@ final class SyncCoordinator: ObservableObject {
     }
 
     private func runRule(_ rule: SyncRule, restrictedToBindingId: String?, explainSkips: Bool) async {
-        let folderName = rule.rmNotebookName
-        var files: [RmFile] = []
+        let folderName = rule.sourceSummary
+        let source = sourceClientFor(rule.sourceKind)
+
+        var items: [SourceItem] = []
         do {
-            files = try await remarkable.listFiles(inFolderId: rule.rmNotebookId)
-            ledger.updateRemarkableHealth(error: nil)
+            items = try await source.listItems(config: rule.source)
+            reportSourceHealth(rule.sourceKind, error: nil)
         } catch {
-            ledger.updateRemarkableHealth(error: error)
+            reportSourceHealth(rule.sourceKind, error: error)
             recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))
             return
         }
@@ -194,130 +206,106 @@ final class SyncCoordinator: ObservableObject {
             if explainSkips { recordSkip(.noEnabledDestinations(folder: folderName), ruleId: rule.id) }
             return
         }
-        guard !files.isEmpty else {
+        guard !items.isEmpty else {
             if explainSkips { recordSkip(.folderEmpty(folder: folderName), ruleId: rule.id) }
             return
         }
 
-        // Narrow to the documents this rule is scoped to: the whole folder, or a
+        // Narrow to the items this rule is scoped to: the whole scope, or a
         // hand-picked set (e.g. "only my journal").
-        let scopedFiles = files.filter { rule.includes(fileId: $0.id) }
-        guard !scopedFiles.isEmpty else {
+        let scopedItems = items.filter { rule.includes(itemId: $0.id) }
+        guard !scopedItems.isEmpty else {
             if explainSkips { recordSkip(.selectedNotesMissing(folder: folderName), ruleId: rule.id) }
             return
         }
 
-        // Skip OCR for files that no enabled binding will accept (e.g. a
-        // destination whose tag filter excludes untagged notes) so we never pay
-        // the OCR provider for output nothing will consume.
-        let neededFiles = scopedFiles.filter { file in bindings.contains { $0.accepts(fileTags: file.tags) } }
-        guard !neededFiles.isEmpty else {
+        // Skip content production for items that no enabled binding will accept
+        // (e.g. a destination whose tag filter excludes untagged notes) so we
+        // never pay the OCR provider for output nothing will consume.
+        let neededItems = scopedItems.filter { item in bindings.contains { $0.accepts(fileTags: item.tags) } }
+        guard !neededItems.isEmpty else {
             if explainSkips { recordSkip(.allNotesFilteredOut(folder: folderName), ruleId: rule.id) }
             return
         }
 
-        // OCR each file once (combining all its pages into one transcript),
-        // reused across every binding — provider cost shouldn't scale with
-        // destination count.
-        let ocr = OcrProviderFactory.make(
-            provider: rule.ocrProviderOverride ?? self.settings.ocrProvider,
-            model: self.settings.ocrModel
-        )
-        var transcripts: [(file: RmFile, content: NoteContent)] = []
-        for file in neededFiles {
-            transcripts.append((file, await buildNoteContent(file, using: ocr)))
+        // Render each item once (OCR for reMarkable), reused across every binding
+        // — source cost shouldn't scale with destination count. A render failure
+        // skips that item rather than aborting the whole rule.
+        var contents: [(item: SourceItem, content: NoteContent)] = []
+        for item in neededItems {
+            do {
+                let content = try await source.content(for: item, config: rule.source)
+                contents.append((item, content))
+            } catch {
+                Log.sync.error("Content production failed for item \(item.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
+            }
         }
 
         for binding in bindings {
             activeBindingId = binding.id
-            await runBinding(rule: rule, folderName: folderName, binding: binding, transcripts: transcripts, ocrName: ocr.name)
+            await runBinding(rule: rule, folderName: folderName, binding: binding, source: source, contents: contents)
         }
         activeBindingId = nil
     }
 
-    /// Builds one note-worth of structured content from a file: typed text
-    /// parsed straight from each page (exact paragraph styles, no OCR cost) plus
-    /// OCR of any handwriting, combined across pages into one ordered block list.
-    private func buildNoteContent(_ file: RmFile, using ocr: OcrProvider) async -> NoteContent {
-        let pages = (try? await remarkable.listPages(notebookId: file.id)) ?? []
-        var blocks: [NoteBlock] = []
-        for page in pages {
-            let content = (try? await remarkable.pageContent(for: page))
-                ?? RemarkablePageContent(imageData: nil, typedText: [])
-            let typedBlocks = content.typedText.map(NoteContentBuilder.block(from:))
-
-            // OCR any strokes on the page (handwriting and diagrams).
-            var ocrBlocks: [NoteBlock] = []
-            if let imageData = content.imageData, !imageData.isEmpty {
-                do {
-                    let result = try await ocr.transcribe(imageData: imageData)
-                    ocrBlocks = NoteContentBuilder.blocks(fromOCRText: result.text)
-                    if let mermaid = result.mermaidSource { ocrBlocks.append(.mermaid(mermaid)) }
-                } catch {
-                    Log.ocr.error("OCR failed for file \(file.id, privacy: .public): \(Formatters.userMessage(for: error), privacy: .public)")
-                }
-            }
-
-            // Order typed text and handwriting by their position on the page.
-            if content.typedTextFirst {
-                blocks.append(contentsOf: typedBlocks + ocrBlocks)
-            } else {
-                blocks.append(contentsOf: ocrBlocks + typedBlocks)
-            }
+    /// Updates source-connection health. Only reMarkable has a health record
+    /// today; other kinds are a no-op until they grow one.
+    private func reportSourceHealth(_ kind: SourceKind, error: Error?) {
+        switch kind {
+        case .remarkable: ledger.updateRemarkableHealth(error: error)
         }
-        return NoteContent(blocks: blocks, provider: ocr.name, model: nil)
     }
 
     private func runBinding(rule: SyncRule, folderName: String, binding: DestinationBinding,
-                            transcripts: [(file: RmFile, content: NoteContent)], ocrName: String) async {
+                            source: SourceClient, contents: [(item: SourceItem, content: NoteContent)]) async {
         let client = DestinationRouter.client(for: binding.kind)
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunStarted))
-
-        // Apply optional per-binding overrides on top of the rule defaults.
-        var effectiveRule = rule
-        if let titleOverride = binding.titleStrategyOverride { effectiveRule.titleStrategy = titleOverride }
-        if let ocrModeOverride = binding.ocrModeOverride { effectiveRule.ocrMode = ocrModeOverride }
 
         var notesSynced = 0
         var firstError: String?
         let runStart = Date()
 
-        for (file, content) in transcripts where binding.accepts(fileTags: file.tags) {
+        for (item, content) in contents where binding.accepts(fileTags: item.tags) {
+            let suppressed = source.shouldSkipAsEmpty(content: content, config: rule.source,
+                                                      ocrModeOverride: binding.ocrModeOverride)
             let directive = engine.evaluate(
-                rule: effectiveRule, file: file, folderName: folderName,
-                ocrText: content.plainText,
-                previouslySyncedHash: ledger.syncedHash(bindingId: binding.id, pageId: file.id)
+                enabled: rule.enabled,
+                itemVersionHash: item.versionHash,
+                previouslySyncedHash: ledger.syncedHash(bindingId: binding.id, pageId: item.id),
+                suppressedAsEmpty: suppressed
             )
-            guard case .create(let title) = directive else { continue }
+            guard case .proceed = directive else { continue }
 
+            let title = source.resolveTitle(for: item, content: content, config: rule.source,
+                                            strategyOverride: binding.titleStrategyOverride)
             let payload = DestinationPayload(
                 title: title,
                 body: content.markdownBody,
                 blocks: content.blocks,
                 mermaidSource: content.firstMermaid,
-                sourceDate: file.createdAt,
+                sourceDate: item.createdAt,
                 pdfData: nil,
-                ocrProvider: ocrName,
-                ruleNotebookName: file.name,
+                ocrProvider: content.provider,
+                ruleNotebookName: item.name,
                 folderName: folderName,
                 pageNumber: 1
             )
             do {
-                let existingId = ledger.syncedExternalId(bindingId: binding.id, pageId: file.id)
+                let existingId = ledger.syncedExternalId(bindingId: binding.id, pageId: item.id)
                 let result = try await client.write(payload: payload, configuration: binding.configuration, existingExternalId: existingId)
                 notesSynced += 1
-                ledger.recordSyncedPage(bindingId: binding.id, pageId: file.id, versionHash: file.versionHash, externalId: result.externalId)
+                ledger.recordSyncedPage(bindingId: binding.id, pageId: item.id, versionHash: item.versionHash, externalId: result.externalId)
                 ledger.appendEvent(makeEvent(
                     rule: rule, binding: binding, folderName: folderName, type: .pageSynced,
-                    noteId: file.id, noteName: file.name, url: result.externalURL?.absoluteString,
-                    ocrProvider: ocrName, durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
+                    noteId: item.id, noteName: item.name, url: result.externalURL?.absoluteString,
+                    ocrProvider: content.provider, durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)
                 ))
             } catch {
                 let msg = Formatters.userMessage(for: error)
                 if firstError == nil { firstError = msg }
                 ledger.appendEvent(makeEvent(
                     rule: rule, binding: binding, folderName: folderName, type: .pageFailed,
-                    noteId: file.id, noteName: file.name, ocrProvider: ocrName, errorMessage: msg
+                    noteId: item.id, noteName: item.name, ocrProvider: content.provider, errorMessage: msg
                 ))
             }
         }
@@ -446,16 +434,16 @@ final class SyncCoordinator: ObservableObject {
     private func recordFailure(rule: SyncRule, binding: DestinationBinding?, message: String) {
         ledger.appendEvent(SyncEvent(
             id: UUID().uuidString, occurredAt: Date(),
-            ruleId: rule.id, ruleName: binding.map { ruleHeader(rule, binding: $0) } ?? rule.rmNotebookName,
+            ruleId: rule.id, ruleName: binding.map { ruleHeader(rule, binding: $0) } ?? rule.sourceSummary,
             eventType: .pageFailed,
-            rmNotebookName: rule.rmNotebookName, rmPageId: nil,
+            rmNotebookName: rule.sourceSummary, rmPageId: nil,
             notionPageUrl: nil, durationMs: nil,
             ocrProvider: nil, errorMessage: message
         ))
     }
 
     private func ruleHeader(_ rule: SyncRule, binding: DestinationBinding) -> String {
-        "\(rule.rmNotebookName) → \(binding.configuration.summary)"
+        "\(rule.sourceSummary) → \(binding.configuration.summary)"
     }
 
     private func postNotification(title: String, body: String) {

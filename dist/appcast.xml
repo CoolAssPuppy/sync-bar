@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.0.2</title>
+      <pubDate>Fri, 05 Jun 2026 13:28:09 +0000</pubDate>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Added Safari bookmark syncing with Chrome.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.0.2.dmg"
+        sparkle:edSignature="qQWUxrfGoCqqS9pI63tYKWZGqtYXlD5XTnCoiPzFoIKfmET3fnHo87OOYKQzOFKdSsxFA9Z4k2lfGTIKYVa9Dw=="
+        length="5230702"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.0.1</title>
       <pubDate>Fri, 05 Jun 2026 08:48:23 +0000</pubDate>
       <sparkle:version>14</sparkle:version>

@@ -23,6 +23,9 @@ struct DestinationPayload: Sendable {
     var ruleNotebookName: String  // the note (file) name
     var folderName: String = ""   // the containing folder (rule subject)
     var pageNumber: Int
+    /// The source item's URL when it is a bookmark; nil for document sources.
+    /// Browser-bookmark destinations write this; note destinations ignore it.
+    var url: URL? = nil
 }
 
 /// Outcome of writing one page to one destination.

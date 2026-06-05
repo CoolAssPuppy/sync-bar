@@ -13,11 +13,15 @@ import Foundation
 /// expensive to produce, e.g. OCR) is fetched separately via `content(for:)` so
 /// it is computed once per item and reused across every destination binding.
 struct SourceItem: Sendable, Equatable, Hashable {
-    var id: String          // stable per-source id (reMarkable file id)
+    var id: String          // stable per-source id (reMarkable file id, Safari bookmark UUID)
     var name: String
     var versionHash: String // content hash: "changed since last sync?"
     var createdAt: Date
     var tags: [String] = []
+    /// The item's URL, when it is one (a bookmark). nil for document sources.
+    /// Carried through to `DestinationPayload.url` so URL-shaped destinations
+    /// (browser bookmarks) have something to write.
+    var url: URL? = nil
 }
 
 /// Errors raised by source clients. Source-domain (not destination/OCR domain)

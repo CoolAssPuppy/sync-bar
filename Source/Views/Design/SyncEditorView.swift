@@ -277,15 +277,32 @@ struct SyncEditorView: View {
     @ViewBuilder private var scopeSheet: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Choose notebooks").font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.foreground)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Choose notebooks").font(.system(size: 18, weight: .bold)).foregroundStyle(theme.foreground)
+                    Text(folder.map { "In \($0.name)" } ?? "Pick what syncs from this folder")
+                        .font(.system(size: 12.5)).foregroundStyle(theme.muted)
+                }
+                Spacer()
+                Button(action: { isChoosingScope = false }) {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.muted)
+                        .frame(width: 30, height: 30)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                }.buttonStyle(.plain)
+            }
+            .padding(20)
+            .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
+
+            NotebookScopePicker(files: scopeFiles, isLoading: scopeLoading, selectedFileIds: selectedFileIds) { selectedFileIds = $0 }
+
+            HStack {
                 Spacer()
                 PillButton(title: "Done", action: { isChoosingScope = false })
-            }.padding(18)
-            Rectangle().fill(theme.divider).frame(height: 1)
-            NotebookScopePicker(files: scopeFiles, isLoading: scopeLoading, selectedFileIds: selectedFileIds) { selectedFileIds = $0 }
-                .frame(minHeight: 320)
+            }
+            .padding(20)
+            .overlay(alignment: .top) { Rectangle().fill(theme.divider).frame(height: 1) }
+            .background(theme.background)
         }
-        .frame(width: 520, height: 480)
+        .frame(width: 540, height: 560)
         .background(theme.surface)
         .environment(\.theme, theme)
     }

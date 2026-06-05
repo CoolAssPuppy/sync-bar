@@ -385,11 +385,11 @@ struct SyncEditorView: View {
 
     private var rulesStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("RULES", "what to keep out of each side")
+            stepLabel("FILTER", "leave some tasks out")
             VStack(alignment: .leading, spacing: 0) {
                 if !exclusionChoices.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Keep these Notion statuses out of Reminders")
+                        Text("Don't put Notion tasks in Reminders when their status is:")
                             .font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
                             ForEach(exclusionChoices, id: \.self) { status in

@@ -68,7 +68,7 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel(text: "Source")
             ConnectionCard(
-                icon: { reMarkableMark },
+                icon: { AnyView(SourceMark(size: 38)) },
                 title: "reMarkable",
                 subtitle: sourceSubtitle,
                 status: sourceStatus,
@@ -80,19 +80,6 @@ struct ConnectionsView: View {
                 }
             )
         }
-    }
-
-    private var reMarkableMark: AnyView {
-        AnyView(
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.cardInset)
-                Image(systemName: "rectangle.portrait.on.rectangle.portrait")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(theme.primary)
-            }
-            .frame(width: 38, height: 38)
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        )
     }
 
     private var sourceSubtitle: String {
@@ -141,8 +128,9 @@ struct ConnectionsView: View {
             }
             ForEach(ledger.markdownTargets) { target in
                 appCard(kind: .markdownFolder, name: target.displayName,
-                        subtitle: (target.folderPath as NSString).abbreviatingWithTildeInPath,
-                        matches: { if case .markdownFolder(let c) = $0 { return c.folderPath == target.folderPath }; return false },
+                        subtitle: target.folderPath.isEmpty ? "Local Markdown files"
+                            : (target.folderPath as NSString).abbreviatingWithTildeInPath,
+                        matches: { if case .markdownFolder = $0 { return true }; return false },
                         rename: nil, reconnect: nil,
                         disconnect: { ledger.removeMarkdownTarget(id: target.id) })
             }

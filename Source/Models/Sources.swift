@@ -52,3 +52,58 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         }
     }
 }
+
+// MARK: - Per-source configuration payloads
+
+/// reMarkable source settings: which folder (and optional sub-selection of
+/// documents) to pull, plus the read/transcription knobs that used to live
+/// directly on `SyncRule`. The folder is the scope a rule targets; each
+/// document in it becomes one note.
+struct RemarkableSourceConfig: Codable, Equatable, Hashable {
+    var folderId: String              // was SyncRule.rmNotebookId
+    var folderName: String            // was SyncRule.rmNotebookName
+    /// Which documents in the folder to sync. `nil`/empty means the whole folder
+    /// (current and future documents); a non-empty set scopes to those file ids.
+    var selectedFileIds: [String]? = nil
+    var titleStrategy: TitleStrategy
+    var titleTemplate: String?
+    var pageOrder: PageOrder
+    var ocrMode: OcrMode
+    var ocrProviderOverride: OcrProviderChoice?
+    var savePdfAttachment: Bool
+}
+
+// MARK: - Polymorphic configuration
+
+/// The source half of a sync, mirroring `DestinationConfiguration`. One case per
+/// `SourceKind`. Adding a source means a new case here, a `SourceClient`, and a
+/// `SourceRouter` branch — the destination quartet's exact shape.
+enum SourceConfiguration: Codable, Equatable, Hashable {
+    case remarkable(RemarkableSourceConfig)
+
+    var kind: SourceKind {
+        switch self {
+        case .remarkable: return .remarkable
+        }
+    }
+
+    /// One-line description shown in rule rows, the menu bar popover, and the
+    /// activity log (replaces the old `rule.rmNotebookName` reads).
+    var summary: String {
+        switch self {
+        case .remarkable(let config): return config.folderName
+        }
+    }
+}
+
+// MARK: - Scope
+
+/// A targetable container within a source — a reMarkable folder today. Used by
+/// the "Choose a Source" picker and the folder/notebook chooser. Generalizes
+/// `RmFolder` for source-agnostic UI; `itemCount` is the number of syncable
+/// items (documents) inside.
+struct SourceScope: Identifiable, Equatable, Hashable {
+    var id: String
+    var name: String
+    var itemCount: Int
+}

@@ -278,6 +278,14 @@ final class SyncCoordinator: ObservableObject {
         let client = destinationClientFor(binding.kind)
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunStarted))
 
+        // Mirror destinations (Chrome with "exactly match") reconcile the whole
+        // set at once — add, update, and delete — rather than writing per item.
+        if client.reconciles(binding.configuration) {
+            await runReconcile(rule: rule, folderName: folderName, binding: binding,
+                               client: client, source: source, contents: contents)
+            return
+        }
+
         var notesSynced = 0
         var firstError: String?
         let runStart = Date()
@@ -351,6 +359,56 @@ final class SyncCoordinator: ObservableObject {
             postNotification(title: "Sync failed", body: "\(folderName) → \(binding.configuration.summary)")
         } else if firstError == nil, notesSynced > 0, self.settings.notifyOnSuccess {
             postNotification(title: "Sync complete", body: "\(folderName): \(Formatters.syncResultLabel(pageCount: notesSynced))")
+        }
+    }
+
+    /// Set-level mirror: hand the destination the full desired set and let it
+    /// add/update/delete to match. Used for "make Chrome exactly match Safari".
+    private func runReconcile(rule: SyncRule, folderName: String, binding: DestinationBinding,
+                              client: DestinationClient, source: SourceClient,
+                              contents: [(item: SourceItem, content: NoteContent)]) async {
+        let runStart = Date()
+        let payloads: [DestinationPayload] = contents
+            .filter { binding.accepts(fileTags: $0.item.tags) }
+            .map { entry in
+                let title = source.resolveTitle(for: entry.item, content: entry.content,
+                                                config: rule.source, strategyOverride: binding.titleStrategyOverride)
+                return DestinationPayload(
+                    title: title, body: entry.content.markdownBody, blocks: entry.content.blocks,
+                    mermaidSource: entry.content.firstMermaid, sourceDate: entry.item.createdAt,
+                    pdfData: nil, ocrProvider: entry.content.provider, ruleNotebookName: entry.item.name,
+                    folderName: folderName, pageNumber: 1, url: entry.item.url, folderPath: entry.item.folderPath
+                )
+            }
+
+        var status: RuleRunStatus = .success
+        var firstError: String?
+        var changed = 0
+        do {
+            let result = try await client.reconcile(desired: payloads, configuration: binding.configuration)
+            changed = result.added + result.updated + result.deleted
+            ledger.appendEvent(makeEvent(
+                rule: rule, binding: binding, folderName: folderName, type: .pageSynced,
+                noteName: "Mirrored: +\(result.added) ~\(result.updated) −\(result.deleted)",
+                durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)))
+        } catch {
+            firstError = Formatters.userMessage(for: error)
+            status = .error
+            ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName,
+                                         type: .pageFailed, errorMessage: firstError))
+        }
+
+        ledger.updateBindingRunResult(ruleId: rule.id, bindingId: binding.id,
+                                      status: status, pagesSynced: changed, runAt: Date(), error: firstError)
+        ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName,
+                                     type: .ruleRunCompleted, durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)))
+        Telemetry.capture("destination.synced", properties: [
+            "provider": binding.kind.rawValue, "notes_synced": changed, "status": status.rawValue, "mode": "mirror"
+        ])
+        if firstError != nil, self.settings.notifyOnFailure {
+            postNotification(title: "Sync failed", body: "\(folderName) → \(binding.configuration.summary)")
+        } else if firstError == nil, changed > 0, self.settings.notifyOnSuccess {
+            postNotification(title: "Sync complete", body: "\(folderName): mirrored to \(binding.configuration.summary)")
         }
     }
 

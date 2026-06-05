@@ -187,6 +187,24 @@ struct MarkdownFolderDestinationConfig: Codable, Equatable, Hashable {
 struct ChromeDestinationConfig: Codable, Equatable, Hashable {
     var profileDirName: String      // Chrome profile directory, e.g. "Default"
     var targetFolderPath: [String]  // Chrome folder to write into, e.g. ["Bookmarks Bar", "From Safari"]
+    /// When true, make Chrome exactly match the source (add, update titles, and
+    /// delete bookmarks that aren't in the source) within the mirrored roots.
+    /// When false, only add/update — never delete (the safe additive default).
+    var mirrorExactly: Bool = false
+
+    init(profileDirName: String, targetFolderPath: [String], mirrorExactly: Bool = false) {
+        self.profileDirName = profileDirName
+        self.targetFolderPath = targetFolderPath
+        self.mirrorExactly = mirrorExactly
+    }
+
+    // Tolerate configs persisted before `mirrorExactly` existed.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        profileDirName = try c.decode(String.self, forKey: .profileDirName)
+        targetFolderPath = try c.decode([String].self, forKey: .targetFolderPath)
+        mirrorExactly = try c.decodeIfPresent(Bool.self, forKey: .mirrorExactly) ?? false
+    }
 }
 
 // MARK: - Polymorphic configuration

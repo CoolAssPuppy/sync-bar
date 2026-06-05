@@ -104,6 +104,58 @@ final class ChromeBookmarkDestinationClientTests: XCTestCase {
         XCTAssertNil(store.guid(forURL: "https://a.com", inFolderPath: ["Bookmarks Bar", "From Safari"]))
     }
 
+    // MARK: Reconcile (mirror)
+
+    func test_reconcile_makes_chrome_match_safari_when_quit() async throws {
+        // Chrome already has a stale bookmark in the bar that Safari doesn't have.
+        let root: [String: Any] = [
+            "version": 1, "checksum": "x",
+            "roots": [
+                "bookmark_bar": ["type": "folder", "name": "Bookmarks bar", "id": "1", "children": [
+                    ["type": "url", "name": "Stale", "url": "https://stale.com", "id": "5", "guid": "g5"]
+                ]],
+                "other": ["type": "folder", "name": "Other", "id": "2", "children": []],
+                "synced": ["type": "folder", "name": "Mobile", "id": "3", "children": []]
+            ]
+        ]
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("chrome-rec-\(UUID().uuidString).json")
+        try JSONSerialization.data(withJSONObject: root).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let client = ChromeBookmarkDestinationClient(bookmarksURLOverride: file, chromeRunningOverride: false)
+        let cfg = DestinationConfiguration.chrome(ChromeDestinationConfig(
+            profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"], mirrorExactly: true))
+        XCTAssertTrue(client.reconciles(cfg))
+
+        var keep = payload("https://a.com", title: "A")
+        keep.folderPath = ["Bookmarks Bar"]
+        let result = try await client.reconcile(desired: [keep], configuration: cfg)
+
+        XCTAssertEqual(result.added, 1)
+        XCTAssertEqual(result.deleted, 1, "the stale bookmark not in Safari is removed")
+
+        let store = try ChromeBookmarksStore(data: try Data(contentsOf: file))
+        XCTAssertNotNil(store.guid(forURL: "https://a.com", inFolderPath: ["Bookmarks Bar"]))
+        XCTAssertNil(store.guid(forURL: "https://stale.com", inFolderPath: ["Bookmarks Bar"]))
+    }
+
+    func test_reconcile_refuses_when_chrome_running() async throws {
+        let file = try writeChromeFixture()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let client = ChromeBookmarkDestinationClient(bookmarksURLOverride: file, chromeRunningOverride: true)
+        let cfg = DestinationConfiguration.chrome(ChromeDestinationConfig(
+            profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"], mirrorExactly: true))
+        do {
+            _ = try await client.reconcile(desired: [], configuration: cfg)
+            XCTFail("reconcile (with deletes) must refuse while Chrome is running")
+        } catch { /* expected */ }
+    }
+
+    func test_default_config_does_not_reconcile() {
+        let client = ChromeBookmarkDestinationClient()
+        XCTAssertFalse(client.reconciles(config(["Bookmarks Bar"])), "mirror is off by default")
+    }
+
     func test_applescript_source_finds_or_creates_nested_folders() {
         let source = ChromeBookmarkDestinationClient.appleScriptSource(
             title: "T", url: "https://t.com", folderPath: ["Other", "Imported", "Deep"])

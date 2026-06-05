@@ -67,6 +67,47 @@ final class ChromeBookmarksStoreTests: XCTestCase {
         XCTAssertNotNil(store.guid(forURL: "https://nested.com", inFolderPath: ["Bookmarks Bar", "From Safari"]))
     }
 
+    func test_mirror_updates_adds_deletes_and_prunes_within_managed_roots() throws {
+        let root: [String: Any] = [
+            "version": 1, "checksum": "x",
+            "roots": [
+                "bookmark_bar": ["type": "folder", "name": "Bookmarks bar", "id": "1", "children": [
+                    ["type": "url", "name": "Apple OLD", "url": "https://apple.com", "id": "5", "guid": "g5"],
+                    ["type": "url", "name": "Stale", "url": "https://stale.com", "id": "6", "guid": "g6"],
+                    ["type": "folder", "name": "Old", "id": "7", "children": [
+                        ["type": "url", "name": "X", "url": "https://x.com", "id": "8", "guid": "g8"]
+                    ]]
+                ]],
+                // A Chrome-native bookmark in a root NOT referenced by desired must be left alone.
+                "other": ["type": "folder", "name": "Other", "id": "2", "children": [
+                    ["type": "url", "name": "Keep me", "url": "https://keep.com", "id": "9", "guid": "g9"]
+                ]],
+                "synced": ["type": "folder", "name": "Mobile", "id": "3", "children": []]
+            ]
+        ]
+        let store = try ChromeBookmarksStore(data: try JSONSerialization.data(withJSONObject: root))
+
+        let desired: [(path: [String], url: String, title: String)] = [
+            (["Bookmarks Bar"], "https://apple.com", "Apple"),                 // update title
+            (["Bookmarks Bar"], "https://new.com", "New"),                     // add
+            (["Bookmarks Bar", "Supabase"], "https://supabase.com", "Supabase") // add + create folder
+        ]
+        let counts = store.mirror(desired: desired)
+
+        XCTAssertEqual(counts.updated, 1, "Apple title")
+        XCTAssertEqual(counts.added, 2, "New + Supabase")
+        XCTAssertEqual(counts.deleted, 2, "Stale + Old/X")
+
+        XCTAssertEqual(store.guid(forURL: "https://apple.com", inFolderPath: ["Bookmarks Bar"]), "g5",
+                       "matched bookmark keeps its guid (title updated in place)")
+        XCTAssertNil(store.guid(forURL: "https://stale.com", inFolderPath: ["Bookmarks Bar"]))
+        XCTAssertNil(store.guid(forURL: "https://x.com", inFolderPath: ["Bookmarks Bar", "Old"]), "emptied folder pruned")
+        XCTAssertNotNil(store.guid(forURL: "https://new.com", inFolderPath: ["Bookmarks Bar"]))
+        XCTAssertNotNil(store.guid(forURL: "https://supabase.com", inFolderPath: ["Bookmarks Bar", "Supabase"]))
+        // The "other" root wasn't in desired → its native bookmark is untouched.
+        XCTAssertEqual(store.guid(forURL: "https://keep.com", inFolderPath: ["Other"]), "g9")
+    }
+
     func test_serialized_round_trips_and_recomputes_checksum() throws {
         let store = try ChromeBookmarksStore(data: fixtureData())
         _ = try store.addBookmark(name: "New", url: "https://new.com", folderPath: ["Bookmarks Bar"])

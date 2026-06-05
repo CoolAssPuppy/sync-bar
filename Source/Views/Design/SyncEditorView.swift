@@ -64,6 +64,7 @@ struct SyncEditorView: View {
     @State private var localAppleNotes = AppleNotesFormState()
     @State private var localMarkdown = MarkdownFormState()
     @State private var chromeTargetFolder: String = "From Safari"
+    @State private var chromeMirrorExactly = false
     // How
     @State private var titleStrategy: TitleStrategy = .firstLineOfOcr
     @State private var ocrMode: OcrMode = .all
@@ -276,6 +277,14 @@ struct SyncEditorView: View {
             if sourceKind == .safari {
                 Text("Your Safari folders are mirrored into Chrome — Favorites into Chrome's Bookmarks Bar, Bookmarks Menu into Other Bookmarks, with subfolders recreated.")
                     .font(.system(size: 12)).foregroundStyle(theme.muted)
+                Toggle(isOn: $chromeMirrorExactly) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Make Chrome exactly match Safari").font(.system(size: 12.5, weight: .medium))
+                        Text("Updates titles and deletes Chrome bookmarks that aren't in Safari (Bookmarks Bar + Other Bookmarks). Off = only add/update.")
+                            .font(.system(size: 11)).foregroundStyle(theme.tertiary)
+                    }
+                }
+                .toggleStyle(.switch).tint(theme.primary)
             } else {
                 Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
                     .font(.system(size: 12)).foregroundStyle(theme.muted)
@@ -460,6 +469,7 @@ struct SyncEditorView: View {
         case .chrome(let cfg):
             toAccountId = ledger.chromeTargets.first?.id
             chromeTargetFolder = cfg.targetFolderPath.count > 1 ? (cfg.targetFolderPath.last ?? "") : ""
+            chromeMirrorExactly = cfg.mirrorExactly
         }
     }
 
@@ -524,7 +534,8 @@ struct SyncEditorView: View {
             let sub = chromeTargetFolder.trimmingCharacters(in: .whitespacesAndNewlines)
             return .chrome(ChromeDestinationConfig(
                 profileDirName: ledger.chromeTargets.first?.profileDirName ?? "Default",
-                targetFolderPath: sub.isEmpty ? ["Bookmarks Bar"] : ["Bookmarks Bar", sub]))
+                targetFolderPath: sub.isEmpty ? ["Bookmarks Bar"] : ["Bookmarks Bar", sub],
+                mirrorExactly: sourceKind == .safari ? chromeMirrorExactly : false))
         case .none: return nil
         }
     }

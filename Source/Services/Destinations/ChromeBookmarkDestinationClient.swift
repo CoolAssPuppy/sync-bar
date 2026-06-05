@@ -77,6 +77,37 @@ struct ChromeBookmarkDestinationClient: DestinationClient {
                                       notes: "Added to Chrome (\(config.profileDirName))")
     }
 
+    func reconciles(_ configuration: DestinationConfiguration) -> Bool {
+        if case .chrome(let config) = configuration { return config.mirrorExactly }
+        return false
+    }
+
+    /// Makes Chrome exactly match `desired` (add / update title / delete extras)
+    /// within the roots `desired` touches. Deleting needs the JSON file, so this
+    /// requires Chrome to be quit; the live AppleScript path can't do safe deletes.
+    func reconcile(desired: [DestinationPayload], configuration: DestinationConfiguration) async throws -> DestinationReconcileResult {
+        guard case .chrome(let config) = configuration else {
+            throw DestinationError.wrongConfiguration(expected: .chrome)
+        }
+        if chromeRunningOverride ?? Self.isChromeRunning() {
+            throw DestinationError.fileSystem("Quit Google Chrome to mirror bookmarks — matching it to Safari (including deletes) needs Chrome closed.")
+        }
+        let bookmarksURL = bookmarksURLOverride ?? Self.bookmarksFileURL(profileDirName: config.profileDirName)
+        guard let data = try? Data(contentsOf: bookmarksURL) else {
+            throw DestinationError.fileSystem("Couldn't read Chrome bookmarks for profile \"\(config.profileDirName)\". Is Chrome installed?")
+        }
+        let store = try ChromeBookmarksStore(data: data)
+        let items: [(path: [String], url: String, title: String)] = desired.compactMap { payload in
+            guard let url = payload.url else { return nil }
+            let path = payload.folderPath.isEmpty ? config.targetFolderPath : payload.folderPath
+            return (path, url.absoluteString, payload.title)
+        }
+        let counts = store.mirror(desired: items)
+        try Self.writeAtomically(try store.serialized(), to: bookmarksURL)
+        return DestinationReconcileResult(added: counts.added, updated: counts.updated,
+                                          deleted: counts.deleted, unchanged: counts.unchanged)
+    }
+
     // MARK: Helpers
 
     static func bookmarksFileURL(profileDirName: String) -> URL {

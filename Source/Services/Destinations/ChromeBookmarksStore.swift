@@ -73,6 +73,114 @@ final class ChromeBookmarksStore {
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
     }
 
+    // MARK: Reconcile (one-way mirror: make the managed roots match `desired`)
+
+    struct ReconcileCounts: Equatable {
+        var added = 0
+        var updated = 0
+        var deleted = 0
+        var unchanged = 0
+    }
+
+    /// Makes the Chrome roots referenced by `desired` exactly match it: update a
+    /// bookmark's title where the (folder, url) matches, delete url-nodes that
+    /// aren't desired, add the missing ones, and prune folders left empty. Only
+    /// the roots present in `desired` are touched — others are left alone.
+    func mirror(desired: [(path: [String], url: String, title: String)]) -> ReconcileCounts {
+        var counts = ReconcileCounts()
+        var desiredByRoot: [String: [String: String]] = [:]   // rootKey -> "subpath\u{2}url" -> title
+        var managedRootKeys: [String] = []
+        for entry in desired {
+            guard let rootName = entry.path.first else { continue }
+            let rootKey = Self.rootKey(for: rootName)
+            if !managedRootKeys.contains(rootKey) { managedRootKeys.append(rootKey) }
+            let sub = Array(entry.path.dropFirst()).joined(separator: "\u{1}")
+            desiredByRoot[rootKey, default: [:]][sub + "\u{2}" + entry.url] = entry.title
+        }
+        guard let roots = root["roots"] as? NSMutableDictionary else { return counts }
+
+        for rootKey in managedRootKeys {
+            guard let rootNode = roots[rootKey] as? NSMutableDictionary else { continue }
+            let wanted = desiredByRoot[rootKey] ?? [:]
+            var seen = Set<String>()
+            reconcileFolder(rootNode, subPath: [], wanted: wanted, seen: &seen, counts: &counts)
+            for (key, title) in wanted where !seen.contains(key) {
+                let parts = key.components(separatedBy: "\u{2}")
+                let sub = parts.first ?? ""
+                let url = parts.count > 1 ? parts[1] : ""
+                let subPath = sub.isEmpty ? [] : sub.components(separatedBy: "\u{1}")
+                if let folder = folderUnderRoot(rootKey: rootKey, subPath: subPath, create: true) {
+                    addBookmarkNode(name: title, url: url, to: folder)
+                    counts.added += 1
+                }
+            }
+            pruneEmptyFolders(rootNode)
+        }
+        return counts
+    }
+
+    private func reconcileFolder(_ folder: NSMutableDictionary, subPath: [String],
+                                 wanted: [String: String], seen: inout Set<String>, counts: inout ReconcileCounts) {
+        let children = childrenArray(of: folder)
+        let subKey = subPath.joined(separator: "\u{1}")
+        var deleteIndexes: [Int] = []
+        for (index, raw) in children.enumerated() {
+            guard let node = raw as? NSMutableDictionary else { continue }
+            switch node["type"] as? String {
+            case "url":
+                let url = node["url"] as? String ?? ""
+                let key = subKey + "\u{2}" + url
+                if let title = wanted[key] {
+                    seen.insert(key)
+                    if (node["name"] as? String) != title { node["name"] = title; counts.updated += 1 }
+                    else { counts.unchanged += 1 }
+                } else {
+                    deleteIndexes.append(index)
+                    counts.deleted += 1
+                }
+            case "folder":
+                let name = node["name"] as? String ?? ""
+                reconcileFolder(node, subPath: subPath + [name], wanted: wanted, seen: &seen, counts: &counts)
+            default:
+                break
+            }
+        }
+        for index in deleteIndexes.reversed() { children.removeObject(at: index) }
+    }
+
+    private func folderUnderRoot(rootKey: String, subPath: [String], create: Bool) -> NSMutableDictionary? {
+        guard let roots = root["roots"] as? NSMutableDictionary,
+              var current = roots[rootKey] as? NSMutableDictionary else { return nil }
+        for name in subPath {
+            guard let next = childFolder(named: name, in: current, create: create) else { return nil }
+            current = next
+        }
+        return current
+    }
+
+    private func addBookmarkNode(name: String, url: String, to folder: NSMutableDictionary) {
+        let node: NSMutableDictionary = [
+            "type": "url", "name": name, "url": url,
+            "guid": UUID().uuidString.lowercased(), "id": String(nextId()),
+            "date_added": Self.chromeTimestamp(Date())
+        ]
+        childrenArray(of: folder).add(node)
+    }
+
+    /// Removes folders left with no children, recursively. Keeps the passed-in
+    /// root node; returns whether it ended up empty.
+    @discardableResult
+    private func pruneEmptyFolders(_ folder: NSMutableDictionary) -> Bool {
+        let children = childrenArray(of: folder)
+        var removeIndexes: [Int] = []
+        for (index, raw) in children.enumerated() {
+            guard let node = raw as? NSMutableDictionary, (node["type"] as? String) == "folder" else { continue }
+            if pruneEmptyFolders(node) { removeIndexes.append(index) }
+        }
+        for index in removeIndexes.reversed() { children.removeObject(at: index) }
+        return children.count == 0
+    }
+
     // MARK: Folder navigation
 
     /// Resolves a folder path. The first component selects a Chrome root

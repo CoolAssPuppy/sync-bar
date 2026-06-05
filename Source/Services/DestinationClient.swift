@@ -40,6 +40,14 @@ struct DestinationWriteResult: Sendable {
     var notes: String?
 }
 
+/// Outcome of a set-level reconcile (mirror). Counts what changed.
+struct DestinationReconcileResult: Sendable {
+    var added: Int = 0
+    var updated: Int = 0
+    var deleted: Int = 0
+    var unchanged: Int = 0
+}
+
 protocol DestinationClient: Sendable {
     var kind: DestinationKind { get }
     /// Writes one note to the destination. When `existingExternalId` is non-nil,
@@ -47,6 +55,22 @@ protocol DestinationClient: Sendable {
     /// page, Google doc, Linear issue, Apple Notes note, or Markdown file) rather
     /// than created anew. Clients fall back to creating if the prior note is gone.
     func write(payload: DestinationPayload, configuration: DestinationConfiguration, existingExternalId: String?) async throws -> DestinationWriteResult
+
+    /// Whether this destination should reconcile the full desired set (mirror,
+    /// including deletes) for the given configuration, instead of per-item writes.
+    func reconciles(_ configuration: DestinationConfiguration) -> Bool
+
+    /// Makes the destination exactly match `desired` — add missing, update
+    /// changed, delete extras (within the managed scope). Only called when
+    /// `reconciles(_:)` is true.
+    func reconcile(desired: [DestinationPayload], configuration: DestinationConfiguration) async throws -> DestinationReconcileResult
+}
+
+extension DestinationClient {
+    func reconciles(_ configuration: DestinationConfiguration) -> Bool { false }
+    func reconcile(desired: [DestinationPayload], configuration: DestinationConfiguration) async throws -> DestinationReconcileResult {
+        throw DestinationError.scriptFailed("This destination doesn't support mirroring.")
+    }
 }
 
 /// Errors raised by destination clients. Each case is destination-domain

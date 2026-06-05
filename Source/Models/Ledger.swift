@@ -23,7 +23,11 @@ final class Ledger: ObservableObject {
     private static let googleAccountsKey    = "ledger.googleAccounts"
     private static let markdownTargetsKey   = "ledger.markdownTargets"
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
-    private static let rulesKey             = "ledger.rules"
+    /// Bumped to `.v2` for the genericized SyncRule shape (a polymorphic
+    /// `source: SourceConfiguration` instead of loose reMarkable fields). The old
+    /// `ledger.rules` key is intentionally abandoned — a clean break, so pre-v1
+    /// rules are simply not read rather than migrated.
+    private static let rulesKey             = "ledger.rules.v2"
     private static let eventsKey            = "ledger.events"
     private static let foldersKey         = "ledger.notebooks"
     private static let syncedPageHashesKey  = "ledger.syncedPageHashes"

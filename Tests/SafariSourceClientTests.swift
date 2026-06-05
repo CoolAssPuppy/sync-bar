@@ -47,7 +47,7 @@ final class SafariSourceClientTests: XCTestCase {
 
     // MARK: Scopes
 
-    func test_list_scopes_offers_all_and_each_folder_excluding_reading_list() async throws {
+    func test_list_scopes_uses_safari_names_and_excludes_reading_list() async throws {
         let (client, url) = try makeClient()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -55,17 +55,17 @@ final class SafariSourceClientTests: XCTestCase {
         let names = scopes.map(\.name)
 
         XCTAssertTrue(names.contains("All bookmarks"))
-        XCTAssertTrue(names.contains("Bookmarks Bar"))
-        XCTAssertTrue(names.contains("Bookmarks Bar / Dev"))
+        XCTAssertTrue(names.contains("Favorites"), "BookmarksBar shows as Safari's 'Favorites'")
+        XCTAssertTrue(names.contains("Favorites / Dev"))
         XCTAssertFalse(names.contains { $0.contains("ReadingList") }, "Reading List must not be a scope")
 
         let all = scopes.first { $0.id == SafariSourceConfig.allScopeId }
         XCTAssertEqual(all?.itemCount, 3, "All bookmarks counts the 3 leaves, not the reading-list item")
     }
 
-    // MARK: Items
+    // MARK: Items + folder paths (Chrome-root mapped)
 
-    func test_list_items_for_all_returns_every_bookmark_with_urls() async throws {
+    func test_list_items_for_all_carries_chrome_mapped_folder_paths() async throws {
         let (client, url) = try makeClient()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -73,13 +73,14 @@ final class SafariSourceClientTests: XCTestCase {
             SafariSourceConfig(folderId: SafariSourceConfig.allScopeId, folderName: "All bookmarks")))
 
         XCTAssertEqual(Set(items.map(\.id)), ["l1", "l2", "l3"])
+        // Favorites (BookmarksBar) maps to Chrome's "Bookmarks Bar"; nested folders verbatim.
+        XCTAssertEqual(items.first { $0.id == "l1" }?.folderPath, ["Bookmarks Bar"])
         XCTAssertEqual(items.first { $0.id == "l1" }?.url, URL(string: "https://apple.com"))
-        XCTAssertEqual(items.first { $0.id == "l1" }?.name, "Apple")
-        // Reading-list item is excluded.
-        XCTAssertFalse(items.contains { $0.id == "rl1" })
+        XCTAssertEqual(items.first { $0.id == "l3" }?.folderPath, ["Bookmarks Bar", "Dev"])
+        XCTAssertFalse(items.contains { $0.id == "rl1" }, "Reading List excluded")
     }
 
-    func test_list_items_scoped_to_a_subfolder() async throws {
+    func test_list_items_scoped_to_a_subfolder_keeps_its_mirrored_path() async throws {
         let (client, url) = try makeClient()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -88,6 +89,7 @@ final class SafariSourceClientTests: XCTestCase {
 
         XCTAssertEqual(items.map(\.id), ["l3"])
         XCTAssertEqual(items.first?.url, URL(string: "https://github.com"))
+        XCTAssertEqual(items.first?.folderPath, ["Bookmarks Bar", "Dev"])
     }
 
     func test_version_hash_changes_with_url_or_title() async throws {

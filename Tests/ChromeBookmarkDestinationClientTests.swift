@@ -50,6 +50,21 @@ final class ChromeBookmarkDestinationClientTests: XCTestCase {
         XCTAssertNotNil(store.guid(forURL: "https://a.com", inFolderPath: ["Bookmarks Bar", "From Safari"]))
     }
 
+    func test_payload_folder_path_mirrors_hierarchy_over_config_target() async throws {
+        let file = try writeChromeFixture()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let client = ChromeBookmarkDestinationClient(bookmarksURLOverride: file, chromeRunningOverride: false)
+
+        // The item carries its own mirrored path; it must win over the config target.
+        var payload = self.payload("https://s.com", title: "Supabase docs")
+        payload.folderPath = ["Bookmarks Bar", "Supabase"]
+        _ = try await client.write(payload: payload, configuration: config(["IGNORED"]), existingExternalId: nil)
+
+        let store = try ChromeBookmarksStore(data: try Data(contentsOf: file))
+        XCTAssertNotNil(store.guid(forURL: "https://s.com", inFolderPath: ["Bookmarks Bar", "Supabase"]))
+        XCTAssertNil(store.guid(forURL: "https://s.com", inFolderPath: ["IGNORED"]))
+    }
+
     func test_idempotent_second_write_creates_nothing() async throws {
         let file = try writeChromeFixture()
         defer { try? FileManager.default.removeItem(at: file) }

@@ -306,7 +306,8 @@ final class SyncCoordinator: ObservableObject {
                 ruleNotebookName: item.name,
                 folderName: folderName,
                 pageNumber: 1,
-                url: item.url
+                url: item.url,
+                folderPath: item.folderPath
             )
             do {
                 let existingId = ledger.syncedExternalId(bindingId: binding.id, pageId: item.id)

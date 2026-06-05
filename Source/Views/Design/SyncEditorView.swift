@@ -273,10 +273,15 @@ struct SyncEditorView: View {
 
     private var chromeForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
-                .font(.system(size: 12)).foregroundStyle(theme.muted)
-            TextField("From Safari", text: $chromeTargetFolder)
-                .textFieldStyle(.roundedBorder)
+            if sourceKind == .safari {
+                Text("Your Safari folders are mirrored into Chrome — Favorites into Chrome's Bookmarks Bar, Bookmarks Menu into Other Bookmarks, with subfolders recreated.")
+                    .font(.system(size: 12)).foregroundStyle(theme.muted)
+            } else {
+                Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
+                    .font(.system(size: 12)).foregroundStyle(theme.muted)
+                TextField("From Safari", text: $chromeTargetFolder)
+                    .textFieldStyle(.roundedBorder)
+            }
             Text("Chrome must be quit for the change to apply — otherwise it syncs next time Chrome is closed.")
                 .font(.system(size: 11)).foregroundStyle(theme.tertiary)
         }

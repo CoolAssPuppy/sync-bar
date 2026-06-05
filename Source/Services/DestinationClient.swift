@@ -26,6 +26,11 @@ struct DestinationPayload: Sendable {
     /// The source item's URL when it is a bookmark; nil for document sources.
     /// Browser-bookmark destinations write this; note destinations ignore it.
     var url: URL? = nil
+    /// The folder path the item should mirror into at the destination (e.g.
+    /// ["Bookmarks Bar", "Supabase"]). Browser-bookmark destinations honor this
+    /// to recreate the source hierarchy; empty means "use the destination's
+    /// configured target folder."
+    var folderPath: [String] = []
 }
 
 /// Outcome of writing one page to one destination.

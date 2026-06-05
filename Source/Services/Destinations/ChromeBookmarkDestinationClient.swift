@@ -43,8 +43,12 @@ struct ChromeBookmarkDestinationClient: DestinationClient {
         }
         let store = try ChromeBookmarksStore(data: data)
 
+        // Mirror the source's folder hierarchy when it provides one; otherwise
+        // fall back to the destination's configured target folder.
+        let targetPath = payload.folderPath.isEmpty ? config.targetFolderPath : payload.folderPath
+
         // Idempotent: already present in the target folder → nothing to write.
-        if let existing = store.guid(forURL: url.absoluteString, inFolderPath: config.targetFolderPath) {
+        if let existing = store.guid(forURL: url.absoluteString, inFolderPath: targetPath) {
             return DestinationWriteResult(externalId: existing, externalURL: url, notes: "Already in Chrome")
         }
 
@@ -54,20 +58,20 @@ struct ChromeBookmarkDestinationClient: DestinationClient {
         // URL-membership check creates the bookmark via the JSON path.
         if chromeRunningOverride ?? Self.isChromeRunning() {
             let source = Self.appleScriptSource(title: payload.title, url: url.absoluteString,
-                                                folderPath: config.targetFolderPath)
+                                                folderPath: targetPath)
             let runner = appleScriptRunner ?? { try Self.runAppleScript($0) }
             try await Task.detached(priority: .userInitiated) { try runner(source) }.value
             // Best-effort guid: Chrome may not have flushed the JSON yet, so fall
             // back to the URL as the external id (idempotency re-reads by URL anyway).
             let guid = (try? Data(contentsOf: bookmarksURL))
                 .flatMap { try? ChromeBookmarksStore(data: $0) }?
-                .guid(forURL: url.absoluteString, inFolderPath: config.targetFolderPath)
+                .guid(forURL: url.absoluteString, inFolderPath: targetPath)
             return DestinationWriteResult(externalId: guid ?? url.absoluteString, externalURL: url,
                                           notes: "Added to Chrome via AppleScript")
         }
 
         // Chrome is quit: the robust path — mutate the JSON and recompute the checksum.
-        let guid = try store.addBookmark(name: payload.title, url: url.absoluteString, folderPath: config.targetFolderPath)
+        let guid = try store.addBookmark(name: payload.title, url: url.absoluteString, folderPath: targetPath)
         try Self.writeAtomically(try store.serialized(), to: bookmarksURL)
         return DestinationWriteResult(externalId: guid, externalURL: url,
                                       notes: "Added to Chrome (\(config.profileDirName))")

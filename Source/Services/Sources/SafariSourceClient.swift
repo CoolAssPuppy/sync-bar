@@ -8,9 +8,10 @@
 import Foundation
 
 /// The second `SourceClient`: Safari bookmarks (read-only). Reads
-/// `~/Library/Safari/Bookmarks.plist` via `SafariBookmarkReader` and presents
-/// folders as scopes and bookmarks as items. There is no document content and
-/// no OCR; a bookmark's payload is just its URL + title.
+/// `~/Library/Safari/Bookmarks.plist` via `SafariBookmarkReader`. Each bookmark
+/// carries its folder path, mapped to Chrome's roots (Safari Favorites →
+/// Bookmarks Bar, Bookmarks Menu → Other Bookmarks), so a browser destination
+/// can mirror the hierarchy rather than flatten it.
 struct SafariSourceClient: SourceClient {
     let kind: SourceKind = .safari
 
@@ -40,32 +41,37 @@ struct SafariSourceClient: SourceClient {
             throw SourceError.wrongConfiguration(expected: .safari)
         }
         let root = try readRoot()
-        let scopeNode = (cfg.folderId == SafariSourceConfig.allScopeId)
-            ? root
-            : findFolder(under: root, uuid: cfg.folderId)
-        guard let scopeNode else { return [] }
+        let all = leavesWithChromePaths(root: root, includeReadingList: cfg.includeReadingList)
 
-        return leaves(under: scopeNode, includeReadingList: cfg.includeReadingList).compactMap { leaf in
-            guard case .leaf(let url) = leaf.kind else { return nil }
+        let chosen: [(leaf: SafariBookmarkNode, path: [String])]
+        if cfg.folderId == SafariSourceConfig.allScopeId {
+            chosen = all
+        } else if let scope = findFolder(under: root, uuid: cfg.folderId) {
+            let inScope = Set(leaves(under: scope, includeReadingList: cfg.includeReadingList).map(\.uuid))
+            chosen = all.filter { inScope.contains($0.leaf.uuid) }
+        } else {
+            chosen = []
+        }
+
+        return chosen.compactMap { entry in
+            guard case .leaf(let url) = entry.leaf.kind else { return nil }
             return SourceItem(
-                id: leaf.uuid,
-                name: leaf.title,
-                // A change to either the URL or the title re-syncs the bookmark.
-                versionHash: "\(url)\u{1}\(leaf.title)",
-                createdAt: .distantPast,   // Safari leaves carry no reliable date
+                id: entry.leaf.uuid,
+                name: entry.leaf.title,
+                // A change to the URL, title, or folder location re-syncs.
+                versionHash: "\(url)\u{1}\(entry.leaf.title)\u{1}\(entry.path.joined(separator: "/"))",
+                createdAt: .distantPast,
                 tags: [],
-                url: URL(string: url)
+                url: URL(string: url),
+                folderPath: entry.path
             )
         }
     }
 
-    /// A bookmark has no document content; the URL travels on the SourceItem.
     func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent {
         NoteContent(blocks: [])
     }
 
-    /// reMarkable title strategies don't apply; use the bookmark's own title,
-    /// falling back to its host.
     func resolveTitle(for item: SourceItem,
                       content: NoteContent,
                       config: SourceConfiguration,
@@ -74,7 +80,6 @@ struct SafariSourceClient: SourceClient {
         return item.url?.host ?? item.url?.absoluteString ?? "Untitled bookmark"
     }
 
-    /// A bookmark is never "empty".
     func shouldSkipAsEmpty(content: NoteContent,
                            config: SourceConfiguration,
                            ocrModeOverride: OcrMode?) -> Bool {
@@ -91,17 +96,45 @@ struct SafariSourceClient: SourceClient {
         }
     }
 
-    /// Every leaf bookmark under a node, recursively. The Reading List subtree
-    /// is excluded unless `includeReadingList`.
+    /// Every leaf bookmark in the tree paired with the Chrome folder path it
+    /// should mirror into: the top-level Safari list mapped to a Chrome root
+    /// (Favorites → "Bookmarks Bar", Bookmarks Menu → "Other Bookmarks"), then
+    /// the nested user folders verbatim. Special Apple lists (Reading List, Tab
+    /// Group Favorites, …) are skipped.
+    private func leavesWithChromePaths(root: SafariBookmarkNode,
+                                       includeReadingList: Bool) -> [(leaf: SafariBookmarkNode, path: [String])] {
+        var out: [(SafariBookmarkNode, [String])] = []
+        func walk(_ node: SafariBookmarkNode, path: [String]) {
+            for child in node.children {
+                switch child.kind {
+                case .leaf:
+                    out.append((child, path))
+                case .folder:
+                    walk(child, path: path + [child.title])
+                }
+            }
+        }
+        for top in root.children {
+            switch top.kind {
+            case .leaf:
+                out.append((top, []))                       // a bare URL at the root (rare)
+            case .folder:
+                if isExcludedTopLevel(top, includeReadingList: includeReadingList) { continue }
+                walk(top, path: [Self.chromeRootName(top.title)])
+            }
+        }
+        return out
+    }
+
+    /// Every leaf under a node, recursively (for scope item counts and filtering).
     private func leaves(under node: SafariBookmarkNode, includeReadingList: Bool) -> [SafariBookmarkNode] {
         var out: [SafariBookmarkNode] = []
         func walk(_ n: SafariBookmarkNode) {
             for child in n.children {
                 switch child.kind {
-                case .leaf:
-                    out.append(child)
+                case .leaf:   out.append(child)
                 case .folder:
-                    if child.isReadingList && !includeReadingList { continue }
+                    if isExcludedTopLevel(child, includeReadingList: includeReadingList) { continue }
                     walk(child)
                 }
             }
@@ -110,19 +143,20 @@ struct SafariSourceClient: SourceClient {
         return out
     }
 
-    /// Every folder under a node, recursively, with a " / "-joined path name.
-    /// The Reading List subtree is skipped.
+    /// User-selectable folders, with a Safari-facing path name (so the dropdown
+    /// reads "Favorites" / "Bookmarks Menu" like Safari shows). Special lists skipped.
     private func folders(under root: SafariBookmarkNode) -> [(node: SafariBookmarkNode, name: String)] {
         var out: [(node: SafariBookmarkNode, name: String)] = []
-        func walk(_ node: SafariBookmarkNode, prefix: [String]) {
+        func walk(_ node: SafariBookmarkNode, prefix: [String], topLevel: Bool) {
             for child in node.children where child.kind == .folder {
-                if child.isReadingList { continue }
-                let path = prefix + [Self.displayName(child.title)]
+                if isExcludedTopLevel(child, includeReadingList: false) { continue }
+                let display = topLevel ? Self.safariUIName(child.title) : child.title
+                let path = prefix + [display]
                 out.append((child, path.joined(separator: " / ")))
-                walk(child, prefix: path)
+                walk(child, prefix: path, topLevel: false)
             }
         }
-        walk(root, prefix: [])
+        walk(root, prefix: [], topLevel: true)
         return out
     }
 
@@ -134,11 +168,27 @@ struct SafariSourceClient: SourceClient {
         return nil
     }
 
-    /// Maps Safari's internal folder names to user-facing ones.
-    static func displayName(_ title: String) -> String {
+    /// Skips Apple's special lists (Reading List, Tab Group Favorites, …), which
+    /// aren't real bookmark folders. Reading List is kept only when opted in.
+    private func isExcludedTopLevel(_ node: SafariBookmarkNode, includeReadingList: Bool) -> Bool {
+        if node.title == "com.apple.ReadingList" { return !includeReadingList }
+        return node.title.hasPrefix("com.apple.")
+    }
+
+    /// Safari's own UI names for its two top-level lists (for the scope picker).
+    static func safariUIName(_ title: String) -> String {
+        switch title {
+        case "BookmarksBar":  return "Favorites"
+        case "BookmarksMenu": return "Bookmarks Menu"
+        default:              return title
+        }
+    }
+
+    /// The Chrome root a Safari top-level list mirrors into.
+    static func chromeRootName(_ title: String) -> String {
         switch title {
         case "BookmarksBar":  return "Bookmarks Bar"
-        case "BookmarksMenu": return "Bookmarks Menu"
+        case "BookmarksMenu": return "Other Bookmarks"
         default:              return title
         }
     }

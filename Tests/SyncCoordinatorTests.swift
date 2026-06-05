@@ -254,7 +254,8 @@ final class SyncCoordinatorTests: XCTestCase {
 
         let spy = SpyDestinationClient()
         let source = StubBookmarkSource(items: [
-            SourceItem(id: "b1", name: "Apple", versionHash: "h1", createdAt: .distantPast, url: URL(string: "https://apple.com"))
+            SourceItem(id: "b1", name: "Apple", versionHash: "h1", createdAt: .distantPast,
+                       url: URL(string: "https://apple.com"), folderPath: ["Bookmarks Bar", "Supabase"])
         ])
         let coordinator = SyncCoordinator(sourceClient: { _ in source }, destinationClient: { _ in spy })
 
@@ -262,6 +263,7 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(binding?.lastRunPagesSynced, 1)
         XCTAssertEqual(spy.lastPayload?.url, URL(string: "https://apple.com"))
         XCTAssertEqual(spy.lastPayload?.title, "Apple")
+        XCTAssertEqual(spy.lastPayload?.folderPath, ["Bookmarks Bar", "Supabase"], "folder path mirrors through")
 
         ledger.deleteRule(id: rule.id)
     }

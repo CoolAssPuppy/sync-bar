@@ -22,6 +22,10 @@ struct SourceItem: Sendable, Equatable, Hashable {
     /// Carried through to `DestinationPayload.url` so URL-shaped destinations
     /// (browser bookmarks) have something to write.
     var url: URL? = nil
+    /// The destination folder path this item should mirror into (a bookmark's
+    /// folder hierarchy, e.g. ["Bookmarks Bar", "Supabase"]). Empty for sources
+    /// with no hierarchy to preserve.
+    var folderPath: [String] = []
 }
 
 /// Errors raised by source clients. Source-domain (not destination/OCR domain)

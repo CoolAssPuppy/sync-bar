@@ -16,6 +16,9 @@ packages:
   PostHog:
     url: https://github.com/PostHog/posthog-ios
     from: "3.0.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "6.0.0"
 
 settings:
   base:
@@ -57,6 +60,8 @@ targets:
       - package: KeychainAccess
       - package: Sparkle
       - package: PostHog
+      - package: GRDB
+        product: GRDB
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBar

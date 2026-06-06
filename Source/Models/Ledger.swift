@@ -104,6 +104,16 @@ final class Ledger: ObservableObject {
     /// always starts on the real store.
     private var store: UserDefaults = Ledger.realStore()
 
+    /// SQLite-backed store for the event log + task-link baselines (the two
+    /// growing collections). nil only if the database can't be opened, in which
+    /// case those two fall back to UserDefaults. In-memory under XCTest.
+    private let db: SyncDatabase? = Ledger.makeDatabase()
+
+    private static func makeDatabase() -> SyncDatabase? {
+        let underTest = NSClassFromString("XCTestCase") != nil
+        return try? SyncDatabase(url: underTest ? nil : SyncDatabase.defaultURL())
+    }
+
     /// Whether the ledger is currently serving ephemeral demo data.
     @Published private(set) var isDemoMode = false
 
@@ -158,9 +168,7 @@ final class Ledger: ObservableObject {
         store.set(safariConnected, forKey: Self.safariConnectedKey)
         store.set(remindersConnected, forKey: Self.remindersConnectedKey)
         persist(value: taskSyncs, key: Self.taskSyncsKey)
-        persist(value: taskSyncState, key: Self.taskSyncStateKey)
         persist(value: rules, key: Self.rulesKey)
-        persist(value: events, key: Self.eventsKey)
         persist(value: folders, key: Self.foldersKey)
         persist(value: syncedPageHashes, key: Self.syncedPageHashesKey)
         persist(value: syncedExternalIds, key: Self.syncedExternalIdsKey)
@@ -310,7 +318,7 @@ final class Ledger: ObservableObject {
     func removeTaskSync(id: String) {
         guard taskSyncs.contains(where: { $0.id == id }) else { return }
         taskSyncs.removeAll { $0.id == id }
-        if taskSyncState.removeValue(forKey: id) != nil { persistTaskSyncState() }
+        if taskSyncState.removeValue(forKey: id) != nil, !isDemoMode { db?.setTaskLinks([], forSyncId: id) }
         persistTaskSyncs()
         NotificationCenter.default.post(name: .taskSyncsChanged, object: nil)
     }
@@ -342,7 +350,7 @@ final class Ledger: ObservableObject {
         } else {
             taskSyncState[id] = links
         }
-        persistTaskSyncState()
+        if !isDemoMode { db?.setTaskLinks(links, forSyncId: id) }
     }
 
     func upsertChromeTarget(_ target: ChromeTarget) {
@@ -579,7 +587,7 @@ final class Ledger: ObservableObject {
         taskSyncState = [:]
         persistSyncedHashes()
         persistSyncedExternalIds()
-        persistTaskSyncState()
+        if !isDemoMode { db?.deleteAllTaskLinks() }
     }
 
     /// Drops every page hash and external id recorded for the given bindings.
@@ -658,13 +666,13 @@ final class Ledger: ObservableObject {
         if events.count > Self.maxEventsRetained {
             events = Array(events.prefix(Self.maxEventsRetained))
         }
-        persistEvents()
+        if !isDemoMode { db?.insertEvent(event, keeping: Self.maxEventsRetained) }
         NotificationCenter.default.post(name: .eventsChanged, object: nil)
     }
 
     func clearEvents() {
         events = []
-        persistEvents()
+        if !isDemoMode { db?.deleteAllEvents() }
         NotificationCenter.default.post(name: .eventsChanged, object: nil)
     }
 
@@ -725,7 +733,6 @@ final class Ledger: ObservableObject {
         remindersConnected = defaults.bool(forKey: Self.remindersConnectedKey)
         taskSyncs         = decodeArray([TaskSync].self,        key: Self.taskSyncsKey,        defaults: defaults, decoder: decoder)
         rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
-        events            = decodeArray([SyncEvent].self,       key: Self.eventsKey,           defaults: defaults, decoder: decoder)
         folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)
 
         if let data = defaults.data(forKey: Self.syncedPageHashesKey),
@@ -736,12 +743,43 @@ final class Ledger: ObservableObject {
            let value = try? decoder.decode([String: String].self, from: data) {
             syncedExternalIds = value
         }
-        if let data = defaults.data(forKey: Self.taskSyncStateKey),
-           let value = try? decoder.decode([String: [TaskLink]].self, from: data) {
-            taskSyncState = value
+
+        // The event log + task-link baselines live in SQLite. Demo mode is
+        // ephemeral and in-memory (DemoData fills events). With no database, fall
+        // back to the legacy UserDefaults copies so the app still works.
+        if isDemoMode {
+            events = []
+            taskSyncState = [:]
+        } else if let db {
+            migrateLocalStoreToDatabaseIfNeeded(defaults: defaults, db: db)
+            events = db.recentEvents(limit: Self.maxEventsRetained)
+            taskSyncState = db.allTaskLinks()
+        } else {
+            events = decodeArray([SyncEvent].self, key: Self.eventsKey, defaults: defaults, decoder: decoder)
+            taskSyncState = (defaults.data(forKey: Self.taskSyncStateKey)
+                .flatMap { try? decoder.decode([String: [TaskLink]].self, from: $0) }) ?? [:]
         }
 
         stripLeakedTestData(defaults: defaults)
+    }
+
+    /// One-time move of the event log + task-link baselines out of UserDefaults
+    /// into SQLite, then clears the old keys so it never re-runs.
+    private func migrateLocalStoreToDatabaseIfNeeded(defaults: UserDefaults, db: SyncDatabase) {
+        let flag = "ledger.migratedToDatabase.v1"
+        guard !defaults.bool(forKey: flag) else { return }
+        let decoder = JSONDecoder()
+        if let data = defaults.data(forKey: Self.eventsKey),
+           let oldEvents = try? decoder.decode([SyncEvent].self, from: data), !oldEvents.isEmpty {
+            db.replaceAllEvents(oldEvents)
+        }
+        if let data = defaults.data(forKey: Self.taskSyncStateKey),
+           let oldLinks = try? decoder.decode([String: [TaskLink]].self, from: data) {
+            for (syncId, links) in oldLinks { db.setTaskLinks(links, forSyncId: syncId) }
+        }
+        defaults.removeObject(forKey: Self.eventsKey)
+        defaults.removeObject(forKey: Self.taskSyncStateKey)
+        defaults.set(true, forKey: flag)
     }
 
     /// One-time cleanup of placeholder "Test" rules and events that earlier
@@ -761,7 +799,7 @@ final class Ledger: ObservableObject {
         let cleanedEvents = events.filter { $0.rmNotebookName != "Test" }
         if cleanedEvents.count != events.count {
             events = cleanedEvents
-            persistEvents()
+            if !isDemoMode { db?.replaceAllEvents(events) }
         }
     }
 
@@ -800,10 +838,8 @@ final class Ledger: ObservableObject {
 
     private func persistRemarkable()    { persist(value: remarkableAccount, key: Self.remarkableAccountKey) }
     private func persistRules()         { persistDebounced({ [weak self] in self?.rules ?? [] }, key: Self.rulesKey) }
-    private func persistEvents()        { persistDebounced({ [weak self] in self?.events ?? [] }, key: Self.eventsKey) }
     private func persistFolders()     { persist(value: folders, key: Self.foldersKey) }
     private func persistSyncedHashes()  { persistDebounced({ [weak self] in self?.syncedPageHashes ?? [:] }, key: Self.syncedPageHashesKey) }
     private func persistSyncedExternalIds() { persistDebounced({ [weak self] in self?.syncedExternalIds ?? [:] }, key: Self.syncedExternalIdsKey) }
     private func persistTaskSyncs()     { persistDebounced({ [weak self] in self?.taskSyncs ?? [] }, key: Self.taskSyncsKey) }
-    private func persistTaskSyncState() { persistDebounced({ [weak self] in self?.taskSyncState ?? [:] }, key: Self.taskSyncStateKey) }
 }

@@ -22,9 +22,6 @@ struct RemoteTask: Equatable, Hashable, Sendable {
     var lastEditedTime: Date
     var archived: Bool
     var rawStatus: String? = nil
-    /// The row's category-column option name, for lane scoping. nil when the sync
-    /// has no category column or the row's column is empty (an uncategorized row).
-    var categoryValue: String? = nil
 }
 
 /// Which task tracker the Notion-side of a sync points at. Notion is the only

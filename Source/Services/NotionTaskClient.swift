@@ -92,9 +92,7 @@ struct RealNotionTaskClient: TaskProvider {
 
     func updatePage(pageId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws {
         var request = try makeRequest(url: "https://api.notion.com/v1/pages/\(pageId)", method: "PATCH")
-        // Don't re-stamp the category on updates: a PATCH omitting the column
-        // leaves it as-is, so a row deliberately moved to another lane stays there.
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": Self.properties(for: task, mapping: mapping, stampCategory: false)])
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": Self.properties(for: task, mapping: mapping)])
         let (data, response) = try await session.data(for: request)
         try Self.validate(response: response, data: data, context: "update task row")
     }
@@ -122,8 +120,7 @@ struct RealNotionTaskClient: TaskProvider {
             let lastEdited = parseDate(result["last_edited_time"]) ?? Date.distantPast
             let task = canonicalTask(fromProperties: props, mapping: mapping)
             return RemoteTask(id: id, task: task, lastEditedTime: lastEdited, archived: archived,
-                              rawStatus: statusName(props: props, mapping: mapping),
-                              categoryValue: categoryName(props: props, mapping: mapping))
+                              rawStatus: statusName(props: props, mapping: mapping))
         }
         let hasMore = root["has_more"] as? Bool ?? false
         let next = hasMore ? (root["next_cursor"] as? String) : nil
@@ -138,11 +135,13 @@ struct RealNotionTaskClient: TaskProvider {
         let notes = mapping.notesProperty.map { plainText(props[$0], key: "rich_text") }
         let isCompleted = completion(props: props, mapping: mapping)
         let priority = mapping.priorityProperty.flatMap { priorityBucket(named: optionName(props[$0])) }
+        let list = categoryName(props: props, mapping: mapping)
         return CanonicalTask(title: title,
                              due: due,
                              isCompleted: isCompleted,
                              notes: (notes?.isEmpty ?? true) ? nil : notes,
-                             priority: priority)
+                             priority: priority,
+                             list: list)
     }
 
     /// Normalizes a Notion select/status option to a Reminders priority bucket.
@@ -171,21 +170,15 @@ struct RealNotionTaskClient: TaskProvider {
             ?? (value["select"] as? [String: Any])?["name"] as? String
     }
 
-    /// The list-tag value on a row, for lane scoping. Reads whichever column type
-    /// holds the Reminders list name: select/status (one option), multi_select
-    /// (returns the configured list value when the row carries it, so equality
-    /// scoping matches), or rich_text. nil when the column is unmapped or empty.
+    /// The Reminders list name carried by a row's mapped "List" column. Reads
+    /// whichever column type holds it: select/status (the option), multi_select
+    /// (the first option), or rich_text. nil when the column is unmapped or empty.
     static func categoryName(props: [String: Any], mapping: TaskFieldMapping) -> String? {
         guard let name = mapping.categoryProperty, let value = props[name] as? [String: Any] else { return nil }
         if let option = (value["status"] as? [String: Any])?["name"] as? String { return option }
         if let option = (value["select"] as? [String: Any])?["name"] as? String { return option }
         if let multi = value["multi_select"] as? [[String: Any]] {
-            let names = multi.compactMap { $0["name"] as? String }
-            if let target = mapping.categoryValue,
-               let hit = names.first(where: { $0.caseInsensitiveCompare(target) == .orderedSame }) {
-                return hit
-            }
-            return names.first
+            return multi.compactMap { $0["name"] as? String }.first
         }
         if let runs = value["rich_text"] as? [[String: Any]] {
             let text = runs.compactMap { ($0["plain_text"] as? String) ?? ($0["text"] as? [String: Any])?["content"] as? String }.joined()
@@ -244,9 +237,9 @@ struct RealNotionTaskClient: TaskProvider {
 
     /// Builds the `properties` payload for a create/update from a task, shaped to
     /// each column's type via the mapping. A nil due clears the date; nil notes
-    /// clears the text; completion is shaped per `statusPropertyType`. The category
-    /// lane is stamped only on creates (`stampCategory`); updates leave it untouched.
-    static func properties(for task: CanonicalTask, mapping: TaskFieldMapping, stampCategory: Bool = true) -> [String: Any] {
+    /// clears the text; completion is shaped per `statusPropertyType`; the list
+    /// name fills the mapped "List" column.
+    static func properties(for task: CanonicalTask, mapping: TaskFieldMapping) -> [String: Any] {
         var properties: [String: Any] = [
             mapping.titleProperty: ["title": [["text": ["content": task.title]]]]
         ]
@@ -275,10 +268,11 @@ struct RealNotionTaskClient: TaskProvider {
             properties[priorityProperty] = [key: ["name": bucket]]
         }
 
-        // Stamp the Reminders list name into the mapped column on creates, shaped
-        // to the column type. Notion creates a select/multi-select option if it
-        // doesn't exist yet.
-        if stampCategory, let categoryProperty = mapping.categoryProperty, let value = mapping.categoryScope {
+        // Write the task's Reminders list name into the mapped column, shaped to
+        // the column type. List membership is bidirectional, so this writes on
+        // creates and updates alike. Notion creates a select/multi-select option
+        // if it doesn't exist yet. A nil list (no list column mapped) is skipped.
+        if let categoryProperty = mapping.categoryProperty, let value = task.list, !value.isEmpty {
             switch mapping.categoryPropertyType {
             case "multi_select": properties[categoryProperty] = ["multi_select": [["name": value]]]
             case "rich_text":    properties[categoryProperty] = ["rich_text": [["text": ["content": value]]]]

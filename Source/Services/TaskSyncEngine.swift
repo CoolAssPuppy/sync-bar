@@ -63,7 +63,6 @@ enum TaskSyncEngine {
                      notionRows: [RemoteTask],
                      links: [TaskLink],
                      rules: TaskSyncRules = TaskSyncRules(),
-                     categoryScope: String? = nil,
                      calendar: Calendar = .current) -> TaskSyncPlan {
         var plan = TaskSyncPlan()
 
@@ -73,15 +72,6 @@ enum TaskSyncEngine {
         func isExcluded(_ n: RemoteTask) -> Bool {
             guard let status = n.rawStatus else { return false }
             return excluded.contains(status)
-        }
-
-        // The category lane: when scoped, only rows carrying the lane value are
-        // candidates for pairing or import. This governs UNPAIRED rows only — an
-        // already-linked row that leaves the lane is left alone (never deleted),
-        // so a one-character category edit in Notion can't drop a reminder.
-        func inScope(_ n: RemoteTask) -> Bool {
-            guard let scope = categoryScope else { return true }
-            return n.categoryValue?.caseInsensitiveCompare(scope) == .orderedSame
         }
 
         let remindersById = Dictionary(reminders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -140,9 +130,7 @@ enum TaskSyncEngine {
 
         // 2) Pair / create the unpaired remainder.
         let unpairedReminders = reminders.filter { !linkedReminderIds.contains($0.id) }
-        // Out-of-lane unpaired rows are invisible: not paired, not imported, and
-        // (being unlinked) never deleted. In-lane rows behave exactly as before.
-        let unpairedNotion = notionRows.filter { !$0.archived && !linkedNotionIds.contains($0.id) && inScope($0) }
+        let unpairedNotion = notionRows.filter { !$0.archived && !linkedNotionIds.contains($0.id) }
         var claimedNotion = Set<String>()
 
         for r in unpairedReminders {
@@ -207,7 +195,11 @@ enum TaskSyncEngine {
         let priority = resolve(reminder.priority, notion.priority, baseline?.priority,
                                equal: { ($0 ?? "").caseInsensitiveCompare($1 ?? "") == .orderedSame },
                                reminderLater: reminderLater)
-        return CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes, priority: priority)
+        let list = resolve(reminder.list, notion.list, baseline?.list,
+                           equal: { ($0 ?? "").caseInsensitiveCompare($1 ?? "") == .orderedSame },
+                           reminderLater: reminderLater)
+        return CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes,
+                             priority: priority, list: list)
     }
 
     /// Resolves one field across the two sides and the optional baseline.

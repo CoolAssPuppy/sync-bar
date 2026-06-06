@@ -26,13 +26,21 @@ struct CanonicalTask: Codable, Equatable, Hashable, Sendable {
     /// Normalized priority: "High", "Medium", "Low", or nil. Apple Reminders has
     /// three levels; a Notion option that isn't one of these is left untouched.
     var priority: String?
+    /// The Reminders list this task lives in, by name. A first-class bidirectional
+    /// field: on the Reminders side it's the EKCalendar title; on the Notion side
+    /// it's the value of the mapped "List" column. Changing it on either side moves
+    /// the task to the matching list / rewrites the column. nil when the sync has
+    /// no list column mapped.
+    var list: String?
 
-    init(title: String, due: Date? = nil, isCompleted: Bool = false, notes: String? = nil, priority: String? = nil) {
+    init(title: String, due: Date? = nil, isCompleted: Bool = false, notes: String? = nil,
+         priority: String? = nil, list: String? = nil) {
         self.title = title
         self.due = due
         self.isCompleted = isCompleted
         self.notes = notes
         self.priority = priority
+        self.list = list
     }
 
     // MARK: Field-level comparison (used by the three-way merge)
@@ -59,12 +67,20 @@ struct CanonicalTask: Codable, Equatable, Hashable, Sendable {
     func samePriority(as other: CanonicalTask) -> Bool {
         (priority ?? "").caseInsensitiveCompare(other.priority ?? "") == .orderedSame
     }
+    /// List membership matches when both are absent or name the same list. A nil on
+    /// one side (sync has no list column) never forces a write, so unmapped syncs
+    /// are unaffected.
+    func sameList(as other: CanonicalTask) -> Bool {
+        guard let a = list, let b = other.list else { return true }
+        return a.caseInsensitiveCompare(b) == .orderedSame
+    }
 
     /// Whole-record field equality (day-granular due, trimmed title, nil-coalesced
     /// notes). Distinct from synthesized `==`, which is exact.
     func fieldsEqual(to other: CanonicalTask, calendar: Calendar = .current) -> Bool {
         sameTitle(as: other) && sameDue(as: other, calendar: calendar)
             && sameCompletion(as: other) && sameNotes(as: other) && samePriority(as: other)
+            && sameList(as: other)
     }
 
     /// First-sync pairing test: an unpaired Reminder and an unpaired Notion row
@@ -100,21 +116,13 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     /// Notion property that holds priority, and its type ("select" or "status").
     var priorityProperty: String?
     var priorityPropertyType: String?
-    /// The "List" mapping: the Notion column that carries this sync's Reminders
-    /// list name, its type (select / status / multi_select / rich_text), and the
-    /// value written — always the list name. When set, the name is stamped on new
-    /// rows and only rows carrying it are imported back (see `categoryScope`). All
-    /// nil means no list tagging — the sync owns the whole database, as before.
+    /// The "List" mapping: the Notion column that carries each task's Reminders
+    /// list name, and its type (select / status / multi_select / rich_text). The
+    /// value written is the task's own `list` (per row, not a constant), so one
+    /// database holds rows from every list, each tagged by its own. nil means no
+    /// list column is mapped.
     var categoryProperty: String?
     var categoryPropertyType: String?
-    var categoryValue: String?
-
-    /// The list value to scope on, or nil when no list column is configured.
-    /// Drives the inbound filter and the outbound stamp.
-    var categoryScope: String? {
-        guard categoryProperty != nil, let value = categoryValue, !value.isEmpty else { return nil }
-        return value
-    }
 
     init(titleProperty: String,
          dueDateProperty: String? = nil,
@@ -126,8 +134,7 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
          priorityProperty: String? = nil,
          priorityPropertyType: String? = nil,
          categoryProperty: String? = nil,
-         categoryPropertyType: String? = nil,
-         categoryValue: String? = nil) {
+         categoryPropertyType: String? = nil) {
         self.titleProperty = titleProperty
         self.dueDateProperty = dueDateProperty
         self.statusProperty = statusProperty
@@ -139,7 +146,6 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
         self.priorityPropertyType = priorityPropertyType
         self.categoryProperty = categoryProperty
         self.categoryPropertyType = categoryPropertyType
-        self.categoryValue = categoryValue
     }
 }
 

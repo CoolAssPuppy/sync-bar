@@ -150,59 +150,46 @@ final class NotionTaskClientTests: XCTestCase {
         XCTAssertNil(custom.priority)
     }
 
-    func test_category_lane_stamps_value_and_reads_option_name() {
+    func test_list_column_writes_and_reads_each_tasks_own_list() {
         let mapping = TaskFieldMapping(titleProperty: "Name",
-                                       categoryProperty: "Category", categoryPropertyType: "select",
-                                       categoryValue: "Personal")
+                                       categoryProperty: "Category", categoryPropertyType: "select")
 
-        // Outbound: the lane value is stamped on creates, omitted on updates (so a
-        // row moved to another lane isn't yanked back).
-        let onCreate = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
-        XCTAssertEqual(((onCreate["Category"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "Personal")
-        let onUpdate = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping, stampCategory: false)
-        XCTAssertNil(onUpdate["Category"], "updates leave the category column untouched")
+        // Outbound: each task writes its OWN list name into the mapped column, on
+        // creates and updates alike (list membership is bidirectional).
+        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", list: "Personal"), mapping: mapping)
+        XCTAssertEqual(((props["Category"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "Personal")
 
-        // Inbound: the row's category option name is surfaced for scoping.
+        // Inbound: the row's column value becomes the task's list.
         let row = RealNotionTaskClient.canonicalTask(
             fromProperties: ["Name": ["title": [["plain_text": "T"]]], "Category": ["select": ["name": "Work"]]],
             mapping: mapping)
-        XCTAssertEqual(row.title, "T", "category isn't a canonical task field")
-        XCTAssertEqual(RealNotionTaskClient.categoryName(
-            props: ["Category": ["select": ["name": "Work"]]], mapping: mapping), "Work")
+        XCTAssertEqual(row.list, "Work")
     }
 
-    func test_category_lane_supports_multi_select_and_text_columns() {
-        // Multi-select: the list name is written as one option, and a row counts as
-        // in-lane when its options contain that name (other tags may coexist).
+    func test_list_column_supports_multi_select_and_text() {
+        // Multi-select: the list name is written as one option; reading takes the
+        // first option as the list.
         let multi = TaskFieldMapping(titleProperty: "Name",
-                                     categoryProperty: "Tags", categoryPropertyType: "multi_select",
-                                     categoryValue: "Personal")
-        let multiProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: multi)
-        let written = (multiProps["Tags"] as? [String: Any])?["multi_select"] as? [[String: Any]]
-        XCTAssertEqual(written?.first?["name"] as? String, "Personal")
+                                     categoryProperty: "Tags", categoryPropertyType: "multi_select")
+        let multiProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", list: "Personal"), mapping: multi)
+        XCTAssertEqual(((multiProps["Tags"] as? [String: Any])?["multi_select"] as? [[String: Any]])?.first?["name"] as? String, "Personal")
         XCTAssertEqual(RealNotionTaskClient.categoryName(
-            props: ["Tags": ["multi_select": [["name": "Urgent"], ["name": "Personal"]]]], mapping: multi), "Personal",
-            "a row carrying the list name among its tags reads as in-lane")
-        XCTAssertNotEqual(RealNotionTaskClient.categoryName(
-            props: ["Tags": ["multi_select": [["name": "Urgent"]]]], mapping: multi), "Personal",
-            "a row without the list name does not read as Personal, so scoping excludes it")
+            props: ["Tags": ["multi_select": [["name": "Personal"], ["name": "Urgent"]]]], mapping: multi), "Personal")
 
         // Text: the list name goes over as rich_text and reads back verbatim.
         let text = TaskFieldMapping(titleProperty: "Name",
-                                    categoryProperty: "List", categoryPropertyType: "rich_text",
-                                    categoryValue: "Work")
-        let textProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: text)
+                                    categoryProperty: "List", categoryPropertyType: "rich_text")
+        let textProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", list: "Work"), mapping: text)
         let runs = (textProps["List"] as? [String: Any])?["rich_text"] as? [[String: Any]]
         XCTAssertEqual((runs?.first?["text"] as? [String: Any])?["content"] as? String, "Work")
         XCTAssertEqual(RealNotionTaskClient.categoryName(
             props: ["List": ["rich_text": [["plain_text": "Work"]]]], mapping: text), "Work")
     }
 
-    func test_no_category_column_leaves_writes_and_scope_untouched() {
+    func test_no_list_column_writes_nothing_for_list() {
         let mapping = TaskFieldMapping(titleProperty: "Name")
-        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
-        XCTAssertNil(props["Category"], "no category column → nothing is stamped")
-        XCTAssertNil(mapping.categoryScope)
+        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", list: "Personal"), mapping: mapping)
+        XCTAssertNil(props["Category"], "no list column mapped → nothing is written")
     }
 
     func test_checkbox_status_encodes_bool() {

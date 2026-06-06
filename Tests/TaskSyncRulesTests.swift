@@ -18,9 +18,9 @@ final class TaskSyncRulesTests: XCTestCase {
     private func reminder(_ id: String, _ title: String, completed: Bool = false) -> ReminderRecord {
         ReminderRecord(id: id, task: CanonicalTask(title: title, isCompleted: completed), lastModified: nil)
     }
-    private func row(_ id: String, _ title: String, status: String? = nil, category: String? = nil) -> RemoteTask {
+    private func row(_ id: String, _ title: String, status: String? = nil) -> RemoteTask {
         RemoteTask(id: id, task: CanonicalTask(title: title), lastEditedTime: .distantPast,
-                   archived: false, rawStatus: status, categoryValue: category)
+                   archived: false, rawStatus: status)
     }
     private func link(_ reminderId: String, _ pageId: String, _ title: String) -> TaskLink {
         TaskLink(reminderId: reminderId, notionPageId: pageId,
@@ -94,46 +94,20 @@ final class TaskSyncRulesTests: XCTestCase {
         XCTAssertEqual(plan.createInReminders.map(\.notionPageId), ["p1"], "without rules, everything syncs")
     }
 
-    // MARK: Category lane (scope)
+    // MARK: List membership (a bidirectional merged field)
 
-    func test_only_in_lane_rows_are_imported_into_reminders() {
-        let plan = TaskSyncEngine.plan(
-            reminders: [],
-            notionRows: [row("p1", "Mine", category: "Personal"),
-                         row("p2", "Theirs", category: "Work"),
-                         row("p3", "Untagged", category: nil)],
-            links: [], categoryScope: "Personal")
-        XCTAssertEqual(plan.createInReminders.map(\.notionPageId), ["p1"],
-                       "out-of-lane and uncategorized rows stay out of Reminders")
-        XCTAssertTrue(plan.deletions.isEmpty, "ignoring an unlinked row never deletes anything")
-    }
-
-    func test_lane_match_is_case_insensitive() {
-        let plan = TaskSyncEngine.plan(
-            reminders: [], notionRows: [row("p1", "T", category: "personal")],
-            links: [], categoryScope: "Personal")
-        XCTAssertEqual(plan.createInReminders.map(\.notionPageId), ["p1"])
-    }
-
-    func test_out_of_lane_row_does_not_pair_so_reminder_creates_in_lane() {
-        // A Personal reminder with the same title as a Work row must NOT pair with
-        // it — it creates its own in-lane Notion row instead.
-        let plan = TaskSyncEngine.plan(
-            reminders: [reminder("r1", "Shared title")],
-            notionRows: [row("p1", "Shared title", category: "Work")],
-            links: [], categoryScope: "Personal")
-        XCTAssertEqual(plan.createInNotion.map(\.reminderId), ["r1"])
-        XCTAssertTrue(plan.matches.isEmpty)
-    }
-
-    func test_linked_row_that_leaves_the_lane_is_left_alone_not_deleted() {
-        // The row was paired while Personal; its category is now Work. The link is
-        // honored and the reminder survives — scope governs unpaired rows only.
-        let plan = TaskSyncEngine.plan(
-            reminders: [reminder("r1", "T")],
-            notionRows: [row("p1", "T", category: "Work")],
-            links: [link("r1", "p1", "T")], categoryScope: "Personal")
-        XCTAssertTrue(plan.deletions.isEmpty, "a linked row leaving the lane never deletes the reminder")
-        XCTAssertEqual(plan.unchangedLinks.map(\.reminderId), ["r1"], "the pairing carries forward")
+    func test_changing_a_rows_list_writes_back_to_the_reminder() {
+        // The reminder was in Personal; the Notion row's list column now says Work
+        // and the row is the newer edit → the merged task takes Work and is applied
+        // to the reminder (the coordinator moves it to the Work list).
+        let r = ReminderRecord(id: "r1", task: CanonicalTask(title: "T", list: "Personal"),
+                               lastModified: Date(timeIntervalSince1970: 1))
+        let n = RemoteTask(id: "p1", task: CanonicalTask(title: "T", list: "Work"),
+                           lastEditedTime: Date(timeIntervalSince1970: 2), archived: false)
+        let links = [TaskLink(reminderId: "r1", notionPageId: "p1",
+                              baseline: CanonicalTask(title: "T", list: "Personal"), baselineSyncedAt: .distantPast)]
+        let plan = TaskSyncEngine.plan(reminders: [r], notionRows: [n], links: links)
+        XCTAssertEqual(plan.updates.first?.merged.list, "Work")
+        XCTAssertEqual(plan.updates.first?.applyToReminder, true)
     }
 }

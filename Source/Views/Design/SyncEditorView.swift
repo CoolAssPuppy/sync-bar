@@ -955,8 +955,7 @@ struct SyncEditorView: View {
             priorityProperty: priorityProperty.isEmpty ? nil : priorityProperty,
             priorityPropertyType: priorityProperty.isEmpty ? nil : priorityType,
             categoryProperty: listProperty.isEmpty ? nil : listProperty,
-            categoryPropertyType: listProperty.isEmpty ? nil : listType,
-            categoryValue: listProperty.isEmpty ? nil : reminderListName)
+            categoryPropertyType: listProperty.isEmpty ? nil : listType)
         let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
                                   excludeCompletedReminders: excludeCompletedReminders)
         let provider = TaskProviderConfig.notion(NotionTaskConfig(

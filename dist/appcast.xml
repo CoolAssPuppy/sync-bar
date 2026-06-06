@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.1.0</title>
+      <pubDate>Sat, 06 Jun 2026 07:59:56 +0000</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Now includes Apple Reminders to Notion sync.</li><li>Better underlying framework for adding sources and destinations.</li><li>Let me know what else you'd like me to sync for you.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.1.0.dmg"
+        sparkle:edSignature="7K48i+HLNHCB+YJdLBQnYiLXxec5O22EX9EUMqfLBtIg3C7qsbWgvwKW0NudzNG4BJ6EFtYb5qEMje5HCfoKDw=="
+        length="6158913"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.0.3</title>
       <pubDate>Fri, 05 Jun 2026 23:12:54 +0000</pubDate>
       <sparkle:version>16</sparkle:version>

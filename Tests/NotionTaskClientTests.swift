@@ -150,6 +150,31 @@ final class NotionTaskClientTests: XCTestCase {
         XCTAssertNil(custom.priority)
     }
 
+    func test_category_lane_stamps_value_and_reads_option_name() {
+        let mapping = TaskFieldMapping(titleProperty: "Name",
+                                       categoryProperty: "Category", categoryPropertyType: "select",
+                                       categoryValue: "Personal")
+
+        // Outbound: the lane value is stamped on every write.
+        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
+        XCTAssertEqual(((props["Category"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "Personal")
+
+        // Inbound: the row's category option name is surfaced for scoping.
+        let row = RealNotionTaskClient.canonicalTask(
+            fromProperties: ["Name": ["title": [["plain_text": "T"]]], "Category": ["select": ["name": "Work"]]],
+            mapping: mapping)
+        XCTAssertEqual(row.title, "T", "category isn't a canonical task field")
+        XCTAssertEqual(RealNotionTaskClient.categoryName(
+            props: ["Category": ["select": ["name": "Work"]]], mapping: mapping), "Work")
+    }
+
+    func test_no_category_column_leaves_writes_and_scope_untouched() {
+        let mapping = TaskFieldMapping(titleProperty: "Name")
+        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
+        XCTAssertNil(props["Category"], "no category column → nothing is stamped")
+        XCTAssertNil(mapping.categoryScope)
+    }
+
     func test_checkbox_status_encodes_bool() {
         let mapping = TaskFieldMapping(titleProperty: "Name", statusProperty: "Done?", statusPropertyType: "checkbox")
         let done = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", isCompleted: true), mapping: mapping)

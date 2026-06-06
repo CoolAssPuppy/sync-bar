@@ -120,7 +120,8 @@ struct RealNotionTaskClient: TaskProvider {
             let lastEdited = parseDate(result["last_edited_time"]) ?? Date.distantPast
             let task = canonicalTask(fromProperties: props, mapping: mapping)
             return RemoteTask(id: id, task: task, lastEditedTime: lastEdited, archived: archived,
-                              rawStatus: statusName(props: props, mapping: mapping))
+                              rawStatus: statusName(props: props, mapping: mapping),
+                              categoryValue: categoryName(props: props, mapping: mapping))
         }
         let hasMore = root["has_more"] as? Bool ?? false
         let next = hasMore ? (root["next_cursor"] as? String) : nil
@@ -164,6 +165,14 @@ struct RealNotionTaskClient: TaskProvider {
     /// value), used by filter rules. nil for a checkbox column or no status.
     static func statusName(props: [String: Any], mapping: TaskFieldMapping) -> String? {
         guard let name = mapping.statusProperty, let value = props[name] as? [String: Any] else { return nil }
+        return (value["status"] as? [String: Any])?["name"] as? String
+            ?? (value["select"] as? [String: Any])?["name"] as? String
+    }
+
+    /// The category-column option name on a row, for lane scoping. nil when no
+    /// category column is mapped or the row's column is empty.
+    static func categoryName(props: [String: Any], mapping: TaskFieldMapping) -> String? {
+        guard let name = mapping.categoryProperty, let value = props[name] as? [String: Any] else { return nil }
         return (value["status"] as? [String: Any])?["name"] as? String
             ?? (value["select"] as? [String: Any])?["name"] as? String
     }
@@ -246,6 +255,14 @@ struct RealNotionTaskClient: TaskProvider {
         if let priorityProperty = mapping.priorityProperty, let bucket = task.priority {
             let key = mapping.priorityPropertyType == "status" ? "status" : "select"
             properties[priorityProperty] = [key: ["name": bucket]]
+        }
+
+        // Stamp the category lane on every write so rows this sync creates or
+        // touches stay tagged for the inbound filter. Notion creates the option
+        // if it doesn't exist yet.
+        if let categoryProperty = mapping.categoryProperty, let value = mapping.categoryScope {
+            let key = mapping.categoryPropertyType == "status" ? "status" : "select"
+            properties[categoryProperty] = [key: ["name": value]]
         }
 
         return properties

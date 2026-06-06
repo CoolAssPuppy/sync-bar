@@ -89,6 +89,8 @@ struct SyncEditorView: View {
     @State private var statusProperty: String = ""
     @State private var notesProperty: String = ""
     @State private var priorityProperty: String = ""
+    @State private var categoryProperty: String = ""
+    @State private var categoryValue: String = ""
     @State private var excludedStatuses: Set<String> = []
     @State private var excludeCompletedReminders = false
     @State private var originalTaskSyncId: String?
@@ -152,7 +154,7 @@ struct SyncEditorView: View {
                     fromStep
                     if isReminders {
                         notionDatabaseStep
-                        if taskDatabaseId != nil { mapStep; filterStep }
+                        if taskDatabaseId != nil { mapStep; filterStep; scopeStep }
                     } else {
                         toStep
                         if toKind != nil { customizeStep }
@@ -352,6 +354,8 @@ struct SyncEditorView: View {
     private var statusType: String? { taskSchema.first { $0.name == statusProperty }?.type }
     private var statusOptions: [String] { taskSchema.first { $0.name == statusProperty }?.options ?? [] }
     private var priorityType: String? { taskSchema.first { $0.name == priorityProperty }?.type }
+    private var categoryType: String? { taskSchema.first { $0.name == categoryProperty }?.type }
+    private var categoryOptions: [String] { taskSchema.first { $0.name == categoryProperty }?.options ?? [] }
     private func taskPropertyNames(ofTypes types: [String]) -> [String] {
         taskSchema.filter { types.contains($0.type) }.map(\.name)
     }
@@ -442,6 +446,53 @@ struct SyncEditorView: View {
             }
             if notion { DestinationIcon(kind: .notion, size: 16) }
         }.frame(width: 38, alignment: .leading))
+    }
+
+    // MARK: Scope (one shared database across lists)
+
+    /// Marks which rows of a shared database belong to this list: a category
+    /// column plus one value, stamped on writes and required on reads. Leaving the
+    /// column unset means the sync owns the whole database.
+    private var scopeStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            stepLabel("SCOPE", "share one database across lists")
+            VStack(spacing: 0) {
+                mapRow("Category column") {
+                    propertyMenu(selection: $categoryProperty,
+                                 options: taskPropertyNames(ofTypes: ["select", "status"]),
+                                 onChange: { _ in defaultCategoryValue() })
+                }
+                if !categoryProperty.isEmpty {
+                    rowDivider
+                    mapRow("Value") { categoryValueMenu }
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+    }
+
+    /// The value picker for the chosen category column: its live options, plus a
+    /// "Create" entry for this list's name when no option matches it yet.
+    private var categoryValueMenu: some View {
+        let trimmed = reminderListName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasListName = categoryOptions.contains { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+        return Menu {
+            ForEach(categoryOptions, id: \.self) { name in Button(name) { categoryValue = name } }
+            if !trimmed.isEmpty && !hasListName {
+                Divider()
+                Button("Create \u{201C}\(trimmed)\u{201D}") { categoryValue = trimmed }
+            }
+        } label: { menuLabel(categoryValue.isEmpty ? "Choose a value" : categoryValue) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+    }
+
+    /// Pre-fills the value when a column is picked: the matching option if one
+    /// exists, otherwise this list's name (Notion creates the option on first write).
+    private func defaultCategoryValue() {
+        guard !categoryProperty.isEmpty else { categoryValue = ""; return }
+        let trimmed = reminderListName.trimmingCharacters(in: .whitespacesAndNewlines)
+        categoryValue = categoryOptions.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed
     }
 
     /// Picks the status option that means done / not-done, by matching common
@@ -714,6 +765,8 @@ struct SyncEditorView: View {
         statusProperty = mapping?.statusProperty ?? ""
         notesProperty = mapping?.notesProperty ?? ""
         priorityProperty = mapping?.priorityProperty ?? ""
+        categoryProperty = mapping?.categoryProperty ?? ""
+        categoryValue = mapping?.categoryValue ?? ""
         excludedStatuses = Set(sync.activeRules.excludedNotionStatuses)
         excludeCompletedReminders = sync.activeRules.excludeCompletedReminders
         loadReminderLists()
@@ -778,7 +831,8 @@ struct SyncEditorView: View {
     private func selectTaskDatabase(_ id: String) {
         taskDatabaseId = id
         taskDatabaseName = taskDatabases.first { $0.id == id }?.title ?? ""
-        dueProperty = ""; statusProperty = ""; notesProperty = ""; priorityProperty = ""; excludedStatuses = []
+        dueProperty = ""; statusProperty = ""; notesProperty = ""; priorityProperty = ""
+        categoryProperty = ""; categoryValue = ""; excludedStatuses = []
         loadTaskSchema()
     }
 
@@ -920,7 +974,10 @@ struct SyncEditorView: View {
             statusNotDoneValue: inferredStatusValue(matching: ["to do", "to-do", "todo", "not started", "backlog", "open", "new", "inbox"]),
             notesProperty: notesProperty.isEmpty ? nil : notesProperty,
             priorityProperty: priorityProperty.isEmpty ? nil : priorityProperty,
-            priorityPropertyType: priorityProperty.isEmpty ? nil : priorityType)
+            priorityPropertyType: priorityProperty.isEmpty ? nil : priorityType,
+            categoryProperty: categoryProperty.isEmpty ? nil : categoryProperty,
+            categoryPropertyType: categoryProperty.isEmpty ? nil : categoryType,
+            categoryValue: (categoryProperty.isEmpty || categoryValue.isEmpty) ? nil : categoryValue)
         let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
                                   excludeCompletedReminders: excludeCompletedReminders)
         let provider = TaskProviderConfig.notion(NotionTaskConfig(

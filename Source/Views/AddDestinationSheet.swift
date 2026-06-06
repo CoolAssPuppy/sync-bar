@@ -65,7 +65,7 @@ struct AddDestinationSheet: View {
                 Text("Add a Destination")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Pick a place to send your transcribed notes.")
+                Text("Pick where Sync Bar sends information to")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
             }

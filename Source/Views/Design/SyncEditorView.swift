@@ -371,10 +371,7 @@ struct SyncEditorView: View {
                 }
                 .padding(.horizontal, 15).padding(.vertical, 9)
                 rowDivider
-                mapRow("Title") {
-                    Text(taskTitleProperty ?? "No title column")
-                        .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
-                }
+                mapRow("Title") { lockedFieldLabel(taskTitleProperty ?? "No title column") }
                 rowDivider
                 mapRow("Due date") { propertyMenu(selection: $dueProperty, options: taskPropertyNames(ofTypes: ["date"])) }
                 rowDivider
@@ -485,12 +482,24 @@ struct SyncEditorView: View {
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
     }
 
+    /// A read-only field rendered at the same metrics as the editable dropdowns,
+    /// so a locked value (the title column) aligns with them instead of floating.
+    private func lockedFieldLabel(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.muted).lineLimit(1)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 12).frame(width: 196, height: 30)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.cardElevated))
+    }
+
     private func menuLabel(_ text: String) -> some View {
         HStack(spacing: 8) {
             Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft).lineLimit(1)
-            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.muted)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(theme.muted)
         }
-        .padding(.horizontal, 12).frame(height: 30)
+        .padding(.horizontal, 12).frame(width: 196, height: 30)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
     }
 

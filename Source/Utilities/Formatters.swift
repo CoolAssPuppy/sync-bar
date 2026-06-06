@@ -35,6 +35,8 @@ enum Formatters {
 
     /// `2 minutes ago` style relative label for menu bar rows.
     static func relativeLabel(for date: Date) -> String {
+        // Under a minute reads as "just now" rather than the awkward "0 sec".
+        if abs(date.timeIntervalSinceNow) < 60 { return "just now" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())

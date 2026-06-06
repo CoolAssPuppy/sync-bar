@@ -296,6 +296,11 @@ final class Ledger: ObservableObject {
         guard remindersConnected != value else { return }
         remindersConnected = value
         store.set(value, forKey: Self.remindersConnectedKey)
+        // Every task sync is Reminders <-> a tracker, so disconnecting Reminders
+        // removes them all (and their baselines) — they can't run without it.
+        if !value {
+            for id in taskSyncs.map(\.id) { removeTaskSync(id: id) }
+        }
         NotificationCenter.default.post(name: .foldersChanged, object: nil)
     }
 

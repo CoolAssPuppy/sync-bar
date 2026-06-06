@@ -98,8 +98,11 @@ struct SyncsHomeView: View {
                     }
                     ForEach(taskSyncs) { sync in
                         TaskSyncRowView(
+                            // Show "Syncing" for the whole run, not just the one row
+                            // the coordinator happens to be on, so finished rows in a
+                            // batch don't flash "Synced just now" mid-sync.
                             sync: sync,
-                            isSyncing: taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id,
+                            isSyncing: taskCoordinator.isSyncing && sync.enabled,
                             onTap: { onEditTask(sync) },
                             onSyncNow: { Task { await taskCoordinator.run(sync) } }
                         )

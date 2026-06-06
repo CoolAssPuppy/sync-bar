@@ -100,6 +100,20 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     /// Notion property that holds priority, and its type ("select" or "status").
     var priorityProperty: String?
     var priorityPropertyType: String?
+    /// Category "lane": the select/status column and the single option value that
+    /// marks rows belonging to this sync. When set, the value is stamped on every
+    /// write and only matching rows are imported into Reminders (see `categoryScope`).
+    /// Both nil means no scoping — the sync owns the whole database, as before.
+    var categoryProperty: String?
+    var categoryPropertyType: String?
+    var categoryValue: String?
+
+    /// The lane value to scope on, or nil when no category column is configured.
+    /// Drives the inbound filter and the outbound stamp.
+    var categoryScope: String? {
+        guard categoryProperty != nil, let value = categoryValue, !value.isEmpty else { return nil }
+        return value
+    }
 
     init(titleProperty: String,
          dueDateProperty: String? = nil,
@@ -109,7 +123,10 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
          statusNotDoneValue: String? = nil,
          notesProperty: String? = nil,
          priorityProperty: String? = nil,
-         priorityPropertyType: String? = nil) {
+         priorityPropertyType: String? = nil,
+         categoryProperty: String? = nil,
+         categoryPropertyType: String? = nil,
+         categoryValue: String? = nil) {
         self.titleProperty = titleProperty
         self.dueDateProperty = dueDateProperty
         self.statusProperty = statusProperty
@@ -119,6 +136,9 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
         self.notesProperty = notesProperty
         self.priorityProperty = priorityProperty
         self.priorityPropertyType = priorityPropertyType
+        self.categoryProperty = categoryProperty
+        self.categoryPropertyType = categoryPropertyType
+        self.categoryValue = categoryValue
     }
 }
 

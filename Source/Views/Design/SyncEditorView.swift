@@ -85,11 +85,7 @@ struct SyncEditorView: View {
     @State private var taskDatabaseId: String?
     @State private var taskDatabaseName: String = ""
     @State private var taskSchema: [NotionDatabaseProperty] = []
-    @State private var dueProperty: String = ""
-    @State private var statusProperty: String = ""
-    @State private var notesProperty: String = ""
-    @State private var priorityProperty: String = ""
-    @State private var listProperty: String = ""
+    @State private var mapRows: [TaskMapRow] = []
     @State private var excludedStatuses: Set<String> = []
     @State private var excludeCompletedReminders = false
     @State private var originalTaskSyncId: String?
@@ -132,7 +128,7 @@ struct SyncEditorView: View {
         switch source {
         case .kind(.remarkable): return folder != nil
         case .kind(.safari):     return safariScopeId != nil
-        case .reminders:         return reminderListId != nil
+        case .reminders:         return true   // all lists; no single list to choose
         }
     }
 
@@ -153,7 +149,7 @@ struct SyncEditorView: View {
                     fromStep
                     if isReminders {
                         notionDatabaseStep
-                        if taskDatabaseId != nil { mapStep; filterStep; listStep }
+                        if taskDatabaseId != nil { mapStep; filterStep }
                     } else {
                         toStep
                         if toKind != nil { customizeStep }
@@ -272,16 +268,14 @@ struct SyncEditorView: View {
 
     private var remindersListPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            CustomDropdown(
-                options: reminderLists.map { DropdownOption(id: $0.id, icon: AnyView(remindersGlyph), title: $0.name) },
-                selectedId: reminderListId,
-                placeholder: remindersLoading ? "Loading lists…" : (reminderLists.isEmpty ? "No Reminders lists found" : "Choose a list"),
-                placeholderIcon: AnyView(placeholderSourceIcon),
-                onSelect: { id in
-                    reminderListId = id
-                    reminderListName = reminderLists.first { $0.id == id }?.name ?? ""
-                }
-            )
+            HStack(spacing: 10) {
+                remindersGlyph
+                Text("All your lists").font(.system(size: 14.5, weight: .semibold)).foregroundStyle(theme.foreground)
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             if reminderLists.isEmpty && !remindersLoading {
                 HStack(spacing: 8) {
                     Text("Reminders access is needed.").font(.system(size: 11)).foregroundStyle(.orange)
@@ -350,38 +344,23 @@ struct SyncEditorView: View {
     // MARK: Map (two-way fields)
 
     private var taskTitleProperty: String? { taskSchema.first { $0.type == "title" }?.name }
-    private var statusType: String? { taskSchema.first { $0.name == statusProperty }?.type }
-    private var statusOptions: [String] { taskSchema.first { $0.name == statusProperty }?.options ?? [] }
-    private var priorityType: String? { taskSchema.first { $0.name == priorityProperty }?.type }
-    private var listType: String? { taskSchema.first { $0.name == listProperty }?.type }
-    private func taskPropertyNames(ofTypes types: [String]) -> [String] {
-        taskSchema.filter { types.contains($0.type) }.map(\.name)
-    }
+    /// The Notion column the Status field is mapped to (if any), and its options —
+    /// used by the FILTER step and the done/not-done inference.
+    private var statusColumn: String { mapRows.first { $0.field == .status }?.column ?? "" }
+    private var statusType: String? { taskSchema.first { $0.name == statusColumn }?.type }
+    private var statusOptions: [String] { taskSchema.first { $0.name == statusColumn }?.options ?? [] }
+    private func columnType(_ name: String) -> String? { taskSchema.first { $0.name == name }?.type }
 
     private var mapStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("MAP", "connect Reminders fields to Notion columns")
-            VStack(spacing: 0) {
-                HStack(spacing: 14) {
-                    Text("REMINDERS").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(theme.tertiary)
-                    Spacer(minLength: 12)
-                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.tertiary)
-                    Spacer(minLength: 12)
-                    Text("NOTION").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(theme.tertiary)
-                }
-                .padding(.horizontal, 15).padding(.vertical, 9)
-                rowDivider
+            stepLabel("MAP", "pair Reminders fields with Notion columns")
+            VStack(alignment: .leading, spacing: 0) {
                 mapRow("Title") { lockedFieldLabel(taskTitleProperty ?? "No title column") }
                 rowDivider
-                mapRow("Due date") { propertyMenu(selection: $dueProperty, options: taskPropertyNames(ofTypes: ["date"])) }
-                rowDivider
-                mapRow("Status") {
-                    propertyMenu(selection: $statusProperty, options: taskPropertyNames(ofTypes: ["status", "select", "checkbox"]))
+                VStack(alignment: .leading, spacing: 0) {
+                    TaskMappingControl(rows: $mapRows, schema: taskSchema)
                 }
-                rowDivider
-                mapRow("Notes") { propertyMenu(selection: $notesProperty, options: taskPropertyNames(ofTypes: ["rich_text"])) }
-                rowDivider
-                mapRow("Priority") { propertyMenu(selection: $priorityProperty, options: taskPropertyNames(ofTypes: ["select", "status"])) }
+                .padding(.horizontal, 15).padding(.vertical, 12)
             }
             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
             .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
@@ -443,26 +422,6 @@ struct SyncEditorView: View {
         }.frame(width: 38, alignment: .leading))
     }
 
-    // MARK: List (tag each Notion row with its Reminders list)
-
-    /// Maps the Reminders list to a Notion column. The list name is written into
-    /// that column (select, status, multi-select, or text) on new rows, and only
-    /// rows carrying it sync back. Leaving it unset means the sync owns the whole
-    /// database.
-    private var listStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            stepLabel("LIST", "write the list name into a Notion column")
-            VStack(spacing: 0) {
-                mapRow("List \u{201C}\(reminderListName)\u{201D}") {
-                    propertyMenu(selection: $listProperty,
-                                 options: taskPropertyNames(ofTypes: ["select", "status", "multi_select", "rich_text"]))
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        }
-    }
-
     /// Picks the status option that means done / not-done, by matching common
     /// words against the column's options. nil for a checkbox column (no option
     /// needed) or when nothing matches.
@@ -474,14 +433,6 @@ struct SyncEditorView: View {
         }
     }
 
-    private func propertyMenu(selection: Binding<String>, options: [String], onChange: ((String) -> Void)? = nil) -> some View {
-        Menu {
-            Button("None") { selection.wrappedValue = ""; onChange?("") }
-            ForEach(options, id: \.self) { name in Button(name) { selection.wrappedValue = name; onChange?(name) } }
-        } label: { menuLabel(selection.wrappedValue.isEmpty ? "None" : selection.wrappedValue) }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-    }
-
     /// A read-only field rendered at the same metrics as the editable dropdowns,
     /// so a locked value (the title column) aligns with them instead of floating.
     private func lockedFieldLabel(_ text: String) -> some View {
@@ -491,16 +442,6 @@ struct SyncEditorView: View {
         }
         .padding(.horizontal, 12).frame(width: 196, height: 30)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.cardElevated))
-    }
-
-    private func menuLabel(_ text: String) -> some View {
-        HStack(spacing: 8) {
-            Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft).lineLimit(1)
-            Spacer(minLength: 8)
-            Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(theme.muted)
-        }
-        .padding(.horizontal, 12).frame(width: 196, height: 30)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
     }
 
     private func mapRow<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
@@ -740,12 +681,7 @@ struct SyncEditorView: View {
         taskWorkspaceId = cfg?.workspaceId
         taskDatabaseId = cfg?.databaseId
         taskDatabaseName = cfg?.databaseName ?? ""
-        let mapping = cfg?.fieldMapping
-        dueProperty = mapping?.dueDateProperty ?? ""
-        statusProperty = mapping?.statusProperty ?? ""
-        notesProperty = mapping?.notesProperty ?? ""
-        priorityProperty = mapping?.priorityProperty ?? ""
-        listProperty = mapping?.categoryProperty ?? ""
+        mapRows = (cfg?.fieldMapping).map(Self.rows(from:)) ?? []
         excludedStatuses = Set(sync.activeRules.excludedNotionStatuses)
         excludeCompletedReminders = sync.activeRules.excludeCompletedReminders
         loadReminderLists()
@@ -761,7 +697,7 @@ struct SyncEditorView: View {
         case .kind(.remarkable): folder = nil; selectedFileIds = nil
         case .kind(.safari):     safariScopeId = nil; safariScopeName = ""; loadSafariScopes()
         case .reminders:
-            reminderListId = nil; reminderListName = ""
+            reminderListId = nil; reminderListName = ""; mapRows = []
             loadReminderLists()
             if taskWorkspaceId == nil { taskWorkspaceId = ledger.notionWorkspaces.first?.id }
             loadTaskDatabases()
@@ -810,8 +746,7 @@ struct SyncEditorView: View {
     private func selectTaskDatabase(_ id: String) {
         taskDatabaseId = id
         taskDatabaseName = taskDatabases.first { $0.id == id }?.title ?? ""
-        dueProperty = ""; statusProperty = ""; notesProperty = ""; priorityProperty = ""
-        listProperty = ""; excludedStatuses = []
+        mapRows = []; excludedStatuses = []
         loadTaskSchema()
     }
 
@@ -943,19 +878,8 @@ struct SyncEditorView: View {
     }
 
     private func saveTaskSync() {
-        guard let reminderListId, let taskWorkspaceId, let taskDatabaseId, let taskTitleProperty else { return }
-        let mapping = TaskFieldMapping(
-            titleProperty: taskTitleProperty,
-            dueDateProperty: dueProperty.isEmpty ? nil : dueProperty,
-            statusProperty: statusProperty.isEmpty ? nil : statusProperty,
-            statusPropertyType: statusProperty.isEmpty ? nil : statusType,
-            statusDoneValue: inferredStatusValue(matching: ["done", "complete", "closed", "finish"]),
-            statusNotDoneValue: inferredStatusValue(matching: ["to do", "to-do", "todo", "not started", "backlog", "open", "new", "inbox"]),
-            notesProperty: notesProperty.isEmpty ? nil : notesProperty,
-            priorityProperty: priorityProperty.isEmpty ? nil : priorityProperty,
-            priorityPropertyType: priorityProperty.isEmpty ? nil : priorityType,
-            categoryProperty: listProperty.isEmpty ? nil : listProperty,
-            categoryPropertyType: listProperty.isEmpty ? nil : listType)
+        guard let taskWorkspaceId, let taskDatabaseId, let taskTitleProperty else { return }
+        let mapping = composedTaskMapping(titleProperty: taskTitleProperty)
         let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
                                   excludeCompletedReminders: excludeCompletedReminders)
         let provider = TaskProviderConfig.notion(NotionTaskConfig(
@@ -963,9 +887,46 @@ struct SyncEditorView: View {
             databaseName: taskDatabaseName, fieldMapping: mapping))
         let sync = TaskSync(
             id: originalTaskSyncId ?? UUID().uuidString,
-            remindersListId: reminderListId, remindersListName: reminderListName,
+            // No single list: an all-lists sync. Each row is tagged by its own list.
+            remindersListId: reminderListId ?? "",
+            remindersListName: (reminderListName.isEmpty ? "All lists" : reminderListName),
             provider: provider, rules: rules)
         ledger.upsertTaskSync(sync)
+    }
+
+    /// Folds the dynamic mapping rows + the auto title column into a TaskFieldMapping.
+    private func composedTaskMapping(titleProperty: String) -> TaskFieldMapping {
+        func column(_ field: ReminderField) -> String? {
+            guard let c = mapRows.first(where: { $0.field == field })?.column, !c.isEmpty else { return nil }
+            return c
+        }
+        let status = column(.status)
+        let priority = column(.priority)
+        let list = column(.list)
+        return TaskFieldMapping(
+            titleProperty: titleProperty,
+            dueDateProperty: column(.due),
+            statusProperty: status,
+            statusPropertyType: status.flatMap(columnType),
+            statusDoneValue: status == nil ? nil : inferredStatusValue(matching: ["done", "complete", "closed", "finish"]),
+            statusNotDoneValue: status == nil ? nil : inferredStatusValue(matching: ["to do", "to-do", "todo", "not started", "backlog", "open", "new", "inbox"]),
+            notesProperty: column(.notes),
+            priorityProperty: priority,
+            priorityPropertyType: priority.flatMap(columnType),
+            categoryProperty: list,
+            categoryPropertyType: list.flatMap(columnType))
+    }
+
+    /// Expands a stored mapping back into editor rows (title is implicit, so it's
+    /// not a row). Order: List, Due, Status, Notes, Priority.
+    private static func rows(from mapping: TaskFieldMapping) -> [TaskMapRow] {
+        var rows: [TaskMapRow] = []
+        if let c = mapping.categoryProperty { rows.append(TaskMapRow(field: .list, column: c)) }
+        if let c = mapping.dueDateProperty  { rows.append(TaskMapRow(field: .due, column: c)) }
+        if let c = mapping.statusProperty   { rows.append(TaskMapRow(field: .status, column: c)) }
+        if let c = mapping.notesProperty    { rows.append(TaskMapRow(field: .notes, column: c)) }
+        if let c = mapping.priorityProperty { rows.append(TaskMapRow(field: .priority, column: c)) }
+        return rows
     }
 
     private func makeBinding(config: DestinationConfiguration) -> DestinationBinding {

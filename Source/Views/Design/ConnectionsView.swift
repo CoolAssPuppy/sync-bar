@@ -161,10 +161,7 @@ struct ConnectionsView: View {
     }
 
     private var remindersGlyph: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.accentColor.opacity(0.14))
-            Image(systemName: "checklist").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.accentColor)
-        }.frame(width: 38, height: 38)
+        Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 38, height: 38)
     }
 
     private func refreshAccessStatus() {

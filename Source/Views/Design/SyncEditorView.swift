@@ -438,7 +438,7 @@ struct SyncEditorView: View {
     private func sourceGlyphs(reminders: Bool, notion: Bool) -> AnyView {
         AnyView(HStack(spacing: 4) {
             if reminders {
-                Image(systemName: "checklist").font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.primary)
+                Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 16, height: 16)
             }
             if notion { DestinationIcon(kind: .notion, size: 16) }
         }.frame(width: 38, alignment: .leading))
@@ -498,10 +498,7 @@ struct SyncEditorView: View {
     }
 
     private var remindersGlyph: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
-            Image(systemName: "checklist").font(.system(size: 14, weight: .medium)).foregroundStyle(theme.primary)
-        }.frame(width: 26, height: 26)
+        Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 26, height: 26)
     }
 
     private func sourceLabel(_ s: EditorSource) -> String {

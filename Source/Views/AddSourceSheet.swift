@@ -105,10 +105,7 @@ struct AddSourceSheet: View {
         case .remarkable: SourceIcon(kind: .remarkable, size: 28)
         case .safari:     SourceIcon(kind: .safari, size: 28)
         case .reminders:
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.accentColor.opacity(0.14))
-                Image(systemName: "checklist").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color.accentColor)
-            }.frame(width: 28, height: 28)
+            Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 28, height: 28)
         }
     }
 

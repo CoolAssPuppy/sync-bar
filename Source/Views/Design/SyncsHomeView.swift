@@ -314,7 +314,7 @@ private struct TaskSyncRowView: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 10) {
-                        glyph("checklist")
+                        Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 30, height: 30)
                         Text(sync.remindersListName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground).lineLimit(1)
@@ -351,12 +351,6 @@ private struct TaskSyncRowView: View {
         .onHover { isHovered = $0 }
     }
 
-    private func glyph(_ name: String) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
-            Image(systemName: name).font(.system(size: 15, weight: .medium)).foregroundStyle(theme.primary)
-        }.frame(width: 30, height: 30)
-    }
 
     private var statusPill: some View {
         HStack(spacing: 6) {

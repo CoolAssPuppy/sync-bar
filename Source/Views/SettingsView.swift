@@ -162,7 +162,7 @@ struct SettingsView: View {
                 Text("Reset your sync database")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Delete the internal database that tracks syncs. Warning: this will resync every note.")
+                Text("Delete the internal database that tracks syncs. Warning: this will resync everything.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
                 AppSecondaryButton(title: "Resync notes", systemImage: "arrow.triangle.2.circlepath", tint: .warning) {
@@ -224,11 +224,7 @@ struct SettingsView: View {
                     }
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Demo mode",
-                              description: """
-                              Show sample data for screenshots. Your real notebooks, rules, and \
-                              history stay untouched — turn this off (or just relaunch) to bring them back.
-                              """) {
+                AppSettingRow("Demo mode", description: nil) {
                     Toggle("", isOn: Binding(
                         get: { ledger.isDemoMode },
                         set: { ledger.setDemoMode($0) }

@@ -21,6 +21,9 @@ struct MainShellView: View {
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var uploadCoordinator = UploadCoordinator.shared
 
+    /// Every sync shown on the Syncs home: one-way flows plus two-way task syncs.
+    private var syncCount: Int { ledger.syncFlows.count + ledger.taskSyncs.count }
+
     @State private var tab: ShellTab = .syncs
     @State private var editorTarget: SyncEditorTarget?
     @State private var isOnboarding = false
@@ -103,7 +106,7 @@ struct MainShellView: View {
 
             VStack(spacing: 3) {
                 RailItem(icon: "arrow.triangle.2.circlepath", label: "Syncs",
-                         badge: ledger.syncFlows.isEmpty ? nil : "\(ledger.syncFlows.count)",
+                         badge: syncCount > 0 ? "\(syncCount)" : nil,
                          isActive: tab == .syncs) { tab = .syncs }
                 RailItem(icon: "link", label: "Connections",
                          badge: ledger.connectionCount > 0 ? "\(ledger.connectionCount)" : nil,

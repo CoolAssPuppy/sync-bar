@@ -322,7 +322,7 @@ private struct TaskSyncRowView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(theme.tertiary)
                         DestinationIcon(kind: .notion, size: 26)
-                        Text(sync.notionDatabaseName)
+                        Text(sync.provider.displayName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground).lineLimit(1)
                     }

@@ -20,22 +20,18 @@ final class TaskSyncCoordinator: ObservableObject {
 
     private let ledger: Ledger
     private let remindersClient: RemindersClient
-    /// Resolves the Notion task client for a workspace. Returns nil when no token
-    /// is stored (the sync can't run). Injectable for tests.
-    private let notionClientFor: @MainActor (String) -> NotionTaskClient?
+    /// Resolves the task provider for a sync's remote config (Notion today).
+    /// Returns nil when it can't run (e.g. no stored token). Injectable for tests.
+    private let providerFor: @MainActor (TaskProviderConfig) -> TaskProvider?
     private let now: @Sendable () -> Date
 
     init(ledger: Ledger? = nil,
          remindersClient: RemindersClient = EventKitRemindersClient(),
-         notionClientFor: (@MainActor (String) -> NotionTaskClient?)? = nil,
+         providerFor: (@MainActor (TaskProviderConfig) -> TaskProvider?)? = nil,
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.ledger = ledger ?? Ledger.shared
         self.remindersClient = remindersClient
-        self.notionClientFor = notionClientFor ?? { workspaceId in
-            guard let token = KeychainStore.shared.value(for: .notionWorkspaceToken(workspaceId: workspaceId)),
-                  !token.isEmpty else { return nil }
-            return RealNotionTaskClient(token: token)
-        }
+        self.providerFor = providerFor ?? { config in TaskProviderRouter.make(config: config) }
         self.now = now
     }
 
@@ -61,18 +57,18 @@ final class TaskSyncCoordinator: ObservableObject {
 
     /// Reconciles a single task sync end-to-end.
     func run(_ sync: TaskSync) async {
-        guard let notion = notionClientFor(sync.notionWorkspaceId) else {
+        guard let provider = providerFor(sync.provider) else {
             ledger.updateTaskSyncRunResult(id: sync.id, status: .error, runAt: now(),
-                                           error: "Reconnect Notion to sync tasks.")
+                                           error: "Reconnect \(sync.provider.kind.label) to sync tasks.")
             return
         }
 
         // 1) Fetch both sides + the baselines.
         let reminders: [ReminderRecord]
-        let notionRows: [NotionRow]
+        let notionRows: [RemoteTask]
         do {
             async let r = remindersClient.fetchReminders(listId: sync.remindersListId)
-            async let n = notion.queryDatabase(databaseId: sync.notionDatabaseId, mapping: sync.fieldMapping)
+            async let n = provider.fetchTasks()
             reminders = try await r
             notionRows = try await n
         } catch {
@@ -90,7 +86,6 @@ final class TaskSyncCoordinator: ObservableObject {
         var newLinks = plan.unchangedLinks
         var firstError: String?
         var succeeded = 0
-        let mapping = sync.fieldMapping
 
         func note(_ error: Error) {
             if firstError == nil { firstError = Formatters.userMessage(for: error) }
@@ -100,8 +95,8 @@ final class TaskSyncCoordinator: ObservableObject {
         // Unpaired reminders → new Notion rows.
         for item in plan.createInNotion {
             do {
-                let pageId = try await notion.createPage(databaseId: sync.notionDatabaseId, task: item.task, mapping: mapping)
-                newLinks.append(TaskLink(reminderId: item.reminderId, notionPageId: pageId,
+                let remoteId = try await provider.createTask(item.task)
+                newLinks.append(TaskLink(reminderId: item.reminderId, notionPageId: remoteId,
                                          baseline: item.task, baselineSyncedAt: now()))
                 succeeded += 1
             } catch { note(error) }
@@ -124,7 +119,7 @@ final class TaskSyncCoordinator: ObservableObject {
                     try await remindersClient.update(id: resolution.reminderId, to: resolution.merged)
                 }
                 if resolution.applyToNotion {
-                    try await notion.updatePage(pageId: resolution.notionPageId, task: resolution.merged, mapping: mapping)
+                    try await provider.updateTask(id: resolution.notionPageId, to: resolution.merged)
                 }
                 newLinks.append(TaskLink(reminderId: resolution.reminderId, notionPageId: resolution.notionPageId,
                                          baseline: resolution.merged, baselineSyncedAt: now()))
@@ -144,7 +139,7 @@ final class TaskSyncCoordinator: ObservableObject {
         for deletion in plan.deletions {
             do {
                 if let reminderId = deletion.reminderId { try await remindersClient.delete(id: reminderId) }
-                if let pageId = deletion.notionPageId { try await notion.archivePage(pageId: pageId) }
+                if let remoteId = deletion.notionPageId { try await provider.removeTask(id: remoteId) }
                 succeeded += 1
             } catch {
                 note(error)
@@ -165,7 +160,7 @@ final class TaskSyncCoordinator: ObservableObject {
             + plan.matches.count + plan.updates.count + plan.deletions.count
         ledger.appendEvent(SyncEvent(
             id: UUID().uuidString, occurredAt: now(),
-            ruleId: sync.id, ruleName: "\(sync.remindersListName) ↔ \(sync.notionDatabaseName)",
+            ruleId: sync.id, ruleName: "\(sync.remindersListName) ↔ \(sync.provider.displayName)",
             eventType: firstError == nil ? .ruleRunCompleted : .pageFailed,
             rmNotebookName: sync.remindersListName, rmPageId: nil,
             notionPageUrl: nil, durationMs: nil, ocrProvider: nil, errorMessage: firstError))

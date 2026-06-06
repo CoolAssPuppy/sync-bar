@@ -53,34 +53,32 @@ final class TaskSyncCoordinatorTests: XCTestCase {
         }
     }
 
-    /// In-memory Notion side. `updatePage`/`archivePage` mutate the store so a
+    /// In-memory remote (Notion) side. update/remove mutate the store so a
     /// follow-up cycle sees the post-write state.
-    final class StubNotionTaskClient: NotionTaskClient, @unchecked Sendable {
-        var rows: [NotionRow]
+    final class StubNotionTaskClient: TaskProvider, @unchecked Sendable {
+        var rows: [RemoteTask]
         private(set) var created: [CanonicalTask] = []
         private(set) var updated: [(id: String, task: CanonicalTask)] = []
         private(set) var archived: [String] = []
         private var counter = 0
 
-        init(_ rows: [NotionRow] = []) { self.rows = rows }
+        init(_ rows: [RemoteTask] = []) { self.rows = rows }
 
-        func queryDatabase(databaseId: String, mapping: TaskFieldMapping) async throws -> [NotionRow] {
-            rows.filter { !$0.archived }
-        }
-        func createPage(databaseId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws -> String {
+        func fetchTasks() async throws -> [RemoteTask] { rows.filter { !$0.archived } }
+        func createTask(_ task: CanonicalTask) async throws -> String {
             counter += 1
             let id = "p-new-\(counter)"
             created.append(task)
-            rows.append(NotionRow(pageId: id, task: task, lastEditedTime: Date(), archived: false))
+            rows.append(RemoteTask(id: id, task: task, lastEditedTime: Date(), archived: false))
             return id
         }
-        func updatePage(pageId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws {
-            updated.append((pageId, task))
-            if let i = rows.firstIndex(where: { $0.pageId == pageId }) { rows[i].task = task }
+        func updateTask(id: String, to task: CanonicalTask) async throws {
+            updated.append((id, task))
+            if let i = rows.firstIndex(where: { $0.id == id }) { rows[i].task = task }
         }
-        func archivePage(pageId: String) async throws {
-            archived.append(pageId)
-            if let i = rows.firstIndex(where: { $0.pageId == pageId }) { rows[i].archived = true }
+        func removeTask(id: String) async throws {
+            archived.append(id)
+            if let i = rows.firstIndex(where: { $0.id == id }) { rows[i].archived = true }
         }
     }
 
@@ -89,9 +87,10 @@ final class TaskSyncCoordinatorTests: XCTestCase {
     private func makeSync() -> TaskSync {
         TaskSync(id: "ts-\(UUID().uuidString)",
                  remindersListId: "list", remindersListName: "Tasks",
-                 notionWorkspaceId: "ws", notionDatabaseId: "db", notionDatabaseName: "Tasks DB",
-                 fieldMapping: TaskFieldMapping(titleProperty: "Name", statusProperty: "Done?",
-                                                statusPropertyType: "checkbox"))
+                 provider: .notion(NotionTaskConfig(
+                    workspaceId: "ws", databaseId: "db", databaseName: "Tasks DB",
+                    fieldMapping: TaskFieldMapping(titleProperty: "Name", statusProperty: "Done?",
+                                                   statusPropertyType: "checkbox"))))
     }
 
     private func makeCoordinator(_ reminders: StubRemindersClient,
@@ -103,7 +102,7 @@ final class TaskSyncCoordinatorTests: XCTestCase {
         let coordinator = TaskSyncCoordinator(
             ledger: ledger,
             remindersClient: reminders,
-            notionClientFor: { _ in notion },
+            providerFor: { _ in notion },
             now: { now })
         return (coordinator, sync)
     }
@@ -114,9 +113,9 @@ final class TaskSyncCoordinatorTests: XCTestCase {
                        lastModified: modified)
     }
     private func row(_ id: String, _ title: String, completed: Bool = false,
-                     notes: String? = nil, due: Date? = nil, edited: Date = .distantPast) -> NotionRow {
-        NotionRow(pageId: id, task: CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes),
-                  lastEditedTime: edited, archived: false)
+                     notes: String? = nil, due: Date? = nil, edited: Date = .distantPast) -> RemoteTask {
+        RemoteTask(id: id, task: CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes),
+                   lastEditedTime: edited, archived: false)
     }
 
     private func cleanup(_ sync: TaskSync) { Ledger.shared.removeTaskSync(id: sync.id) }
@@ -336,7 +335,7 @@ final class TaskSyncCoordinatorTests: XCTestCase {
         // Force the Notion create to throw by swapping in a failing client.
         let failing = FailingCreateNotionClient()
         let coordinator2 = TaskSyncCoordinator(ledger: Ledger.shared, remindersClient: r,
-                                               notionClientFor: { _ in failing },
+                                               providerFor: { _ in failing },
                                                now: { Date(timeIntervalSince1970: 1) })
         _ = coordinator  // silence unused
         await coordinator2.run(sync)
@@ -347,12 +346,10 @@ final class TaskSyncCoordinatorTests: XCTestCase {
     }
 
     /// A Notion client whose create always throws, for the error path.
-    final class FailingCreateNotionClient: NotionTaskClient, @unchecked Sendable {
-        func queryDatabase(databaseId: String, mapping: TaskFieldMapping) async throws -> [NotionRow] { [] }
-        func createPage(databaseId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws -> String {
-            throw NotionError.validationFailed("nope")
-        }
-        func updatePage(pageId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws {}
-        func archivePage(pageId: String) async throws {}
+    final class FailingCreateNotionClient: TaskProvider, @unchecked Sendable {
+        func fetchTasks() async throws -> [RemoteTask] { [] }
+        func createTask(_ task: CanonicalTask) async throws -> String { throw NotionError.validationFailed("nope") }
+        func updateTask(id: String, to task: CanonicalTask) async throws {}
+        func removeTask(id: String) async throws {}
     }
 }

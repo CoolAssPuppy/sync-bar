@@ -708,13 +708,15 @@ struct SyncEditorView: View {
         originalTaskSyncId = sync.id
         reminderListId = sync.remindersListId
         reminderListName = sync.remindersListName
-        taskWorkspaceId = sync.notionWorkspaceId
-        taskDatabaseId = sync.notionDatabaseId
-        taskDatabaseName = sync.notionDatabaseName
-        dueProperty = sync.fieldMapping.dueDateProperty ?? ""
-        statusProperty = sync.fieldMapping.statusProperty ?? ""
-        notesProperty = sync.fieldMapping.notesProperty ?? ""
-        priorityProperty = sync.fieldMapping.priorityProperty ?? ""
+        let cfg = sync.provider.notionConfig
+        taskWorkspaceId = cfg?.workspaceId
+        taskDatabaseId = cfg?.databaseId
+        taskDatabaseName = cfg?.databaseName ?? ""
+        let mapping = cfg?.fieldMapping
+        dueProperty = mapping?.dueDateProperty ?? ""
+        statusProperty = mapping?.statusProperty ?? ""
+        notesProperty = mapping?.notesProperty ?? ""
+        priorityProperty = mapping?.priorityProperty ?? ""
         excludedStatuses = Set(sync.activeRules.excludedNotionStatuses)
         excludeCompletedReminders = sync.activeRules.excludeCompletedReminders
         loadReminderLists()
@@ -924,11 +926,13 @@ struct SyncEditorView: View {
             priorityPropertyType: priorityProperty.isEmpty ? nil : priorityType)
         let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
                                   excludeCompletedReminders: excludeCompletedReminders)
+        let provider = TaskProviderConfig.notion(NotionTaskConfig(
+            workspaceId: taskWorkspaceId, databaseId: taskDatabaseId,
+            databaseName: taskDatabaseName, fieldMapping: mapping))
         let sync = TaskSync(
             id: originalTaskSyncId ?? UUID().uuidString,
             remindersListId: reminderListId, remindersListName: reminderListName,
-            notionWorkspaceId: taskWorkspaceId, notionDatabaseId: taskDatabaseId, notionDatabaseName: taskDatabaseName,
-            fieldMapping: mapping, rules: rules)
+            provider: provider, rules: rules)
         ledger.upsertTaskSync(sync)
     }
 

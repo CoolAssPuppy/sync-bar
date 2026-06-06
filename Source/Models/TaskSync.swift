@@ -148,10 +148,8 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
     var enabled: Bool
     var remindersListId: String
     var remindersListName: String
-    var notionWorkspaceId: String
-    var notionDatabaseId: String
-    var notionDatabaseName: String
-    var fieldMapping: TaskFieldMapping
+    /// The remote side (Notion today; other trackers later) and its field mapping.
+    var provider: TaskProviderConfig
     /// Filter rules. Optional so older persisted syncs (no rules key) still decode.
     var rules: TaskSyncRules?
     var createdAt: Date
@@ -167,10 +165,7 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
          enabled: Bool = true,
          remindersListId: String,
          remindersListName: String,
-         notionWorkspaceId: String,
-         notionDatabaseId: String,
-         notionDatabaseName: String,
-         fieldMapping: TaskFieldMapping,
+         provider: TaskProviderConfig,
          rules: TaskSyncRules? = nil,
          createdAt: Date = Date(),
          updatedAt: Date = Date(),
@@ -181,16 +176,63 @@ struct TaskSync: Codable, Equatable, Identifiable, Hashable, Sendable {
         self.enabled = enabled
         self.remindersListId = remindersListId
         self.remindersListName = remindersListName
-        self.notionWorkspaceId = notionWorkspaceId
-        self.notionDatabaseId = notionDatabaseId
-        self.notionDatabaseName = notionDatabaseName
-        self.fieldMapping = fieldMapping
+        self.provider = provider
         self.rules = rules
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastRunAt = lastRunAt
         self.lastRunStatus = lastRunStatus
         self.lastRunError = lastRunError
+    }
+
+    // MARK: Codable (tolerant of the pre-genericized flat Notion shape)
+
+    enum CodingKeys: String, CodingKey {
+        case id, enabled, remindersListId, remindersListName, provider, rules
+        case createdAt, updatedAt, lastRunAt, lastRunStatus, lastRunError
+        // Legacy flat keys (pre-provider).
+        case notionWorkspaceId, notionDatabaseId, notionDatabaseName, fieldMapping
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        remindersListId = try c.decode(String.self, forKey: .remindersListId)
+        remindersListName = try c.decode(String.self, forKey: .remindersListName)
+        rules = try c.decodeIfPresent(TaskSyncRules.self, forKey: .rules)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
+        lastRunStatus = try c.decode(RuleRunStatus.self, forKey: .lastRunStatus)
+        lastRunError = try c.decodeIfPresent(String.self, forKey: .lastRunError)
+
+        if let provider = try c.decodeIfPresent(TaskProviderConfig.self, forKey: .provider) {
+            self.provider = provider
+        } else {
+            // Migrate a pre-genericized sync (flat Notion fields) into .notion(...).
+            let workspaceId = try c.decode(String.self, forKey: .notionWorkspaceId)
+            let databaseId = try c.decode(String.self, forKey: .notionDatabaseId)
+            let databaseName = try c.decode(String.self, forKey: .notionDatabaseName)
+            let mapping = try c.decode(TaskFieldMapping.self, forKey: .fieldMapping)
+            self.provider = .notion(NotionTaskConfig(workspaceId: workspaceId, databaseId: databaseId,
+                                                     databaseName: databaseName, fieldMapping: mapping))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encode(remindersListId, forKey: .remindersListId)
+        try c.encode(remindersListName, forKey: .remindersListName)
+        try c.encode(provider, forKey: .provider)
+        try c.encodeIfPresent(rules, forKey: .rules)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(lastRunAt, forKey: .lastRunAt)
+        try c.encode(lastRunStatus, forKey: .lastRunStatus)
+        try c.encodeIfPresent(lastRunError, forKey: .lastRunError)
     }
 }
 

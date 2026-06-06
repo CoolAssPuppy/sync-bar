@@ -403,7 +403,7 @@ private struct MenuTaskRow: View {
                         .foregroundStyle(theme.foreground).lineLimit(1)
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.tertiary)
-                    Text(sync.notionDatabaseName)
+                    Text(sync.provider.displayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.foreground).lineLimit(1)
                 }

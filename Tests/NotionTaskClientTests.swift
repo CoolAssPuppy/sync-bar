@@ -189,7 +189,7 @@ final class NotionTaskClientTests: XCTestCase {
 
         let client = RealNotionTaskClient(token: "t", session: makeSession())
         let rows = try await client.queryDatabase(databaseId: "db", mapping: mapping)
-        XCTAssertEqual(rows.map(\.pageId), ["a", "b"])
+        XCTAssertEqual(rows.map(\.id), ["a", "b"])
         XCTAssertEqual(rows.map(\.task.title), ["First", "Second"])
     }
 

@@ -18,9 +18,9 @@ final class TaskSyncRulesTests: XCTestCase {
     private func reminder(_ id: String, _ title: String, completed: Bool = false) -> ReminderRecord {
         ReminderRecord(id: id, task: CanonicalTask(title: title, isCompleted: completed), lastModified: nil)
     }
-    private func row(_ id: String, _ title: String, status: String? = nil) -> NotionRow {
-        NotionRow(pageId: id, task: CanonicalTask(title: title), lastEditedTime: .distantPast,
-                  archived: false, rawStatus: status)
+    private func row(_ id: String, _ title: String, status: String? = nil) -> RemoteTask {
+        RemoteTask(id: id, task: CanonicalTask(title: title), lastEditedTime: .distantPast,
+                   archived: false, rawStatus: status)
     }
     private func link(_ reminderId: String, _ pageId: String, _ title: String) -> TaskLink {
         TaskLink(reminderId: reminderId, notionPageId: pageId,

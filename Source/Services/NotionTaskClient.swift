@@ -14,44 +14,51 @@
 
 import Foundation
 
-/// One Notion database row, projected to the neutral task shape plus what the
-/// merge needs: its page id, page-level last-edited time, and archived flag.
-struct NotionRow: Equatable, Hashable, Sendable {
-    var pageId: String
-    var task: CanonicalTask
-    var lastEditedTime: Date
-    var archived: Bool
-    /// The raw status/select option name (independent of the done-value mapping),
-    /// so filter rules can exclude specific states. nil for checkbox or unmapped.
-    var rawStatus: String? = nil
-}
-
-/// The Notion side of a TaskSync. A protocol so the coordinator's tests can
-/// substitute an in-memory stub instead of hitting the API.
-protocol NotionTaskClient: Sendable {
-    func queryDatabase(databaseId: String, mapping: TaskFieldMapping) async throws -> [NotionRow]
-    /// Creates a row and returns its new page id.
-    func createPage(databaseId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws -> String
-    func updatePage(pageId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws
-    func archivePage(pageId: String) async throws
-}
-
-/// Real Notion v2022-06-28 client for task rows. Stateless: the field-shaping
-/// info lives in the mapping (captured from the schema in the editor), so no
-/// per-call schema fetch is needed.
-struct RealNotionTaskClient: NotionTaskClient {
+/// Real Notion v2022-06-28 task client and the Notion `TaskProvider` conformer.
+/// The granular `queryDatabase`/`createPage`/… methods stay (they're unit-tested
+/// directly); the TaskProvider methods wrap them with the instance's config. The
+/// field-shaping info lives in the mapping (captured from the schema in the
+/// editor), so no per-call schema fetch is needed.
+struct RealNotionTaskClient: TaskProvider {
     let token: String
+    /// Present for the TaskProvider path (production); nil when constructed with
+    /// just a token for direct method tests.
+    let config: NotionTaskConfig?
     private let session: URLSession
 
-    init(token: String, session: URLSession = .shared) {
+    init(token: String, config: NotionTaskConfig? = nil, session: URLSession = .shared) {
         self.token = token
+        self.config = config
         self.session = session
+    }
+
+    // MARK: TaskProvider (uses the instance's config)
+
+    private func requireConfig() throws -> NotionTaskConfig {
+        guard let config else { throw NotionError.validationFailed("Notion provider has no database configured.") }
+        return config
+    }
+
+    func fetchTasks() async throws -> [RemoteTask] {
+        let config = try requireConfig()
+        return try await queryDatabase(databaseId: config.databaseId, mapping: config.fieldMapping)
+    }
+    func createTask(_ task: CanonicalTask) async throws -> String {
+        let config = try requireConfig()
+        return try await createPage(databaseId: config.databaseId, task: task, mapping: config.fieldMapping)
+    }
+    func updateTask(id: String, to task: CanonicalTask) async throws {
+        let config = try requireConfig()
+        try await updatePage(pageId: id, task: task, mapping: config.fieldMapping)
+    }
+    func removeTask(id: String) async throws {
+        try await archivePage(pageId: id)
     }
 
     // MARK: Query (paginated)
 
-    func queryDatabase(databaseId: String, mapping: TaskFieldMapping) async throws -> [NotionRow] {
-        var rows: [NotionRow] = []
+    func queryDatabase(databaseId: String, mapping: TaskFieldMapping) async throws -> [RemoteTask] {
+        var rows: [RemoteTask] = []
         var cursor: String? = nil
         repeat {
             var body: [String: Any] = ["page_size": 100]
@@ -101,19 +108,19 @@ struct RealNotionTaskClient: NotionTaskClient {
 
     /// Projects a `/databases/{id}/query` response into rows plus the next cursor
     /// (nil when there are no more pages).
-    static func parseQueryResponse(data: Data, mapping: TaskFieldMapping) throws -> (rows: [NotionRow], nextCursor: String?) {
+    static func parseQueryResponse(data: Data, mapping: TaskFieldMapping) throws -> (rows: [RemoteTask], nextCursor: String?) {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = root["results"] as? [[String: Any]] else {
             throw NotionError.validationFailed("Notion query response wasn't shaped as expected.")
         }
-        let rows: [NotionRow] = results.compactMap { result in
+        let rows: [RemoteTask] = results.compactMap { result in
             guard let id = result["id"] as? String else { return nil }
             let props = result["properties"] as? [String: Any] ?? [:]
             let archived = result["archived"] as? Bool ?? false
             let lastEdited = parseDate(result["last_edited_time"]) ?? Date.distantPast
             let task = canonicalTask(fromProperties: props, mapping: mapping)
-            return NotionRow(pageId: id, task: task, lastEditedTime: lastEdited, archived: archived,
-                             rawStatus: statusName(props: props, mapping: mapping))
+            return RemoteTask(id: id, task: task, lastEditedTime: lastEdited, archived: archived,
+                              rawStatus: statusName(props: props, mapping: mapping))
         }
         let hasMore = root["has_more"] as? Bool ?? false
         let next = hasMore ? (root["next_cursor"] as? String) : nil

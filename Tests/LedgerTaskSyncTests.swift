@@ -17,8 +17,9 @@ final class LedgerTaskSyncTests: XCTestCase {
     private func makeSync(id: String) -> TaskSync {
         TaskSync(id: id,
                  remindersListId: "list-1", remindersListName: "Tasks",
-                 notionWorkspaceId: "ws-1", notionDatabaseId: "db-1", notionDatabaseName: "Tasks DB",
-                 fieldMapping: TaskFieldMapping(titleProperty: "Name"))
+                 provider: .notion(NotionTaskConfig(workspaceId: "ws-1", databaseId: "db-1",
+                                                    databaseName: "Tasks DB",
+                                                    fieldMapping: TaskFieldMapping(titleProperty: "Name"))))
     }
 
     private func link(_ reminderId: String, _ pageId: String) -> TaskLink {
@@ -33,10 +34,12 @@ final class LedgerTaskSyncTests: XCTestCase {
         XCTAssertEqual(ledger.taskSyncs.filter { $0.id == id }.count, 1)
 
         var edited = makeSync(id: id)
-        edited.notionDatabaseName = "Renamed DB"
+        edited.provider = .notion(NotionTaskConfig(workspaceId: "ws-1", databaseId: "db-1",
+                                                   databaseName: "Renamed DB",
+                                                   fieldMapping: TaskFieldMapping(titleProperty: "Name")))
         ledger.upsertTaskSync(edited)
         XCTAssertEqual(ledger.taskSyncs.filter { $0.id == id }.count, 1, "same id updates in place")
-        XCTAssertEqual(ledger.taskSyncs.first { $0.id == id }?.notionDatabaseName, "Renamed DB")
+        XCTAssertEqual(ledger.taskSyncs.first { $0.id == id }?.provider.displayName, "Renamed DB")
 
         ledger.removeTaskSync(id: id)
     }

@@ -55,6 +55,19 @@ final class TaskSyncCoordinator: ObservableObject {
         isSyncing = false
     }
 
+    /// Records an Activity entry for a Notion row that can't come into Reminders
+    /// because its list column is blank or names a list that doesn't exist.
+    private func flagUnroutableRow(_ task: CanonicalTask, sync: TaskSync) {
+        let named = (task.list?.isEmpty == false) ? "\"\(task.list!)\"" : "(no list)"
+        ledger.appendEvent(SyncEvent(
+            id: UUID().uuidString, occurredAt: now(),
+            ruleId: sync.id, ruleName: "\(sync.remindersListName) ↔ \(sync.provider.displayName)",
+            eventType: .pageFailed,
+            rmNotebookName: task.list ?? "—", rmPageId: nil,
+            notionPageUrl: nil, durationMs: nil, ocrProvider: nil,
+            errorMessage: "Skipped \"\(task.title)\": no Reminders list named \(named)."))
+    }
+
     /// Reconciles a single task sync end-to-end.
     func run(_ sync: TaskSync) async {
         guard let provider = providerFor(sync.provider) else {
@@ -63,11 +76,16 @@ final class TaskSyncCoordinator: ObservableObject {
             return
         }
 
+        // An all-lists sync (no single list chosen) spans every Reminders list and
+        // routes rows back by their mapped list name. A legacy sync targets one list.
+        let isAllLists = sync.remindersListId.isEmpty
+
         // 1) Fetch both sides + the baselines.
         let reminders: [ReminderRecord]
         let notionRows: [RemoteTask]
         do {
-            async let r = remindersClient.fetchReminders(listId: sync.remindersListId)
+            async let r = isAllLists ? remindersClient.fetchAllReminders()
+                                     : remindersClient.fetchReminders(listId: sync.remindersListId)
             async let n = provider.fetchTasks()
             reminders = try await r
             notionRows = try await n
@@ -102,10 +120,28 @@ final class TaskSyncCoordinator: ObservableObject {
             } catch { note(error) }
         }
 
+        // All-lists syncs route each new row into the list its mapped column names.
+        // A row whose list is blank or names no existing list is skipped and flagged
+        // in Activity (we never guess a home or auto-create lists).
+        let listIdByName: [String: String] = isAllLists
+            ? Dictionary(await remindersClient.lists().map { ($0.name.lowercased(), $0.id) },
+                         uniquingKeysWith: { first, _ in first })
+            : [:]
+
         // Unpaired Notion rows → new reminders.
         for item in plan.createInReminders {
+            let targetListId: String?
+            if isAllLists {
+                targetListId = item.task.list.flatMap { listIdByName[$0.lowercased()] }
+                if targetListId == nil {
+                    flagUnroutableRow(item.task, sync: sync)
+                    continue
+                }
+            } else {
+                targetListId = sync.remindersListId
+            }
             do {
-                let reminderId = try await remindersClient.create(item.task, inList: sync.remindersListId)
+                let reminderId = try await remindersClient.create(item.task, inList: targetListId!)
                 newLinks.append(TaskLink(reminderId: reminderId, notionPageId: item.notionPageId,
                                          baseline: item.task, baselineSyncedAt: now()))
                 succeeded += 1

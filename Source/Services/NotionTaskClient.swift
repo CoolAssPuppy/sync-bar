@@ -171,12 +171,27 @@ struct RealNotionTaskClient: TaskProvider {
             ?? (value["select"] as? [String: Any])?["name"] as? String
     }
 
-    /// The category-column option name on a row, for lane scoping. nil when no
-    /// category column is mapped or the row's column is empty.
+    /// The list-tag value on a row, for lane scoping. Reads whichever column type
+    /// holds the Reminders list name: select/status (one option), multi_select
+    /// (returns the configured list value when the row carries it, so equality
+    /// scoping matches), or rich_text. nil when the column is unmapped or empty.
     static func categoryName(props: [String: Any], mapping: TaskFieldMapping) -> String? {
         guard let name = mapping.categoryProperty, let value = props[name] as? [String: Any] else { return nil }
-        return (value["status"] as? [String: Any])?["name"] as? String
-            ?? (value["select"] as? [String: Any])?["name"] as? String
+        if let option = (value["status"] as? [String: Any])?["name"] as? String { return option }
+        if let option = (value["select"] as? [String: Any])?["name"] as? String { return option }
+        if let multi = value["multi_select"] as? [[String: Any]] {
+            let names = multi.compactMap { $0["name"] as? String }
+            if let target = mapping.categoryValue,
+               let hit = names.first(where: { $0.caseInsensitiveCompare(target) == .orderedSame }) {
+                return hit
+            }
+            return names.first
+        }
+        if let runs = value["rich_text"] as? [[String: Any]] {
+            let text = runs.compactMap { ($0["plain_text"] as? String) ?? ($0["text"] as? [String: Any])?["content"] as? String }.joined()
+            return text.isEmpty ? nil : text
+        }
+        return nil
     }
 
     /// Reads completion from the status column, robust to whichever shape it has
@@ -260,11 +275,16 @@ struct RealNotionTaskClient: TaskProvider {
             properties[priorityProperty] = [key: ["name": bucket]]
         }
 
-        // Stamp the category lane on creates so new rows are tagged for the
-        // inbound filter. Notion creates the option if it doesn't exist yet.
+        // Stamp the Reminders list name into the mapped column on creates, shaped
+        // to the column type. Notion creates a select/multi-select option if it
+        // doesn't exist yet.
         if stampCategory, let categoryProperty = mapping.categoryProperty, let value = mapping.categoryScope {
-            let key = mapping.categoryPropertyType == "status" ? "status" : "select"
-            properties[categoryProperty] = [key: ["name": value]]
+            switch mapping.categoryPropertyType {
+            case "multi_select": properties[categoryProperty] = ["multi_select": [["name": value]]]
+            case "rich_text":    properties[categoryProperty] = ["rich_text": [["text": ["content": value]]]]
+            case "status":       properties[categoryProperty] = ["status": ["name": value]]
+            default:             properties[categoryProperty] = ["select": ["name": value]]
+            }
         }
 
         return properties

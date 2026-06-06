@@ -100,15 +100,16 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     /// Notion property that holds priority, and its type ("select" or "status").
     var priorityProperty: String?
     var priorityPropertyType: String?
-    /// Category "lane": the select/status column and the single option value that
-    /// marks rows belonging to this sync. When set, the value is stamped on every
-    /// write and only matching rows are imported into Reminders (see `categoryScope`).
-    /// Both nil means no scoping — the sync owns the whole database, as before.
+    /// The "List" mapping: the Notion column that carries this sync's Reminders
+    /// list name, its type (select / status / multi_select / rich_text), and the
+    /// value written — always the list name. When set, the name is stamped on new
+    /// rows and only rows carrying it are imported back (see `categoryScope`). All
+    /// nil means no list tagging — the sync owns the whole database, as before.
     var categoryProperty: String?
     var categoryPropertyType: String?
     var categoryValue: String?
 
-    /// The lane value to scope on, or nil when no category column is configured.
+    /// The list value to scope on, or nil when no list column is configured.
     /// Drives the inbound filter and the outbound stamp.
     var categoryScope: String? {
         guard categoryProperty != nil, let value = categoryValue, !value.isEmpty else { return nil }

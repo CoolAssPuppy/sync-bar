@@ -171,6 +171,33 @@ final class NotionTaskClientTests: XCTestCase {
             props: ["Category": ["select": ["name": "Work"]]], mapping: mapping), "Work")
     }
 
+    func test_category_lane_supports_multi_select_and_text_columns() {
+        // Multi-select: the list name is written as one option, and a row counts as
+        // in-lane when its options contain that name (other tags may coexist).
+        let multi = TaskFieldMapping(titleProperty: "Name",
+                                     categoryProperty: "Tags", categoryPropertyType: "multi_select",
+                                     categoryValue: "Personal")
+        let multiProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: multi)
+        let written = (multiProps["Tags"] as? [String: Any])?["multi_select"] as? [[String: Any]]
+        XCTAssertEqual(written?.first?["name"] as? String, "Personal")
+        XCTAssertEqual(RealNotionTaskClient.categoryName(
+            props: ["Tags": ["multi_select": [["name": "Urgent"], ["name": "Personal"]]]], mapping: multi), "Personal",
+            "a row carrying the list name among its tags reads as in-lane")
+        XCTAssertNotEqual(RealNotionTaskClient.categoryName(
+            props: ["Tags": ["multi_select": [["name": "Urgent"]]]], mapping: multi), "Personal",
+            "a row without the list name does not read as Personal, so scoping excludes it")
+
+        // Text: the list name goes over as rich_text and reads back verbatim.
+        let text = TaskFieldMapping(titleProperty: "Name",
+                                    categoryProperty: "List", categoryPropertyType: "rich_text",
+                                    categoryValue: "Work")
+        let textProps = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: text)
+        let runs = (textProps["List"] as? [String: Any])?["rich_text"] as? [[String: Any]]
+        XCTAssertEqual((runs?.first?["text"] as? [String: Any])?["content"] as? String, "Work")
+        XCTAssertEqual(RealNotionTaskClient.categoryName(
+            props: ["List": ["rich_text": [["plain_text": "Work"]]]], mapping: text), "Work")
+    }
+
     func test_no_category_column_leaves_writes_and_scope_untouched() {
         let mapping = TaskFieldMapping(titleProperty: "Name")
         let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)

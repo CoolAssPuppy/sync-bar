@@ -192,7 +192,10 @@ enum TaskSyncEngine {
                                 equal: { $0 == $1 }, reminderLater: reminderLater)
         let notes = resolve(reminder.notes, notion.notes, baseline?.notes,
                             equal: { ($0 ?? "") == ($1 ?? "") }, reminderLater: reminderLater)
-        return CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes)
+        let priority = resolve(reminder.priority, notion.priority, baseline?.priority,
+                               equal: { ($0 ?? "").caseInsensitiveCompare($1 ?? "") == .orderedSame },
+                               reminderLater: reminderLater)
+        return CanonicalTask(title: title, due: due, isCompleted: completed, notes: notes, priority: priority)
     }
 
     /// Resolves one field across the two sides and the optional baseline.

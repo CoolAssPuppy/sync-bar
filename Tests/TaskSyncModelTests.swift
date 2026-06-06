@@ -77,6 +77,35 @@ final class TaskSyncModelTests: XCTestCase {
 
     // MARK: Pairing (title + due, ignores completion/notes)
 
+    func test_ek_priority_buckets_round_trip() {
+        XCTAssertEqual(EventKitRemindersClient.priorityBucket(fromEK: 1), "High")
+        XCTAssertEqual(EventKitRemindersClient.priorityBucket(fromEK: 5), "Medium")
+        XCTAssertEqual(EventKitRemindersClient.priorityBucket(fromEK: 9), "Low")
+        XCTAssertNil(EventKitRemindersClient.priorityBucket(fromEK: 0))
+        XCTAssertEqual(EventKitRemindersClient.ekPriority(fromBucket: "High"), 1)
+        XCTAssertEqual(EventKitRemindersClient.ekPriority(fromBucket: "Medium"), 5)
+        XCTAssertEqual(EventKitRemindersClient.ekPriority(fromBucket: "Low"), 9)
+        XCTAssertEqual(EventKitRemindersClient.ekPriority(fromBucket: nil), 0)
+    }
+
+    func test_priority_merges_disjoint_and_by_latest_on_conflict() {
+        // Disjoint: reminder sets priority, Notion unchanged → reminder's kept.
+        let disjoint = TaskSyncEngine.merge(
+            reminder: CanonicalTask(title: "T", priority: "High"),
+            notion: CanonicalTask(title: "T"),
+            baseline: CanonicalTask(title: "T"),
+            reminderLater: false)
+        XCTAssertEqual(disjoint.priority, "High")
+
+        // Conflict: both changed; later editor wins.
+        let conflict = TaskSyncEngine.merge(
+            reminder: CanonicalTask(title: "T", priority: "High"),
+            notion: CanonicalTask(title: "T", priority: "Low"),
+            baseline: CanonicalTask(title: "T", priority: "Medium"),
+            reminderLater: false)
+        XCTAssertEqual(conflict.priority, "Low")
+    }
+
     func test_pairs_on_title_and_due_only() {
         let reminder = CanonicalTask(title: "Ship v1", due: date(2026, 6, 5, 8), isCompleted: true, notes: "done")
         let notionRow = CanonicalTask(title: "Ship v1", due: date(2026, 6, 5, 23), isCompleted: false, notes: nil)

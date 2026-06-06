@@ -127,10 +127,30 @@ struct RealNotionTaskClient: NotionTaskClient {
         let due = mapping.dueDateProperty.flatMap { dateValue(props[$0]) }
         let notes = mapping.notesProperty.map { plainText(props[$0], key: "rich_text") }
         let isCompleted = completion(props: props, mapping: mapping)
+        let priority = mapping.priorityProperty.flatMap { priorityBucket(named: optionName(props[$0])) }
         return CanonicalTask(title: title,
                              due: due,
                              isCompleted: isCompleted,
-                             notes: (notes?.isEmpty ?? true) ? nil : notes)
+                             notes: (notes?.isEmpty ?? true) ? nil : notes,
+                             priority: priority)
+    }
+
+    /// Normalizes a Notion select/status option to a Reminders priority bucket.
+    /// Anything that isn't recognizably high/medium/low is left unmapped (nil) so
+    /// we never overwrite a non-standard Notion priority.
+    static func priorityBucket(named name: String?) -> String? {
+        guard let n = name?.lowercased() else { return nil }
+        if n.contains("high") { return "High" }
+        if n.contains("medium") || n.contains("med") { return "Medium" }
+        if n.contains("low") { return "Low" }
+        return nil
+    }
+
+    /// The select/status option name on a property value.
+    private static func optionName(_ property: Any?) -> String? {
+        guard let value = property as? [String: Any] else { return nil }
+        return (value["status"] as? [String: Any])?["name"] as? String
+            ?? (value["select"] as? [String: Any])?["name"] as? String
     }
 
     /// The raw status/select option name on a row (not compared to any done
@@ -212,6 +232,13 @@ struct RealNotionTaskClient: NotionTaskClient {
 
         if let statusProperty = mapping.statusProperty, let value = statusValue(for: task, mapping: mapping) {
             properties[statusProperty] = value
+        }
+
+        // Only write priority when we have one — a nil priority leaves Notion's
+        // value untouched (so non-standard priorities aren't wiped).
+        if let priorityProperty = mapping.priorityProperty, let bucket = task.priority {
+            let key = mapping.priorityPropertyType == "status" ? "status" : "select"
+            properties[priorityProperty] = [key: ["name": bucket]]
         }
 
         return properties

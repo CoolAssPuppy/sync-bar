@@ -128,6 +128,28 @@ final class NotionTaskClientTests: XCTestCase {
         XCTAssertNil(props["Status"], "no not-done option configured → status column is left as-is")
     }
 
+    func test_priority_encodes_only_when_present_and_reads_known_buckets() {
+        let mapping = TaskFieldMapping(titleProperty: "Name", priorityProperty: "Priority", priorityPropertyType: "select")
+
+        let withPriority = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", priority: "High"), mapping: mapping)
+        XCTAssertEqual(((withPriority["Priority"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "High")
+
+        // nil priority omits the column entirely (so a non-standard Notion priority is never wiped).
+        let without = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
+        XCTAssertNil(without["Priority"])
+
+        let low = RealNotionTaskClient.canonicalTask(
+            fromProperties: ["Name": ["title": [["plain_text": "T"]]], "Priority": ["select": ["name": "Low"]]],
+            mapping: mapping)
+        XCTAssertEqual(low.priority, "Low")
+
+        // An option that isn't recognizably high/medium/low is left unmapped.
+        let custom = RealNotionTaskClient.canonicalTask(
+            fromProperties: ["Name": ["title": [["plain_text": "T"]]], "Priority": ["select": ["name": "P1"]]],
+            mapping: mapping)
+        XCTAssertNil(custom.priority)
+    }
+
     func test_checkbox_status_encodes_bool() {
         let mapping = TaskFieldMapping(titleProperty: "Name", statusProperty: "Done?", statusPropertyType: "checkbox")
         let done = RealNotionTaskClient.properties(for: CanonicalTask(title: "T", isCompleted: true), mapping: mapping)

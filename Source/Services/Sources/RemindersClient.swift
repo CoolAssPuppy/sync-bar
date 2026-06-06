@@ -136,7 +136,8 @@ struct EventKitRemindersClient: RemindersClient {
             title: reminder.title ?? "",
             due: date(fromDueComponents: reminder.dueDateComponents),
             isCompleted: reminder.isCompleted,
-            notes: reminder.notes)
+            notes: reminder.notes,
+            priority: priorityBucket(fromEK: reminder.priority))
         return ReminderRecord(id: reminder.calendarItemIdentifier,
                               task: task,
                               lastModified: reminder.lastModifiedDate)
@@ -149,6 +150,26 @@ struct EventKitRemindersClient: RemindersClient {
         reminder.dueDateComponents = dueComponents(from: task.due, calendar: calendar)
         reminder.isCompleted = task.isCompleted
         reminder.notes = task.notes
+        reminder.priority = ekPriority(fromBucket: task.priority)
+    }
+
+    /// EventKit priority is 0 (none) / 1–4 (high) / 5 (medium) / 6–9 (low).
+    static func priorityBucket(fromEK value: Int) -> String? {
+        switch value {
+        case 1...4: return "High"
+        case 5:     return "Medium"
+        case 6...9: return "Low"
+        default:    return nil
+        }
+    }
+
+    static func ekPriority(fromBucket bucket: String?) -> Int {
+        switch bucket?.lowercased() {
+        case "high":   return 1
+        case "medium": return 5
+        case "low":    return 9
+        default:       return 0
+        }
     }
 
     // MARK: Pure date helpers (EventKit-free, unit-tested)

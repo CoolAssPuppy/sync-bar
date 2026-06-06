@@ -23,12 +23,16 @@ struct CanonicalTask: Codable, Equatable, Hashable, Sendable {
     var due: Date?
     var isCompleted: Bool
     var notes: String?
+    /// Normalized priority: "High", "Medium", "Low", or nil. Apple Reminders has
+    /// three levels; a Notion option that isn't one of these is left untouched.
+    var priority: String?
 
-    init(title: String, due: Date? = nil, isCompleted: Bool = false, notes: String? = nil) {
+    init(title: String, due: Date? = nil, isCompleted: Bool = false, notes: String? = nil, priority: String? = nil) {
         self.title = title
         self.due = due
         self.isCompleted = isCompleted
         self.notes = notes
+        self.priority = priority
     }
 
     // MARK: Field-level comparison (used by the three-way merge)
@@ -52,12 +56,15 @@ struct CanonicalTask: Codable, Equatable, Hashable, Sendable {
     }
     func sameCompletion(as other: CanonicalTask) -> Bool { isCompleted == other.isCompleted }
     func sameNotes(as other: CanonicalTask) -> Bool { (notes ?? "") == (other.notes ?? "") }
+    func samePriority(as other: CanonicalTask) -> Bool {
+        (priority ?? "").caseInsensitiveCompare(other.priority ?? "") == .orderedSame
+    }
 
     /// Whole-record field equality (day-granular due, trimmed title, nil-coalesced
     /// notes). Distinct from synthesized `==`, which is exact.
     func fieldsEqual(to other: CanonicalTask, calendar: Calendar = .current) -> Bool {
         sameTitle(as: other) && sameDue(as: other, calendar: calendar)
-            && sameCompletion(as: other) && sameNotes(as: other)
+            && sameCompletion(as: other) && sameNotes(as: other) && samePriority(as: other)
     }
 
     /// First-sync pairing test: an unpaired Reminder and an unpaired Notion row
@@ -90,6 +97,9 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
     /// back to incomplete. When nil, an incomplete task leaves the column as-is.
     var statusNotDoneValue: String?
     var notesProperty: String?
+    /// Notion property that holds priority, and its type ("select" or "status").
+    var priorityProperty: String?
+    var priorityPropertyType: String?
 
     init(titleProperty: String,
          dueDateProperty: String? = nil,
@@ -97,7 +107,9 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
          statusPropertyType: String? = nil,
          statusDoneValue: String? = nil,
          statusNotDoneValue: String? = nil,
-         notesProperty: String? = nil) {
+         notesProperty: String? = nil,
+         priorityProperty: String? = nil,
+         priorityPropertyType: String? = nil) {
         self.titleProperty = titleProperty
         self.dueDateProperty = dueDateProperty
         self.statusProperty = statusProperty
@@ -105,6 +117,8 @@ struct TaskFieldMapping: Codable, Equatable, Hashable, Sendable {
         self.statusDoneValue = statusDoneValue
         self.statusNotDoneValue = statusNotDoneValue
         self.notesProperty = notesProperty
+        self.priorityProperty = priorityProperty
+        self.priorityPropertyType = priorityPropertyType
     }
 }
 

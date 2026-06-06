@@ -268,14 +268,6 @@ struct SyncEditorView: View {
 
     private var remindersListPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                remindersGlyph
-                Text("All your lists").font(.system(size: 14.5, weight: .semibold)).foregroundStyle(theme.foreground)
-                Spacer()
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.cardInset))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             if reminderLists.isEmpty && !remindersLoading {
                 HStack(spacing: 8) {
                     Text("Reminders access is needed.").font(.system(size: 11)).foregroundStyle(.orange)
@@ -887,9 +879,11 @@ struct SyncEditorView: View {
             databaseName: taskDatabaseName, fieldMapping: mapping))
         let sync = TaskSync(
             id: originalTaskSyncId ?? UUID().uuidString,
-            // No single list: an all-lists sync. Each row is tagged by its own list.
-            remindersListId: reminderListId ?? "",
-            remindersListName: (reminderListName.isEmpty ? "All lists" : reminderListName),
+            // The editor is all-lists only — always empty, even when editing an
+            // older single-list sync, so the coordinator routes inbound rows by
+            // their mapped list instead of dumping them into one list.
+            remindersListId: "",
+            remindersListName: "All lists",
             provider: provider, rules: rules)
         ledger.upsertTaskSync(sync)
     }

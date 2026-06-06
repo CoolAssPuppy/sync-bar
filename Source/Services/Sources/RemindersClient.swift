@@ -54,6 +54,9 @@ protocol RemindersClient: Sendable {
     func requestAccess() async -> Bool
     func lists() async -> [ReminderList]
     func fetchReminders(listId: String) async throws -> [ReminderRecord]
+    /// Every reminder across every list, each tagged with its list name. Used by
+    /// all-lists task syncs (no single list chosen).
+    func fetchAllReminders() async throws -> [ReminderRecord]
     /// Creates a reminder and returns its new stable id.
     func create(_ task: CanonicalTask, inList listId: String) async throws -> String
     func update(id: String, to task: CanonicalTask) async throws
@@ -95,6 +98,19 @@ struct EventKitRemindersClient: RemindersClient {
         return reminders.map(Self.record(from:))
     }
 
+    func fetchAllReminders() async throws -> [ReminderRecord] {
+        let store = EKEventStore()
+        let calendars = store.calendars(for: .reminder)
+        guard !calendars.isEmpty else { return [] }
+        let predicate = store.predicateForReminders(in: calendars)
+        let reminders: [EKReminder] = await withCheckedContinuation { cont in
+            store.fetchReminders(matching: predicate) { found in
+                cont.resume(returning: found ?? [])
+            }
+        }
+        return reminders.map(Self.record(from:))
+    }
+
     func create(_ task: CanonicalTask, inList listId: String) async throws -> String {
         let store = EKEventStore()
         guard let calendar = store.calendar(withIdentifier: listId) else {
@@ -114,6 +130,14 @@ struct EventKitRemindersClient: RemindersClient {
             throw RemindersError.reminderNotFound
         }
         Self.apply(task, to: reminder)
+        // List membership is bidirectional: if the task's list changed (a Notion
+        // category edit), move the reminder to the matching list. If no list with
+        // that name exists, leave it where it is rather than guess.
+        if let listName = task.list,
+           reminder.calendar?.title.caseInsensitiveCompare(listName) != .orderedSame,
+           let target = store.calendars(for: .reminder).first(where: { $0.title.caseInsensitiveCompare(listName) == .orderedSame }) {
+            reminder.calendar = target
+        }
         do { try store.save(reminder, commit: true) }
         catch { throw RemindersError.saveFailed(error.localizedDescription) }
     }
@@ -137,7 +161,8 @@ struct EventKitRemindersClient: RemindersClient {
             due: date(fromDueComponents: reminder.dueDateComponents),
             isCompleted: reminder.isCompleted,
             notes: reminder.notes,
-            priority: priorityBucket(fromEK: reminder.priority))
+            priority: priorityBucket(fromEK: reminder.priority),
+            list: reminder.calendar?.title)
         return ReminderRecord(id: reminder.calendarItemIdentifier,
                               task: task,
                               lastModified: reminder.lastModifiedDate)

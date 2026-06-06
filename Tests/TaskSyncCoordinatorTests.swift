@@ -34,6 +34,7 @@ final class TaskSyncCoordinatorTests: XCTestCase {
         func requestAccess() async -> Bool { true }
         func lists() async -> [ReminderList] { [ReminderList(id: "list", name: "Tasks")] }
         func fetchReminders(listId: String) async throws -> [ReminderRecord] { records }
+        func fetchAllReminders() async throws -> [ReminderRecord] { records }
 
         func create(_ task: CanonicalTask, inList listId: String) async throws -> String {
             if failNextCreate { failNextCreate = false; throw RemindersError.saveFailed("boom") }

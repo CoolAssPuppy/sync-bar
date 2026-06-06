@@ -92,7 +92,9 @@ struct RealNotionTaskClient: TaskProvider {
 
     func updatePage(pageId: String, task: CanonicalTask, mapping: TaskFieldMapping) async throws {
         var request = try makeRequest(url: "https://api.notion.com/v1/pages/\(pageId)", method: "PATCH")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": Self.properties(for: task, mapping: mapping)])
+        // Don't re-stamp the category on updates: a PATCH omitting the column
+        // leaves it as-is, so a row deliberately moved to another lane stays there.
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["properties": Self.properties(for: task, mapping: mapping, stampCategory: false)])
         let (data, response) = try await session.data(for: request)
         try Self.validate(response: response, data: data, context: "update task row")
     }
@@ -227,8 +229,9 @@ struct RealNotionTaskClient: TaskProvider {
 
     /// Builds the `properties` payload for a create/update from a task, shaped to
     /// each column's type via the mapping. A nil due clears the date; nil notes
-    /// clears the text; completion is shaped per `statusPropertyType`.
-    static func properties(for task: CanonicalTask, mapping: TaskFieldMapping) -> [String: Any] {
+    /// clears the text; completion is shaped per `statusPropertyType`. The category
+    /// lane is stamped only on creates (`stampCategory`); updates leave it untouched.
+    static func properties(for task: CanonicalTask, mapping: TaskFieldMapping, stampCategory: Bool = true) -> [String: Any] {
         var properties: [String: Any] = [
             mapping.titleProperty: ["title": [["text": ["content": task.title]]]]
         ]
@@ -257,10 +260,9 @@ struct RealNotionTaskClient: TaskProvider {
             properties[priorityProperty] = [key: ["name": bucket]]
         }
 
-        // Stamp the category lane on every write so rows this sync creates or
-        // touches stay tagged for the inbound filter. Notion creates the option
-        // if it doesn't exist yet.
-        if let categoryProperty = mapping.categoryProperty, let value = mapping.categoryScope {
+        // Stamp the category lane on creates so new rows are tagged for the
+        // inbound filter. Notion creates the option if it doesn't exist yet.
+        if stampCategory, let categoryProperty = mapping.categoryProperty, let value = mapping.categoryScope {
             let key = mapping.categoryPropertyType == "status" ? "status" : "select"
             properties[categoryProperty] = [key: ["name": value]]
         }

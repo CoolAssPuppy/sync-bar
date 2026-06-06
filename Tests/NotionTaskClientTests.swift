@@ -155,9 +155,12 @@ final class NotionTaskClientTests: XCTestCase {
                                        categoryProperty: "Category", categoryPropertyType: "select",
                                        categoryValue: "Personal")
 
-        // Outbound: the lane value is stamped on every write.
-        let props = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
-        XCTAssertEqual(((props["Category"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "Personal")
+        // Outbound: the lane value is stamped on creates, omitted on updates (so a
+        // row moved to another lane isn't yanked back).
+        let onCreate = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping)
+        XCTAssertEqual(((onCreate["Category"] as? [String: Any])?["select"] as? [String: Any])?["name"] as? String, "Personal")
+        let onUpdate = RealNotionTaskClient.properties(for: CanonicalTask(title: "T"), mapping: mapping, stampCategory: false)
+        XCTAssertNil(onUpdate["Category"], "updates leave the category column untouched")
 
         // Inbound: the row's category option name is surfaced for scoping.
         let row = RealNotionTaskClient.canonicalTask(

@@ -582,6 +582,15 @@ final class Ledger: ObservableObject {
         if changed { persistSyncedHashes() }
     }
 
+    /// Whether a binding has any recorded sync state (a hash or an external id).
+    /// False means it has never synced and never been adopted — the cue to run
+    /// first-run adoption before the first write so existing notes aren't dupes.
+    func hasAnySyncedState(bindingId: String) -> Bool {
+        let prefix = "\(bindingId)|"
+        return syncedPageHashes.keys.contains { $0.hasPrefix(prefix) }
+            || syncedExternalIds.keys.contains { $0.hasPrefix(prefix) }
+    }
+
     /// Seeds a first-run adoption link: records that `pageId` already lives at
     /// `externalId` (an existing Apple note matched by title+date) WITHOUT
     /// recording a version hash. The missing hash is deliberate — the next sync

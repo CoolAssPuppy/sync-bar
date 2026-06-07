@@ -288,6 +288,8 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
+        await adoptExistingNotesIfFirstRun(rule: rule, binding: binding, contents: contents)
+
         var notesSynced = 0
         var firstError: String?
         let runStart = Date()
@@ -362,6 +364,38 @@ final class SyncCoordinator: ObservableObject {
         } else if firstError == nil, notesSynced > 0, self.settings.notifyOnSuccess {
             postNotification(title: "Sync complete", body: "\(folderName): \(Formatters.syncResultLabel(pageCount: notesSynced))")
         }
+    }
+
+    /// Before a Notion -> Apple Notes binding's first write, link each Notion page
+    /// to an existing Apple note that matches it (same notebook + title + date) so
+    /// the sync updates those notes in place instead of duplicating them. Identity
+    /// can't live in the note body (Apple Notes strips hidden markers), so it's
+    /// seeded into the ledger here. Runs once: a binding with any recorded state
+    /// has already adopted/synced. Only Notion -> Apple Notes adopts; reading the
+    /// whole Notes account is wasted for any other pairing.
+    private func adoptExistingNotesIfFirstRun(rule: SyncRule, binding: DestinationBinding,
+                                              contents: [(item: SourceItem, content: NoteContent)]) async {
+        guard case .notion = rule.source, binding.kind == .appleNotes else { return }
+        guard !ledger.hasAnySyncedState(bindingId: binding.id) else { return }
+
+        let candidates = contents.map { entry in
+            AdoptionCandidate(notionId: entry.item.id,
+                              title: entry.item.name,
+                              category: entry.item.folderPath.last,
+                              createdAt: entry.item.createdAt)
+        }
+        let existing: [ExistingAppleNote]
+        do {
+            existing = try await AppleNotesInventory.read()
+        } catch {
+            Log.sync.error("First-run adoption skipped — couldn't read Apple Notes: \(Formatters.userMessage(for: error), privacy: .public)")
+            return
+        }
+        let result = NoteAdoptionMatcher.match(notion: candidates, apple: existing)
+        for link in result.links {
+            ledger.adoptExternalLink(bindingId: binding.id, pageId: link.notionId, externalId: link.appleNoteId)
+        }
+        Log.sync.info("First-run adoption: linked \(result.links.count, privacy: .public), fresh \(result.freshNotionIds.count, privacy: .public), orphan Apple notes \(result.orphanAppleNoteIds.count, privacy: .public)")
     }
 
     /// Set-level mirror: hand the destination the full desired set and let it

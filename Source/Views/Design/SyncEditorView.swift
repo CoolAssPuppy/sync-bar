@@ -78,6 +78,8 @@ struct SyncEditorView: View {
     @State private var notionSourceDatabaseName: String = ""
     @State private var notionSourceTitleProperty: String = ""
     @State private var notionSourceCategoryProperty: String = NotionSourceConfig.defaultCategoryProperty
+    @State private var notionSourceDatabases: [NotionDestination] = []
+    @State private var notionSourceSchema: [NotionDatabaseProperty] = []
     // From — Reminders (two-way)
     @State private var reminderLists: [ReminderList] = []
     @State private var remindersLoading = false
@@ -145,6 +147,8 @@ struct SyncEditorView: View {
         var out: [EditorSource] = []
         if ledger.remarkableAccount != nil { out.append(.kind(.remarkable)) }
         if ledger.safariConnected { out.append(.kind(.safari)) }
+        // A connected Notion workspace can be a backup source (Notion -> notes).
+        if !ledger.notionWorkspaces.isEmpty { out.append(.kind(.notion)) }
         if ledger.remindersConnected { out.append(.reminders) }
         return out.isEmpty ? [.kind(.remarkable)] : out
     }
@@ -231,7 +235,7 @@ struct SyncEditorView: View {
             switch source {
             case .kind(.remarkable): remarkableScopePicker
             case .kind(.safari):     safariScopePicker
-            case .kind(.notion):     EmptyView()   // Notion source picker: later step
+            case .kind(.notion):     notionSourceScopePicker
             case .reminders:         remindersListPicker
             }
         }
@@ -273,6 +277,46 @@ struct SyncEditorView: View {
                 }
             }
         )
+    }
+
+    /// Notion-as-source picker: workspace (when several), database, and the
+    /// single-select column whose value becomes the destination folder/notebook.
+    private var notionSourceScopePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if ledger.notionWorkspaces.count > 1 {
+                CustomDropdown(
+                    options: ledger.notionWorkspaces.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.workspaceName) },
+                    selectedId: notionSourceWorkspaceId,
+                    placeholder: "Choose a workspace",
+                    placeholderIcon: AnyView(DestinationIcon(kind: .notion, size: 24)),
+                    onSelect: { id in selectNotionSourceWorkspace(id) }
+                )
+            }
+            CustomDropdown(
+                options: notionSourceDatabases.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.title) },
+                selectedId: notionSourceDatabaseId,
+                placeholder: notionSourceDatabases.isEmpty ? "Loading databases…" : "Choose a database",
+                placeholderIcon: AnyView(placeholderSourceIcon),
+                onSelect: { id in selectNotionSourceDatabase(id) }
+            )
+            if notionSourceDatabaseId != nil {
+                HStack(spacing: 8) {
+                    Text("Folder column").font(.system(size: 12)).foregroundStyle(theme.tertiary)
+                    CustomDropdown(
+                        options: notionSourceCategoryColumns.map { DropdownOption(id: $0, icon: AnyView(EmptyView()), title: $0) },
+                        selectedId: notionSourceCategoryProperty,
+                        placeholder: notionSourceCategoryColumns.isEmpty ? "No select columns" : "Choose a column",
+                        placeholderIcon: AnyView(placeholderSourceIcon),
+                        onSelect: { id in notionSourceCategoryProperty = id }
+                    )
+                }
+            }
+        }
+    }
+
+    /// Single-select-style columns that can drive the folder/notebook split.
+    private var notionSourceCategoryColumns: [String] {
+        notionSourceSchema.filter { ["select", "status", "multi_select"].contains($0.type) }.map(\.name)
     }
 
     private var remindersListPicker: some View {
@@ -640,6 +684,10 @@ struct SyncEditorView: View {
             source = availableSources.first ?? .kind(.remarkable)
             if isReminders { loadReminderLists(); taskWorkspaceId = ledger.notionWorkspaces.first?.id; loadTaskDatabases() }
             else if sourceKind == .safari { loadSafariScopes() }
+            else if sourceKind == .notion {
+                notionSourceWorkspaceId = ledger.notionWorkspaces.first?.id
+                loadNotionSourceDatabases()
+            }
         case .edit(let flow):
             loadOneWay(flow)
         case .editTask(let sync):
@@ -676,6 +724,8 @@ struct SyncEditorView: View {
             notionSourceDatabaseName = cfg.databaseTitle
             notionSourceTitleProperty = cfg.titleProperty
             notionSourceCategoryProperty = cfg.categoryProperty
+            loadNotionSourceDatabases()
+            loadNotionSourceSchema()
         }
         loadFormState(from: flow.binding.configuration)
     }
@@ -704,7 +754,10 @@ struct SyncEditorView: View {
         switch next {
         case .kind(.remarkable): folder = nil; selectedFileIds = nil
         case .kind(.safari):     safariScopeId = nil; safariScopeName = ""; loadSafariScopes()
-        case .kind(.notion):     notionSourceDatabaseId = nil; notionSourceDatabaseName = ""
+        case .kind(.notion):
+            notionSourceDatabaseId = nil; notionSourceDatabaseName = ""; notionSourceSchema = []
+            if notionSourceWorkspaceId == nil { notionSourceWorkspaceId = ledger.notionWorkspaces.first?.id }
+            loadNotionSourceDatabases()
         case .reminders:
             reminderListId = nil; reminderListName = ""; mapRows = []
             loadReminderLists()
@@ -717,6 +770,49 @@ struct SyncEditorView: View {
         Task {
             let scopes = await coordinator.scopes(for: .safari)
             await MainActor.run { safariScopes = scopes }
+        }
+    }
+
+    // MARK: Notion source loaders
+
+    private func selectNotionSourceWorkspace(_ id: String) {
+        guard id != notionSourceWorkspaceId else { return }
+        notionSourceWorkspaceId = id
+        notionSourceDatabaseId = nil; notionSourceDatabaseName = ""; notionSourceSchema = []
+        loadNotionSourceDatabases()
+    }
+
+    private func selectNotionSourceDatabase(_ id: String) {
+        notionSourceDatabaseId = id
+        notionSourceDatabaseName = notionSourceDatabases.first { $0.id == id }?.title ?? ""
+        loadNotionSourceSchema()
+    }
+
+    private func loadNotionSourceDatabases() {
+        guard let workspaceId = notionSourceWorkspaceId else { return }
+        Task {
+            let client = NotionClientFactory.make(workspaceId: workspaceId)
+            let all = (try? await client.listDestinations(workspaceId: workspaceId)) ?? []
+            await MainActor.run { notionSourceDatabases = all.filter { $0.type == .database } }
+        }
+    }
+
+    private func loadNotionSourceSchema() {
+        guard let workspaceId = notionSourceWorkspaceId, let databaseId = notionSourceDatabaseId else { return }
+        Task {
+            let client = NotionClientFactory.make(workspaceId: workspaceId)
+            let props = (try? await client.databaseSchema(destinationId: databaseId, workspaceId: workspaceId)) ?? []
+            await MainActor.run {
+                notionSourceSchema = props
+                notionSourceTitleProperty = props.first { $0.type == "title" }?.name ?? ""
+                // Default the folder column to "Category" when present, else the
+                // first select-style column, so the common case needs no choice.
+                let selectCols = props.filter { ["select", "status", "multi_select"].contains($0.type) }.map(\.name)
+                if !selectCols.contains(notionSourceCategoryProperty) {
+                    notionSourceCategoryProperty = selectCols.first(where: { $0 == NotionSourceConfig.defaultCategoryProperty })
+                        ?? selectCols.first ?? NotionSourceConfig.defaultCategoryProperty
+                }
+            }
         }
     }
 

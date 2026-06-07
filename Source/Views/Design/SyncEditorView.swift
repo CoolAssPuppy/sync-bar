@@ -71,6 +71,13 @@ struct SyncEditorView: View {
     @State private var safariScopes: [SourceScope] = []
     @State private var safariScopeId: String?
     @State private var safariScopeName: String = ""
+    // From — Notion (database backup). Wired into the editor UI in a later step;
+    // these hold the chosen workspace/database and the Category column.
+    @State private var notionSourceWorkspaceId: String?
+    @State private var notionSourceDatabaseId: String?
+    @State private var notionSourceDatabaseName: String = ""
+    @State private var notionSourceTitleProperty: String = ""
+    @State private var notionSourceCategoryProperty: String = NotionSourceConfig.defaultCategoryProperty
     // From — Reminders (two-way)
     @State private var reminderLists: [ReminderList] = []
     @State private var remindersLoading = false
@@ -128,6 +135,7 @@ struct SyncEditorView: View {
         switch source {
         case .kind(.remarkable): return folder != nil
         case .kind(.safari):     return safariScopeId != nil
+        case .kind(.notion):     return notionSourceDatabaseId != nil
         case .reminders:         return true   // all lists; no single list to choose
         }
     }
@@ -223,6 +231,7 @@ struct SyncEditorView: View {
             switch source {
             case .kind(.remarkable): remarkableScopePicker
             case .kind(.safari):     safariScopePicker
+            case .kind(.notion):     EmptyView()   // Notion source picker: later step
             case .reminders:         remindersListPicker
             }
         }
@@ -660,6 +669,13 @@ struct SyncEditorView: View {
             safariScopeId = cfg.folderId
             safariScopeName = cfg.folderName
             loadSafariScopes()
+        case .notion(let cfg):
+            source = .kind(.notion)
+            notionSourceWorkspaceId = cfg.workspaceId
+            notionSourceDatabaseId = cfg.databaseId
+            notionSourceDatabaseName = cfg.databaseTitle
+            notionSourceTitleProperty = cfg.titleProperty
+            notionSourceCategoryProperty = cfg.categoryProperty
         }
         loadFormState(from: flow.binding.configuration)
     }
@@ -688,6 +704,7 @@ struct SyncEditorView: View {
         switch next {
         case .kind(.remarkable): folder = nil; selectedFileIds = nil
         case .kind(.safari):     safariScopeId = nil; safariScopeName = ""; loadSafariScopes()
+        case .kind(.notion):     notionSourceDatabaseId = nil; notionSourceDatabaseName = ""
         case .reminders:
             reminderListId = nil; reminderListName = ""; mapRows = []
             loadReminderLists()
@@ -864,6 +881,7 @@ struct SyncEditorView: View {
         switch source {
         case .kind(.remarkable): saveRemarkable(binding: binding)
         case .kind(.safari):     saveSafari(binding: binding)
+        case .kind(.notion):     saveNotionSource(binding: binding)
         case .reminders:         break
         }
         onClose()
@@ -959,6 +977,29 @@ struct SyncEditorView: View {
     private func saveSafari(binding: DestinationBinding) {
         guard let scopeId = safariScopeId else { return }
         let source = SourceConfiguration.safari(SafariSourceConfig(folderId: scopeId, folderName: safariScopeName))
+        if let origRuleId = originalRuleId {
+            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
+                rule.source = source
+                ledger.upsertRule(rule)
+            }
+            ledger.updateBinding(ruleId: origRuleId, binding: binding)
+        } else {
+            var rule = SyncRule(source: source)
+            rule.destinations = [binding]
+            ledger.upsertRule(rule)
+        }
+    }
+
+    private func saveNotionSource(binding: DestinationBinding) {
+        guard let workspaceId = notionSourceWorkspaceId,
+              let databaseId = notionSourceDatabaseId else { return }
+        let source = SourceConfiguration.notion(NotionSourceConfig(
+            workspaceId: workspaceId,
+            workspaceName: ledger.notionWorkspaces.first(where: { $0.id == workspaceId })?.workspaceName ?? "",
+            databaseId: databaseId,
+            databaseTitle: notionSourceDatabaseName,
+            titleProperty: notionSourceTitleProperty,
+            categoryProperty: notionSourceCategoryProperty))
         if let origRuleId = originalRuleId {
             if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
                 rule.source = source

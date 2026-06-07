@@ -15,6 +15,7 @@ import Foundation
 enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case remarkable
     case safari
+    case notion
 
     var id: String { rawValue }
 
@@ -22,6 +23,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .remarkable: return "reMarkable"
         case .safari:     return "Safari"
+        case .notion:     return "Notion"
         }
     }
 
@@ -30,6 +32,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .remarkable: return "Tablet notebooks and documents"
         case .safari:     return "Browser bookmarks"
+        case .notion:     return "Database pages, backed up"
         }
     }
 
@@ -38,14 +41,17 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .remarkable: return "rectangle.portrait.on.rectangle.portrait"
         case .safari:     return "safari"
+        case .notion:     return "square.grid.3x3.fill"
         }
     }
 
-    /// Brand asset shipped in `Images.xcassets`.
+    /// Brand asset shipped in `Images.xcassets`. Notion reuses the destination
+    /// brand mark (same logo, source or destination).
     var assetName: String {
         switch self {
         case .remarkable: return "Remarkable"
         case .safari:     return "Safari"
+        case .notion:     return "Destinations/Notion"
         }
     }
 
@@ -55,6 +61,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .remarkable: return false
         case .safari:     return false
+        case .notion:     return false
         }
     }
 
@@ -65,6 +72,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .remarkable: return true
         case .safari:     return false
+        case .notion:     return false
         }
     }
 }
@@ -102,6 +110,25 @@ struct SafariSourceConfig: Codable, Equatable, Hashable {
     static let allScopeId = "__all_safari_bookmarks__"
 }
 
+/// Notion source settings: which workspace and database to back up, plus the
+/// column that decides the destination folder/notebook. Each row in the database
+/// becomes one note; its `Category` value becomes the containing folder. The
+/// title column varies per database (usually "Name"), so it's captured here from
+/// the schema rather than assumed.
+struct NotionSourceConfig: Codable, Equatable, Hashable {
+    var workspaceId: String
+    var workspaceName: String
+    var databaseId: String
+    var databaseTitle: String
+    /// The database's title property name (e.g. "Name"). Empty falls back to
+    /// reading whichever property has type `title`.
+    var titleProperty: String = ""
+    /// The single-select column whose value becomes the destination folder.
+    var categoryProperty: String = NotionSourceConfig.defaultCategoryProperty
+
+    static let defaultCategoryProperty = "Category"
+}
+
 // MARK: - Polymorphic configuration
 
 /// The source half of a sync, mirroring `DestinationConfiguration`. One case per
@@ -110,11 +137,13 @@ struct SafariSourceConfig: Codable, Equatable, Hashable {
 enum SourceConfiguration: Codable, Equatable, Hashable {
     case remarkable(RemarkableSourceConfig)
     case safari(SafariSourceConfig)
+    case notion(NotionSourceConfig)
 
     var kind: SourceKind {
         switch self {
         case .remarkable: return .remarkable
         case .safari:     return .safari
+        case .notion:     return .notion
         }
     }
 
@@ -124,6 +153,7 @@ enum SourceConfiguration: Codable, Equatable, Hashable {
         switch self {
         case .remarkable(let config): return config.folderName
         case .safari(let config):     return config.folderName
+        case .notion(let config):     return config.databaseTitle
         }
     }
 }

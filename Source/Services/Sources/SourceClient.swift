@@ -94,6 +94,7 @@ enum SourceRouter {
         switch kind {
         case .remarkable: return RemarkableSourceClient()
         case .safari:     return SafariSourceClient()
+        case .notion:     return NotionSourceClient()
         }
     }
 }

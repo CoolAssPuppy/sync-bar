@@ -69,6 +69,44 @@ final class AppleNotesEscapingTests: XCTestCase {
         XCTAssertTrue(html.contains("<h1>Title &lt;b&gt;</h1>"))
     }
 
+    // MARK: Notebook routing (Category -> notebook)
+
+    private func payload(folderPath: [String]) -> DestinationPayload {
+        DestinationPayload(
+            title: "Note", body: "x", mermaidSource: nil, sourceDate: Date(),
+            pdfData: nil, ocrProvider: nil, ruleNotebookName: "Note", pageNumber: 1,
+            folderPath: folderPath
+        )
+    }
+
+    func test_category_folder_path_picks_the_notebook() {
+        let folder = AppleNotesDestinationClient.targetFolder(
+            payload: payload(folderPath: ["Supabase"]),
+            config: AppleNotesDestinationConfig(folderName: "Notes"))
+        XCTAssertEqual(folder, "Supabase", "A Notion Category must route the note into that notebook")
+    }
+
+    func test_blank_folder_path_falls_back_to_configured_folder() {
+        let folder = AppleNotesDestinationClient.targetFolder(
+            payload: payload(folderPath: []),
+            config: AppleNotesDestinationConfig(folderName: "Inbox"))
+        XCTAssertEqual(folder, "Inbox", "No per-item folder (reMarkable) keeps the configured folder")
+    }
+
+    func test_blank_folder_path_and_blank_config_defaults_to_notes() {
+        let folder = AppleNotesDestinationClient.targetFolder(
+            payload: payload(folderPath: []),
+            config: AppleNotesDestinationConfig(folderName: ""))
+        XCTAssertEqual(folder, "Notes")
+    }
+
+    func test_whitespace_only_category_is_ignored() {
+        let folder = AppleNotesDestinationClient.targetFolder(
+            payload: payload(folderPath: ["   "]),
+            config: AppleNotesDestinationConfig(folderName: "Inbox"))
+        XCTAssertEqual(folder, "Inbox", "An all-whitespace Category shouldn't create a blank notebook")
+    }
+
     func test_html_renders_blocks_as_a_checklist() {
         let payload = DestinationPayload(
             title: "Groceries",

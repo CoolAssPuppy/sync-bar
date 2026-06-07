@@ -19,7 +19,7 @@ struct AppleNotesDestinationClient: DestinationClient {
         guard case .appleNotes(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .appleNotes)
         }
-        let folderName = config.folderName.isEmpty ? "Notes" : config.folderName
+        let folderName = Self.targetFolder(payload: payload, config: config)
 
         // Notes uses HTML for body rendering. Convert the OCR output into a
         // basic HTML structure with the mermaid diagram inlined as <pre>.
@@ -84,6 +84,19 @@ struct AppleNotesDestinationClient: DestinationClient {
             var seen = Set<String>()
             return names.filter { seen.insert($0).inserted }
         }.value
+    }
+
+    /// The iCloud notebook a note lands in. A source that carries a per-item
+    /// folder (Notion's Category, on `payload.folderPath`) routes each note into a
+    /// notebook of that name, so a database fans out across notebooks the way it
+    /// fans out across Markdown folders. Sources with no per-item folder
+    /// (reMarkable) fall back to the binding's single configured folder, and an
+    /// empty configured folder falls back to "Notes" (the default notebook).
+    static func targetFolder(payload: DestinationPayload, config: AppleNotesDestinationConfig) -> String {
+        if let category = payload.folderPath.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            return category
+        }
+        return config.folderName.isEmpty ? "Notes" : config.folderName
     }
 
     // MARK: Script building (internal for testing)

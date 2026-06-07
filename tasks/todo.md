@@ -12,19 +12,18 @@ Branch: `notion-backup-source`. Notion is the Source of truth.
 
 ## Steps (one commit each; `make build` + `make test` between; pkill app before tests)
 
-- [ ] **1. Notion read layer + block converter** (foundation, pure/testable)
+- [x] **1. Notion read layer + block converter** (foundation, pure/testable)
   - `NotionSourceConfig` + `.notion` case in `SourceKind` / `SourceConfiguration` / `SourceRouter`
   - `NotionPageReader.swift`: query DB pages (paginated, optional `last_edited_time` filter), fetch page blocks; pure parse statics
   - `NotionBlockConverter.swift`: Notion block JSON -> `[NoteBlock]` (pure)
   - `NotionSourceClient.swift`: `SourceClient` conformer
   - Tests: page-summary parsing, block conversion
-- [ ] **2. Category -> notebook routing**
+- [x] **2. Category -> notebook routing**
   - `AppleNotesDestinationClient` honors `DestinationPayload.folderPath` (notebook per Category) instead of only `config.folderName`
   - Coordinator passes per-item `folderPath`; tests
-- [ ] **3. notion_id marker + first-run adoption**
-  - Stamp/parse a hidden `notion_id` marker in Apple Notes HTML body
-  - Apple Notes inventory reader (notebook + title + creation date)
-  - Pure matcher (notebook + normalized title + date) -> seed `Ledger.recordSyncedPage`; tests
+- [x] **3. first-run adoption** (marker abandoned — Apple Notes strips hidden HTML; identity lives in the ledger)
+  - Apple Notes inventory reader (notebook + title + creation date + note id)
+  - Pure matcher (notebook + normalized title + date) -> `Ledger.adoptExternalLink`; tests
 - [ ] **4. Orphan upload (Apple -> Notion) with review gate**
   - Detect orphans (no marker, no match); build review list; create pages in Notion, then stamp + link; confirm-before-write UI gate
 - [ ] **5. UI wiring**

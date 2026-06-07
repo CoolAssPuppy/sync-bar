@@ -582,6 +582,21 @@ final class Ledger: ObservableObject {
         if changed { persistSyncedHashes() }
     }
 
+    /// Seeds a first-run adoption link: records that `pageId` already lives at
+    /// `externalId` (an existing Apple note matched by title+date) WITHOUT
+    /// recording a version hash. The missing hash is deliberate — the next sync
+    /// still sees the page as "changed" and writes Notion's current content into
+    /// the existing note (Notion wins), updating it in place instead of creating a
+    /// duplicate. Idempotent and skipped when a hash was already recorded (so it
+    /// never clobbers a real prior sync).
+    func adoptExternalLink(bindingId: String, pageId: String, externalId: String) {
+        guard !externalId.isEmpty else { return }
+        let key = Self.syncedHashKey(bindingId: bindingId, pageId: pageId)
+        guard syncedPageHashes[key] == nil, syncedExternalIds[key] != externalId else { return }
+        syncedExternalIds[key] = externalId
+        persistSyncedExternalIds()
+    }
+
     /// Wipes the entire sync-tracking database (every recorded page hash and
     /// external id) so the next cycle resyncs all notes to all destinations.
     /// Does not touch the visible event log.

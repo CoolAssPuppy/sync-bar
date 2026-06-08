@@ -20,14 +20,15 @@ enum NoteSyncPreview {
     struct Counts: Equatable {
         var pages: Int
         var create: Int
-        var adopt: Int
+        /// Matched an existing note — kept as-is on a first run (not overwritten).
+        var keep: Int
         var orphans: Int
     }
 
     static func counts(result: AdoptionResult, pageCount: Int) -> Counts {
         Counts(pages: pageCount,
                create: result.freshNotionIds.count,
-               adopt: result.links.count,
+               keep: result.links.count,
                orphans: result.orphanAppleNoteIds.count)
     }
 
@@ -57,31 +58,33 @@ enum NoteSyncPreview {
         var out = ""
         out += "# SyncBar dry run — \(databaseTitle)\n\n"
         out += "_Generated \(timestamp(now)). **Nothing was written.** This previews a first run "
-        out += "(Notion → Apple Notes), where Notion is the source of truth._\n\n"
+        out += "(Notion → Apple Notes). A page that already exists as a note is **kept as-is** — the "
+        out += "first run only creates the genuinely new pages. Later, editing a page in Notion flows "
+        out += "that change down (Notion wins on a real change)._\n\n"
 
         out += "## Summary\n\n"
         out += "- Pages in Notion: **\(c.pages)**\n"
         out += "- Would **create** new notes: **\(c.create)**\n"
-        out += "- Would **update in place** (matched an existing note; Notion content wins): **\(c.adopt)**\n"
+        out += "- Already in Apple Notes, **kept as-is** (not overwritten): **\(c.keep)**\n"
         out += "- Apple notes with **no Notion match** (orphans, would upload to Notion later): **\(c.orphans)**\n\n"
 
-        // By notebook: create + update tallies.
+        // By notebook: create + keep tallies.
         var createByNb: [String: Int] = [:]
-        var adoptByNb: [String: Int] = [:]
+        var keepByNb: [String: Int] = [:]
         for id in result.freshNotionIds {
             createByNb[notebookLabel(for: candById[id]?.category), default: 0] += 1
         }
         for link in result.links {
-            adoptByNb[notebookLabel(for: candById[link.notionId]?.category), default: 0] += 1
+            keepByNb[notebookLabel(for: candById[link.notionId]?.category), default: 0] += 1
         }
-        let notebooks = Set(createByNb.keys).union(adoptByNb.keys).sorted {
-            (createByNb[$0, default: 0] + adoptByNb[$0, default: 0]) > (createByNb[$1, default: 0] + adoptByNb[$1, default: 0])
+        let notebooks = Set(createByNb.keys).union(keepByNb.keys).sorted {
+            (createByNb[$0, default: 0] + keepByNb[$0, default: 0]) > (createByNb[$1, default: 0] + keepByNb[$1, default: 0])
         }
         if !notebooks.isEmpty {
             out += "## By notebook\n\n"
-            out += "| Notebook | Create | Update |\n|---|---:|---:|\n"
+            out += "| Notebook | Create | Kept as-is |\n|---|---:|---:|\n"
             for nb in notebooks {
-                out += "| \(nb) | \(createByNb[nb, default: 0]) | \(adoptByNb[nb, default: 0]) |\n"
+                out += "| \(nb) | \(createByNb[nb, default: 0]) | \(keepByNb[nb, default: 0]) |\n"
             }
             out += "\n"
         }
@@ -93,14 +96,15 @@ enum NoteSyncPreview {
                        empty: "Nothing new to create.",
                        lines: creates.map { "- [\(notebook(for: $0.category))] \($0.title)" })
 
-        // Detailed: update in place.
-        let adopts: [(cand: AdoptionCandidate, note: ExistingAppleNote)] = result.links.compactMap { link in
+        // Detailed: matched, kept as-is.
+        let keeps: [(cand: AdoptionCandidate, note: ExistingAppleNote)] = result.links.compactMap { link in
             guard let cand = candById[link.notionId], let note = noteById[link.appleNoteId] else { return nil }
             return (cand, note)
         }.sorted { ($0.cand.category ?? "", $0.cand.title) < ($1.cand.category ?? "", $1.cand.title) }
-        out += section(title: "Would update in place (\(adopts.count))",
+        out += section(title: "Already in Apple Notes — kept as-is (\(keeps.count))",
                        empty: "No existing notes matched.",
-                       lines: adopts.map { "- [\(notebook(for: $0.cand.category))] \($0.cand.title)  ←  existing note “\($0.note.title)”" })
+                       lines: keeps.map { "- [\(notebook(for: $0.cand.category))] \($0.cand.title)  =  existing note “\($0.note.title)”" },
+                       note: "Left untouched on a first run. Verify the pairings look right — a wrong match here would mis-route a future Notion edit.")
 
         // Detailed: orphans.
         let orphans = result.orphanAppleNoteIds.compactMap { noteById[$0] }

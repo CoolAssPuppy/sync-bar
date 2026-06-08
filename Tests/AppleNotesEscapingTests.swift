@@ -107,6 +107,28 @@ final class AppleNotesEscapingTests: XCTestCase {
         XCTAssertEqual(folder, "Inbox", "An all-whitespace Category shouldn't create a blank notebook")
     }
 
+    // MARK: Creation-date preservation
+
+    func test_creation_date_is_set_at_make_time() {
+        // Apple Notes only accepts the date in the make-new-note call, so the
+        // script must build theDate and pass both date properties there.
+        var comps = DateComponents()
+        comps.year = 2019; comps.month = 9; comps.day = 20; comps.hour = 8; comps.minute = 30; comps.second = 0
+        let date = Calendar(identifier: .gregorian).date(from: comps)!
+        let dated = AppleNotesDestinationClient.appleScriptSource(folderName: "Personal", title: "Codes & Cards", bodyHtml: "x", creationDate: date)
+        XCTAssertTrue(dated.contains("set year of theDate to 2019"))
+        XCTAssertTrue(dated.contains("set month of theDate to 9"))
+        XCTAssertTrue(dated.contains("set day of theDate to 20"))
+        XCTAssertTrue(dated.contains("creation date:theDate, modification date:theDate"),
+                      "both date properties must be set in the make call")
+    }
+
+    func test_no_date_means_no_date_properties() {
+        let s = AppleNotesDestinationClient.appleScriptSource(folderName: "Personal", title: "t", bodyHtml: "x", creationDate: nil)
+        XCTAssertFalse(s.contains("creation date:"), "without a date, don't touch creation date")
+        XCTAssertFalse(s.contains("set year of theDate"))
+    }
+
     func test_html_renders_blocks_as_a_checklist() {
         let payload = DestinationPayload(
             title: "Groceries",

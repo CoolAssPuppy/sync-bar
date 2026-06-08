@@ -26,7 +26,7 @@ final class NoteSyncPreviewTests: XCTestCase {
                                     freshNotionIds: ["n2", "n3"],
                                     orphanAppleNoteIds: ["a9"])
         let c = NoteSyncPreview.counts(result: result, pageCount: 3)
-        XCTAssertEqual(c, NoteSyncPreview.Counts(pages: 3, create: 2, adopt: 1, orphans: 1))
+        XCTAssertEqual(c, NoteSyncPreview.Counts(pages: 3, create: 2, keep: 1, orphans: 1))
     }
 
     func testReportListsCreateUpdateAndOrphan() {
@@ -40,11 +40,12 @@ final class NoteSyncPreviewTests: XCTestCase {
             fallbackNotebook: "Notes", databaseTitle: "Brain", now: day("2026-06-08"))
 
         XCTAssertTrue(md.contains("Nothing was written"), "Must reassure no writes happen")
+        XCTAssertTrue(md.contains("kept as-is"), "matched notes are kept, not overwritten")
         XCTAssertTrue(md.contains("[Supabase] Benchmarks"), "create line")
-        XCTAssertTrue(md.contains("[Personal] Codes & Cards"), "update line")
+        XCTAssertTrue(md.contains("[Personal] Codes & Cards"), "kept-as-is line")
         XCTAssertTrue(md.contains("Old only-here"), "orphan line")
         XCTAssertTrue(md.contains("| Supabase | 1 | 0 |"), "by-notebook create tally")
-        XCTAssertTrue(md.contains("| Personal | 0 | 1 |"), "by-notebook update tally")
+        XCTAssertTrue(md.contains("| Personal | 0 | 1 |"), "by-notebook kept tally")
     }
 
     func testUncategorizedRoutesToFallbackNotebookLabel() {

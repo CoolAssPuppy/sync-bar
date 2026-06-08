@@ -28,9 +28,9 @@ struct AppleNotesDestinationClient: DestinationClient {
         // back to creating one if it was deleted in Notes.
         let script: String
         if let existingExternalId, !existingExternalId.isEmpty {
-            script = Self.updateScriptSource(noteId: existingExternalId, folderName: folderName, title: payload.title, bodyHtml: bodyHtml)
+            script = Self.updateScriptSource(noteId: existingExternalId, folderName: folderName, title: payload.title, bodyHtml: bodyHtml, creationDate: payload.sourceDate)
         } else {
-            script = Self.appleScriptSource(folderName: folderName, title: payload.title, bodyHtml: bodyHtml)
+            script = Self.appleScriptSource(folderName: folderName, title: payload.title, bodyHtml: bodyHtml, creationDate: payload.sourceDate)
         }
 
         return try await Task.detached(priority: .userInitiated) { () throws -> DestinationWriteResult in
@@ -105,7 +105,7 @@ struct AppleNotesDestinationClient: DestinationClient {
     /// the note. Every interpolated value runs through `escape`, since titles,
     /// folder names, and OCR'd body text are user-controlled and would
     /// otherwise allow AppleScript injection.
-    static func appleScriptSource(folderName: String, title: String, bodyHtml: String) -> String {
+    static func appleScriptSource(folderName: String, title: String, bodyHtml: String, creationDate: Date? = nil) -> String {
         """
         tell application "Notes"
             tell account "iCloud"
@@ -113,7 +113,7 @@ struct AppleNotesDestinationClient: DestinationClient {
                     make new folder with properties {name:"\(escape(folderName))"}
                 end if
                 tell folder "\(escape(folderName))"
-                    set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"}
+        \(dateSetup(creationDate))set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"\(dateProperties(creationDate))}
                     return id of newNote
                 end tell
             end tell
@@ -121,11 +121,40 @@ struct AppleNotesDestinationClient: DestinationClient {
         """
     }
 
+    /// AppleScript that builds `theDate` from a Swift Date's components. Apple
+    /// Notes only accepts a note's creation/modification date AT creation time
+    /// (both are read-only afterward), so this is emitted right before the
+    /// `make new note` call. Components are set as integers (no injection surface);
+    /// day is reset to 1 first so setting a shorter month can't roll the date over.
+    static func dateSetup(_ date: Date?, varName: String = "theDate") -> String {
+        guard let date else { return "" }
+        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        let indent = "            "
+        return """
+        \(indent)set \(varName) to (current date)
+        \(indent)set day of \(varName) to 1
+        \(indent)set year of \(varName) to \(c.year ?? 2000)
+        \(indent)set month of \(varName) to \(c.month ?? 1)
+        \(indent)set day of \(varName) to \(c.day ?? 1)
+        \(indent)set hours of \(varName) to \(c.hour ?? 0)
+        \(indent)set minutes of \(varName) to \(c.minute ?? 0)
+        \(indent)set seconds of \(varName) to \(c.second ?? 0)
+
+        """
+    }
+
+    /// The `creation date`/`modification date` properties for a `make new note`,
+    /// or empty when no date is being preserved. Both are set so the note doesn't
+    /// surface as "modified just now" in a date-sorted list.
+    static func dateProperties(_ date: Date?, varName: String = "theDate") -> String {
+        date == nil ? "" : ", creation date:\(varName), modification date:\(varName)"
+    }
+
     /// Updates the body of an existing note (found by id). If that note no
     /// longer exists, falls back to creating one in the folder so an edit still
     /// lands somewhere. Setting the body (whose first line is an `<h1>` title)
     /// also updates the note's displayed name.
-    static func updateScriptSource(noteId: String, folderName: String, title: String, bodyHtml: String) -> String {
+    static func updateScriptSource(noteId: String, folderName: String, title: String, bodyHtml: String, creationDate: Date? = nil) -> String {
         """
         tell application "Notes"
             tell account "iCloud"
@@ -138,7 +167,7 @@ struct AppleNotesDestinationClient: DestinationClient {
                         make new folder with properties {name:"\(escape(folderName))"}
                     end if
                     tell folder "\(escape(folderName))"
-                        set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"}
+        \(dateSetup(creationDate))set newNote to make new note with properties {name:"\(escape(title))", body:"\(escape(bodyHtml))"\(dateProperties(creationDate))}
                         return id of newNote
                     end tell
                 end try

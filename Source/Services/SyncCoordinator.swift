@@ -366,13 +366,17 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
-    /// Before a Notion -> Apple Notes binding's first write, link each Notion page
-    /// to an existing Apple note that matches it (same notebook + title + date) so
-    /// the sync updates those notes in place instead of duplicating them. Identity
-    /// can't live in the note body (Apple Notes strips hidden markers), so it's
-    /// seeded into the ledger here. Runs once: a binding with any recorded state
-    /// has already adopted/synced. Only Notion -> Apple Notes adopts; reading the
-    /// whole Notes account is wasted for any other pairing.
+    /// Before a Notion -> Apple Notes binding's first write, reconcile each Notion
+    /// page against the existing Apple notes (same notebook + title). A match means
+    /// the note already exists, so it's recorded as **already in sync at its current
+    /// Notion version** — linked (for future edits) AND marked synced, so the first
+    /// run leaves it untouched rather than overwriting it with a round-tripped copy.
+    /// Only genuinely new pages get created; a later Notion edit changes the version
+    /// hash and flows down then (Notion wins on a real change). Identity can't live
+    /// in the note body (Apple Notes strips hidden markers), so it's seeded here.
+    /// Runs once: a binding with any recorded state has already reconciled. Only
+    /// Notion -> Apple Notes does this; reading the whole Notes account is wasted
+    /// for any other pairing.
     private func adoptExistingNotesIfFirstRun(rule: SyncRule, binding: DestinationBinding,
                                               contents: [(item: SourceItem, content: NoteContent)]) async {
         guard case .notion = rule.source, binding.kind == .appleNotes else { return }
@@ -392,10 +396,16 @@ final class SyncCoordinator: ObservableObject {
             return
         }
         let result = NoteAdoptionMatcher.match(notion: candidates, apple: existing)
+        // Mark each matched page as synced at its current version, so the first run
+        // skips it (no overwrite) but still updates it in place on a future edit.
+        let hashByPage = Dictionary(contents.map { ($0.item.id, $0.item.versionHash) },
+                                    uniquingKeysWith: { first, _ in first })
         for link in result.links {
-            ledger.adoptExternalLink(bindingId: binding.id, pageId: link.notionId, externalId: link.appleNoteId)
+            guard let versionHash = hashByPage[link.notionId] else { continue }
+            ledger.recordSyncedPage(bindingId: binding.id, pageId: link.notionId,
+                                    versionHash: versionHash, externalId: link.appleNoteId)
         }
-        Log.sync.info("First-run adoption: linked \(result.links.count, privacy: .public), fresh \(result.freshNotionIds.count, privacy: .public), orphan Apple notes \(result.orphanAppleNoteIds.count, privacy: .public)")
+        Log.sync.info("First-run adoption: kept \(result.links.count, privacy: .public) existing notes as-is, will create \(result.freshNotionIds.count, privacy: .public) new, \(result.orphanAppleNoteIds.count, privacy: .public) orphan Apple notes")
     }
 
     /// Set-level mirror: hand the destination the full desired set and let it

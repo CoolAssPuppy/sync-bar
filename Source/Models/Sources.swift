@@ -132,6 +132,32 @@ struct NotionSourceConfig: Codable, Equatable, Hashable {
     var dateProperty: String = ""
 
     static let defaultCategoryProperty = "Category"
+
+    init(workspaceId: String, workspaceName: String, databaseId: String, databaseTitle: String,
+         titleProperty: String = "", categoryProperty: String = NotionSourceConfig.defaultCategoryProperty,
+         dateProperty: String = "") {
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.databaseId = databaseId
+        self.databaseTitle = databaseTitle
+        self.titleProperty = titleProperty
+        self.categoryProperty = categoryProperty
+        self.dateProperty = dateProperty
+    }
+
+    // Tolerant decoder so configs persisted before later fields existed
+    // (titleProperty, categoryProperty, dateProperty) still load — a missing key
+    // must not drop the whole rules array.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        workspaceId = try c.decode(String.self, forKey: .workspaceId)
+        workspaceName = try c.decode(String.self, forKey: .workspaceName)
+        databaseId = try c.decode(String.self, forKey: .databaseId)
+        databaseTitle = try c.decode(String.self, forKey: .databaseTitle)
+        titleProperty = try c.decodeIfPresent(String.self, forKey: .titleProperty) ?? ""
+        categoryProperty = try c.decodeIfPresent(String.self, forKey: .categoryProperty) ?? NotionSourceConfig.defaultCategoryProperty
+        dateProperty = try c.decodeIfPresent(String.self, forKey: .dateProperty) ?? ""
+    }
 }
 
 // MARK: - Polymorphic configuration

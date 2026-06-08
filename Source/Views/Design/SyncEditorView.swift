@@ -591,7 +591,7 @@ struct SyncEditorView: View {
         case .notion:         NotionForm(binding: $localNotion, workspaces: ledger.notionWorkspaces)
         case .linear:         LinearForm(binding: $localLinear, accounts: ledger.linearAccounts)
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
-        case .appleNotes:     AppleNotesForm(binding: $localAppleNotes)
+        case .appleNotes:     AppleNotesForm(binding: $localAppleNotes, routesByCategory: sourceKind == .notion)
         case .markdownFolder: MarkdownForm(binding: $localMarkdown, targets: ledger.markdownTargets)
         case .chrome:         chromeForm
         case .none:           EmptyView()

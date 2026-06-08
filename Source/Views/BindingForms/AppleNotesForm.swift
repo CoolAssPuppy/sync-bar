@@ -9,6 +9,9 @@ import SwiftUI
 
 struct AppleNotesForm: View {
     @Binding var binding: AppleNotesFormState
+    /// When true, the source files each note into a notebook named after its
+    /// Category, so this folder is only the fallback for pages with no Category.
+    var routesByCategory: Bool = false
 
     /// Sentinel selection meaning "create a new folder" (typed below).
     private static let createNewTag = "\u{0}__create_new__"
@@ -22,7 +25,9 @@ struct AppleNotesForm: View {
     var body: some View {
         AppCard("Apple Notes") {
             VStack(spacing: 0) {
-                AppSettingRow("Folder", description: "Pick an existing iCloud Notes folder, or create a new one.") {
+                AppSettingRow(routesByCategory ? "Fallback folder" : "Folder",
+                              description: routesByCategory ? "For pages with no Category."
+                                                            : "Pick an existing iCloud Notes folder, or create a new one.") {
                     folderControl
                 }
                 if isCreatingNew {

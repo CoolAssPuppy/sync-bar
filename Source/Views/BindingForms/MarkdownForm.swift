@@ -36,9 +36,11 @@ struct MarkdownForm: View {
                         .frame(width: 260)
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Include YAML frontmatter", description: nil) {
-                    Toggle("", isOn: $binding.includeFrontmatter)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                AppSettingRow("Frontmatter", description: "All columns, the essential fields, or none.") {
+                    Picker("", selection: $binding.frontmatterMode) {
+                        ForEach(FrontmatterMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
                 }
             }
         }

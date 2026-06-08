@@ -45,6 +45,7 @@ struct MarkdownFormState {
     var folderPath: String = ""
     var fileNameTemplate: String = MarkdownTarget.defaultFileNameTemplate
     var includeFrontmatter: Bool = true
+    var frontmatterMode: FrontmatterMode = .essential
 }
 
 extension NotionFormState {

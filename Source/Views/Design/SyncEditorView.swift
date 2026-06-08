@@ -78,6 +78,8 @@ struct SyncEditorView: View {
     @State private var notionSourceDatabaseName: String = ""
     @State private var notionSourceTitleProperty: String = ""
     @State private var notionSourceCategoryProperty: String = NotionSourceConfig.defaultCategoryProperty
+    /// The Notion date column that supplies each note's date. Empty = created_time.
+    @State private var notionSourceDateProperty: String = ""
     @State private var notionSourceDatabases: [NotionDestination] = []
     @State private var notionSourceSchema: [NotionDatabaseProperty] = []
     // From — Reminders (two-way)
@@ -354,6 +356,17 @@ struct SyncEditorView: View {
                         onSelect: { id in notionSourceCategoryProperty = id }
                     )
                 }
+                HStack(spacing: 8) {
+                    Text("Note date").font(.system(size: 12)).foregroundStyle(theme.tertiary)
+                    CustomDropdown(
+                        options: [DropdownOption(id: "", icon: AnyView(EmptyView()), title: "Page created time")]
+                            + notionSourceDateColumns.map { DropdownOption(id: $0, icon: AnyView(EmptyView()), title: $0) },
+                        selectedId: notionSourceDateProperty,
+                        placeholder: "Page created time",
+                        placeholderIcon: AnyView(placeholderSourceIcon),
+                        onSelect: { id in notionSourceDateProperty = id }
+                    )
+                }
             }
         }
     }
@@ -361,6 +374,11 @@ struct SyncEditorView: View {
     /// Single-select-style columns that can drive the folder/notebook split.
     private var notionSourceCategoryColumns: [String] {
         notionSourceSchema.filter { ["select", "status", "multi_select"].contains($0.type) }.map(\.name)
+    }
+
+    /// Date columns that can supply the note's original date.
+    private var notionSourceDateColumns: [String] {
+        notionSourceSchema.filter { $0.type == "date" }.map(\.name)
     }
 
     private var remindersListPicker: some View {
@@ -768,6 +786,7 @@ struct SyncEditorView: View {
             notionSourceDatabaseName = cfg.databaseTitle
             notionSourceTitleProperty = cfg.titleProperty
             notionSourceCategoryProperty = cfg.categoryProperty
+            notionSourceDateProperty = cfg.dateProperty
             loadNotionSourceDatabases()
             loadNotionSourceSchema()
         }
@@ -856,6 +875,12 @@ struct SyncEditorView: View {
                     notionSourceCategoryProperty = selectCols.first(where: { $0 == NotionSourceConfig.defaultCategoryProperty })
                         ?? selectCols.first ?? NotionSourceConfig.defaultCategoryProperty
                 }
+                // Default the note-date column to one holding the original date, if
+                // present ("Created Date" / "Creation Date"); else created_time ("").
+                let dateCols = props.filter { $0.type == "date" }.map(\.name)
+                if !dateCols.contains(notionSourceDateProperty) {
+                    notionSourceDateProperty = dateCols.first(where: { ["Created Date", "Creation Date"].contains($0) }) ?? ""
+                }
             }
         }
     }
@@ -929,7 +954,8 @@ struct SyncEditorView: View {
         case .markdownFolder(let cfg):
             toAccountId = ledger.markdownTargets.first?.id
             localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate,
-                                              includeFrontmatter: cfg.includeFrontmatter)
+                                              includeFrontmatter: cfg.includeFrontmatter,
+                                              frontmatterMode: cfg.effectiveFrontmatter)
         case .chrome(let cfg):
             toAccountId = ledger.chromeTargets.first?.id
             chromeTargetFolder = cfg.targetFolderPath.count > 1 ? (cfg.targetFolderPath.last ?? "") : ""
@@ -950,6 +976,12 @@ struct SyncEditorView: View {
         case .markdownFolder:
             if case .markdownFolder(let cfg) = app.defaultConfig {
                 localMarkdown = MarkdownFormState(folderPath: cfg.folderPath, fileNameTemplate: cfg.fileNameTemplate, includeFrontmatter: cfg.includeFrontmatter)
+            }
+            // A Notion backup defaults to a dated filename and full frontmatter so
+            // it mirrors the Python tool out of the box.
+            if sourceKind == .notion {
+                localMarkdown.fileNameTemplate = "{date}-{title}"
+                localMarkdown.frontmatterMode = .all
             }
         case .chrome:
             break
@@ -993,7 +1025,8 @@ struct SyncEditorView: View {
             return .markdownFolder(MarkdownFolderDestinationConfig(
                 folderPath: localMarkdown.folderPath,
                 fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{notebook}-page-{page_n}" : localMarkdown.fileNameTemplate,
-                includeFrontmatter: localMarkdown.includeFrontmatter))
+                includeFrontmatter: localMarkdown.frontmatterMode != .none,
+                frontmatterMode: localMarkdown.frontmatterMode))
         case .chrome:
             let sub = chromeTargetFolder.trimmingCharacters(in: .whitespacesAndNewlines)
             return .chrome(ChromeDestinationConfig(
@@ -1139,7 +1172,8 @@ struct SyncEditorView: View {
             databaseId: databaseId,
             databaseTitle: notionSourceDatabaseName,
             titleProperty: notionSourceTitleProperty,
-            categoryProperty: notionSourceCategoryProperty))
+            categoryProperty: notionSourceCategoryProperty,
+            dateProperty: notionSourceDateProperty))
         if let origRuleId = originalRuleId {
             if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
                 rule.source = source

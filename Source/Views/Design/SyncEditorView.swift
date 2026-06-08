@@ -120,6 +120,9 @@ struct SyncEditorView: View {
     @State private var isChoosingScope = false
     @State private var scopeFiles: [RmFile] = []
     @State private var scopeLoading = false
+    // Notion source dry-run preview
+    @State private var previewRunning = false
+    @State private var previewError: String?
 
     private let remindersClient: RemindersClient = EventKitRemindersClient()
 
@@ -209,13 +212,54 @@ struct SyncEditorView: View {
                         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.destructive.opacity(0.4), lineWidth: 1))
                 }.buttonStyle(.plain)
             }
+            if let previewError {
+                Text(previewError).font(.system(size: 11)).foregroundStyle(theme.destructive).lineLimit(1)
+            }
             Spacer()
+            // Dry run: read Notion + Apple Notes, show what a first sync would do,
+            // write nothing. Only meaningful for a Notion source with a database.
+            if sourceKind == .notion, notionSourceDatabaseId != nil {
+                PillButton(title: previewRunning ? "Generating…" : "Preview (no writes)",
+                           systemImage: previewRunning ? nil : "eye",
+                           filled: false,
+                           action: previewNotionSource)
+                    .opacity(previewRunning ? 0.5 : 1).disabled(previewRunning)
+            }
             PillButton(title: "Cancel", filled: false, action: onClose)
             PillButton(title: "Save sync", action: save).opacity(canSave ? 1 : 0.5).disabled(!canSave)
         }
         .padding(20)
         .overlay(alignment: .top) { Rectangle().fill(theme.divider).frame(height: 1) }
         .background(theme.background)
+    }
+
+    /// Generates the read-only dry-run report for the configured Notion source and
+    /// opens it. Uses the Apple Notes destination's folder (or "Notes") as the
+    /// fallback notebook for uncategorized pages.
+    private func previewNotionSource() {
+        guard let workspaceId = notionSourceWorkspaceId, let databaseId = notionSourceDatabaseId else { return }
+        let config = NotionSourceConfig(
+            workspaceId: workspaceId,
+            workspaceName: ledger.notionWorkspaces.first(where: { $0.id == workspaceId })?.workspaceName ?? "",
+            databaseId: databaseId,
+            databaseTitle: notionSourceDatabaseName,
+            titleProperty: notionSourceTitleProperty,
+            categoryProperty: notionSourceCategoryProperty)
+        let fallback = localAppleNotes.folderName.isEmpty ? "Notes" : localAppleNotes.folderName
+        previewRunning = true
+        previewError = nil
+        Task {
+            do {
+                let url = try await NotionAppleNotesPreview.generate(source: config, fallbackNotebook: fallback)
+                await MainActor.run {
+                    previewRunning = false
+                    NSWorkspace.shared.open(url)
+                }
+            } catch {
+                let message = Formatters.userMessage(for: error)
+                await MainActor.run { previewRunning = false; previewError = message }
+            }
+        }
     }
 
     // MARK: From

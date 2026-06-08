@@ -34,6 +34,8 @@ struct NotionPageReader: Sendable {
         var category: String?
         var createdAt: Date
         var lastEditedTime: Date
+        /// Every column value, serialized to a readable string, for frontmatter.
+        var properties: [String: String] = [:]
     }
 
     /// Max nesting depth we recurse for a page's block tree, a guard against
@@ -49,6 +51,7 @@ struct NotionPageReader: Sendable {
     func queryPages(databaseId: String,
                     titleProperty: String,
                     categoryProperty: String,
+                    dateProperty: String = "",
                     sinceLastEdited: Date? = nil) async throws -> [PageSummary] {
         var pages: [PageSummary] = []
         var cursor: String? = nil
@@ -68,7 +71,8 @@ struct NotionPageReader: Sendable {
             try Self.validate(response: response, data: data, context: "query notion database")
             let (rows, next) = try Self.parsePageSummaries(data: data,
                                                            titleProperty: titleProperty,
-                                                           categoryProperty: categoryProperty)
+                                                           categoryProperty: categoryProperty,
+                                                           dateProperty: dateProperty)
             pages.append(contentsOf: rows)
             cursor = next
         } while cursor != nil
@@ -113,7 +117,8 @@ struct NotionPageReader: Sendable {
     /// next cursor. Tolerant of rows missing the title or category column.
     static func parsePageSummaries(data: Data,
                                    titleProperty: String,
-                                   categoryProperty: String) throws -> (pages: [PageSummary], nextCursor: String?) {
+                                   categoryProperty: String,
+                                   dateProperty: String = "") throws -> (pages: [PageSummary], nextCursor: String?) {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = root["results"] as? [[String: Any]] else {
             throw NotionError.validationFailed("Notion query response wasn't shaped as expected.")
@@ -121,19 +126,75 @@ struct NotionPageReader: Sendable {
         let pages: [PageSummary] = results.compactMap { result in
             guard let id = result["id"] as? String else { return nil }
             let props = result["properties"] as? [String: Any] ?? [:]
-            let created = RealNotionTaskClient.parseDate(result["created_time"]) ?? Date.distantPast
-            let edited = RealNotionTaskClient.parseDate(result["last_edited_time"]) ?? created
+            let createdTime = RealNotionTaskClient.parseDate(result["created_time"]) ?? Date.distantPast
+            let edited = RealNotionTaskClient.parseDate(result["last_edited_time"]) ?? createdTime
+            // The note's date comes from the configured date column when set (e.g.
+            // "Created Date" holding the original date), falling back to created_time.
+            let created = (dateProperty.isEmpty ? nil : dateValue(props[dateProperty])) ?? createdTime
             return PageSummary(
                 id: id,
                 title: title(props: props, preferred: titleProperty),
                 category: selectName(props[categoryProperty]),
                 createdAt: created,
-                lastEditedTime: edited
+                lastEditedTime: edited,
+                properties: serializeProperties(props)
             )
         }
         let hasMore = root["has_more"] as? Bool ?? false
         let next = hasMore ? (root["next_cursor"] as? String) : nil
         return (pages, next)
+    }
+
+    /// Serializes every column value to a readable string for frontmatter. Covers
+    /// the common Notion property types; unknown/empty ones are skipped.
+    static func serializeProperties(_ props: [String: Any]) -> [String: String] {
+        var out: [String: String] = [:]
+        for (name, raw) in props {
+            guard let value = raw as? [String: Any], let type = value["type"] as? String else { continue }
+            let string: String?
+            switch type {
+            case "title", "rich_text":
+                string = richTextString(value[type])
+            case "select":
+                string = (value["select"] as? [String: Any])?["name"] as? String
+            case "status":
+                string = (value["status"] as? [String: Any])?["name"] as? String
+            case "multi_select":
+                string = (value["multi_select"] as? [[String: Any]])?.compactMap { $0["name"] as? String }.joined(separator: ", ")
+            case "date":
+                string = (value["date"] as? [String: Any])?["start"] as? String
+            case "number":
+                string = (value["number"] as? NSNumber)?.stringValue
+            case "checkbox":
+                string = (value["checkbox"] as? Bool).map { $0 ? "true" : "false" }
+            case "url", "email", "phone_number":
+                string = value[type] as? String
+            case "people":
+                string = (value["people"] as? [[String: Any]])?.compactMap { $0["name"] as? String }.joined(separator: ", ")
+            case "created_time", "last_edited_time":
+                string = value[type] as? String
+            case "formula":
+                let f = value["formula"] as? [String: Any]
+                string = (f?["string"] as? String) ?? (f?["number"] as? NSNumber)?.stringValue ?? (f?["boolean"] as? Bool).map { $0 ? "true" : "false" }
+            default:
+                string = nil
+            }
+            if let string, !string.isEmpty { out[name] = string }
+        }
+        return out
+    }
+
+    private static func richTextString(_ value: Any?) -> String? {
+        guard let runs = value as? [[String: Any]] else { return nil }
+        let text = runs.compactMap { ($0["plain_text"] as? String) ?? ($0["text"] as? [String: Any])?["content"] as? String }.joined()
+        return text.isEmpty ? nil : text
+    }
+
+    /// A date property's `start` → a Date (day or instant).
+    private static func dateValue(_ property: Any?) -> Date? {
+        guard let property = property as? [String: Any],
+              let date = property["date"] as? [String: Any] else { return nil }
+        return RealNotionTaskClient.parseDate(date["start"])
     }
 
     /// Extracts the block objects array and the next cursor from a

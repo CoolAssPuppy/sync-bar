@@ -251,7 +251,7 @@ final class SyncCoordinator: ObservableObject {
         // already in sync. This is what keeps a 3,000-page backup from fetching
         // 3,000 page bodies on the first run when almost all already exist.
         for binding in bindings {
-            await adoptExistingNotesIfFirstRun(rule: rule, binding: binding, items: neededItems)
+            await adoptIfFirstRun(rule: rule, binding: binding, items: neededItems)
         }
 
         // Produce content (OCR for reMarkable, block fetch for Notion) only for
@@ -338,7 +338,9 @@ final class SyncCoordinator: ObservableObject {
                 folderName: folderName,
                 pageNumber: 1,
                 url: item.url,
-                folderPath: item.folderPath
+                folderPath: item.folderPath,
+                sourceId: item.id,
+                metadata: item.metadata
             )
             do {
                 let existingId = ledger.syncedExternalId(bindingId: binding.id, pageId: item.id)
@@ -396,11 +398,38 @@ final class SyncCoordinator: ObservableObject {
     /// Runs once: a binding with any recorded state has already reconciled. Only
     /// Notion -> Apple Notes does this; reading the whole Notes account is wasted
     /// for any other pairing.
-    private func adoptExistingNotesIfFirstRun(rule: SyncRule, binding: DestinationBinding,
-                                              items: [SourceItem]) async {
-        guard case .notion = rule.source, binding.kind == .appleNotes else { return }
+    /// Dispatches first-run adoption to the right strategy for a Notion source's
+    /// destination. Both keep matched items as-is (seed their version, no
+    /// overwrite) so a first run only creates genuinely new pages.
+    private func adoptIfFirstRun(rule: SyncRule, binding: DestinationBinding, items: [SourceItem]) async {
+        guard case .notion = rule.source else { return }
         guard !ledger.hasAnySyncedState(bindingId: binding.id) else { return }
+        switch binding.configuration {
+        case .appleNotes:                 await adoptExistingNotes(binding: binding, items: items)
+        case .markdownFolder(let config): adoptExistingMarkdown(binding: binding, items: items, config: config)
+        default:                          break
+        }
+    }
 
+    /// Notion -> Markdown: link each page to an existing `.md` with the same
+    /// `notion_id` (exact, frontmatter-based) so the file is updated in place on a
+    /// future edit rather than duplicated. Seeds the current version so the first
+    /// run leaves existing files untouched.
+    private func adoptExistingMarkdown(binding: DestinationBinding, items: [SourceItem],
+                                       config: MarkdownFolderDestinationConfig) {
+        let index = MarkdownAdoptionIndex.read(folderPath: config.folderPath)
+        guard !index.isEmpty else { return }
+        var kept = 0
+        for item in items {
+            guard let path = index[item.id] else { continue }
+            ledger.recordSyncedPage(bindingId: binding.id, pageId: item.id,
+                                    versionHash: item.versionHash, externalId: path)
+            kept += 1
+        }
+        Log.sync.info("First-run Markdown adoption: kept \(kept, privacy: .public) existing files as-is, will create \(items.count - kept, privacy: .public) new")
+    }
+
+    private func adoptExistingNotes(binding: DestinationBinding, items: [SourceItem]) async {
         let candidates = items.map { item in
             AdoptionCandidate(notionId: item.id,
                               title: item.name,

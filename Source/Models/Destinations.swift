@@ -178,10 +178,34 @@ struct AppleNotesDestinationConfig: Codable, Equatable, Hashable {
     var folderName: String          // e.g. "Notes", "Work", "Travel"
 }
 
+/// How much YAML frontmatter to write atop each Markdown file.
+enum FrontmatterMode: String, Codable, CaseIterable, Identifiable, Hashable {
+    case all          // every source field/column value
+    case essential    // notion_id, title, category, created, last_edited
+    case none
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:       return "All properties"
+        case .essential: return "Essential"
+        case .none:      return "None"
+        }
+    }
+}
+
 struct MarkdownFolderDestinationConfig: Codable, Equatable, Hashable {
     var folderPath: String          // Absolute file URL path
-    var fileNameTemplate: String    // e.g. "{notebook}-{page_n}-{date}"
+    var fileNameTemplate: String    // e.g. "{date}-{title}"
     var includeFrontmatter: Bool
+    /// Three-way frontmatter choice. Optional for back-compat: configs persisted
+    /// before it existed fall back to `includeFrontmatter` (essential / none).
+    var frontmatterMode: FrontmatterMode? = nil
+
+    /// The effective mode, resolving the legacy bool when the new field is unset.
+    var effectiveFrontmatter: FrontmatterMode {
+        frontmatterMode ?? (includeFrontmatter ? .essential : .none)
+    }
 }
 
 struct ChromeDestinationConfig: Codable, Equatable, Hashable {

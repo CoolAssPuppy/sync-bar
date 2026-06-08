@@ -31,6 +31,14 @@ struct DestinationPayload: Sendable {
     /// to recreate the source hierarchy; empty means "use the destination's
     /// configured target folder."
     var folderPath: [String] = []
+    /// The source item's stable id (a Notion page id). Destinations that embed
+    /// identity in the file — Markdown frontmatter `notion_id` — write this so a
+    /// later run adopts the file instead of duplicating it. Empty when the source
+    /// has no such id.
+    var sourceId: String = ""
+    /// Source metadata (a Notion row's column values) for destinations that record
+    /// it as frontmatter. Empty otherwise.
+    var metadata: [String: String] = [:]
 }
 
 /// Outcome of writing one page to one destination.

@@ -44,7 +44,7 @@ struct MarkdownDestinationClient: DestinationClient {
             throw DestinationError.fileSystem("Couldn't create folder \(parentUrl.path): \(error.localizedDescription)")
         }
 
-        let frontmatter = config.includeFrontmatter ? Self.frontmatter(payload: payload) : ""
+        let frontmatter = Self.frontmatter(payload: payload, mode: config.effectiveFrontmatter)
         let mermaidBlock = payload.mermaidSource.map { "\n\n```mermaid\n\($0)\n```\n" } ?? ""
         let body = "\(frontmatter)# \(payload.title)\n\n\(payload.body)\(mermaidBlock)"
 
@@ -53,6 +53,13 @@ struct MarkdownDestinationClient: DestinationClient {
         } catch {
             throw DestinationError.fileSystem("Couldn't write \(fileUrl.path): \(error.localizedDescription)")
         }
+        // Stamp the file with the note's date (the configured date column, e.g.
+        // the original pre-migration date) so Finder/Obsidian sort chronologically,
+        // mirroring the Python backup's SetFile step. Best-effort: a failure here
+        // doesn't fail the write.
+        try? FileManager.default.setAttributes(
+            [.creationDate: payload.sourceDate, .modificationDate: payload.sourceDate],
+            ofItemAtPath: fileUrl.path)
         return DestinationWriteResult(
             externalId: fileUrl.path,
             externalURL: fileUrl,
@@ -63,9 +70,11 @@ struct MarkdownDestinationClient: DestinationClient {
     // MARK: Helpers
 
     /// Resolves the template into a relative path (with ".md") under the base
-    /// folder. A "/" in the template makes a subfolder, so the slash is kept as
-    /// a separator while each path component is independently sanitized.
-    private static func resolveRelativePath(template: String, payload: DestinationPayload) -> String {
+    /// folder. The item's `folderPath` (a Notion Category) becomes a leading
+    /// subfolder, so a database fans out across folders the way the Python backup
+    /// does. A "/" in the template makes further subfolders; each component is
+    /// independently sanitized.
+    static func resolveRelativePath(template: String, payload: DestinationPayload) -> String {
         let context = TitleTemplateContext(
             notebook: payload.ruleNotebookName,
             pageNumber: payload.pageNumber,
@@ -74,25 +83,56 @@ struct MarkdownDestinationClient: DestinationClient {
             folderName: payload.folderName
         )
         let resolved = context.apply(to: template.isEmpty ? "{notebook}" : template)
-        let components = resolved
-            .components(separatedBy: "/")
-            .map { sanitizeComponent($0) }
+        let categoryComponents = payload.folderPath.map { sanitizeComponent($0) }
+        let templateComponents = resolved.components(separatedBy: "/").map { sanitizeComponent($0) }
+        let components = (categoryComponents + templateComponents)
             .filter { !$0.isEmpty && $0 != "." && $0 != ".." }
         let relative = components.isEmpty ? "note" : components.joined(separator: "/")
         return relative + ".md"
     }
 
-    private static func frontmatter(payload: DestinationPayload) -> String {
-        let dateFormatter = ISO8601DateFormatter()
-        var lines: [String] = ["---", "title: \"\(escape(payload.title))\"",
-                               "source: reMarkable",
-                               "notebook: \"\(escape(payload.ruleNotebookName))\"",
-                               "page: \(payload.pageNumber)",
-                               "captured_at: \(dateFormatter.string(from: payload.sourceDate))"]
-        if let provider = payload.ocrProvider { lines.append("ocr_provider: \(provider)") }
+    /// YAML frontmatter for the file. `essential` writes the identity/date fields;
+    /// `all` adds every source column value; `none` writes nothing. The `notion_id`
+    /// is what lets a later run adopt this file instead of duplicating it. For a
+    /// reMarkable source (no `sourceId`) it falls back to the original notebook/page
+    /// fields so those files keep their shape.
+    static func frontmatter(payload: DestinationPayload, mode: FrontmatterMode) -> String {
+        guard mode != .none else { return "" }
+        let iso = ISO8601DateFormatter()
+        var lines: [String] = ["---", "title: \"\(escape(payload.title))\""]
+
+        if !payload.sourceId.isEmpty {
+            lines.append("notion_id: \(payload.sourceId)")
+            if let category = payload.folderPath.last { lines.append("category: \"\(escape(category))\"") }
+            lines.append("created: \(iso.string(from: payload.sourceDate))")
+            if let lastEdited = payload.metadata["last_edited"] { lines.append("last_edited: \(lastEdited)") }
+        } else {
+            // reMarkable-shaped file.
+            lines.append("source: reMarkable")
+            lines.append("notebook: \"\(escape(payload.ruleNotebookName))\"")
+            lines.append("page: \(payload.pageNumber)")
+            lines.append("captured_at: \(iso.string(from: payload.sourceDate))")
+            if let provider = payload.ocrProvider { lines.append("ocr_provider: \(provider)") }
+        }
+
+        if mode == .all {
+            // Every other source column value, stable-ordered, skipping ones already
+            // emitted above and the internal `last_edited` carrier.
+            let shown: Set<String> = ["last_edited"]
+            for key in payload.metadata.keys.sorted() where !shown.contains(key) {
+                guard let value = payload.metadata[key], !value.isEmpty else { continue }
+                lines.append("\(yamlKey(key)): \"\(escape(value))\"")
+            }
+        }
         if payload.mermaidSource != nil { lines.append("has_diagram: true") }
         lines.append("---\n\n")
         return lines.joined(separator: "\n")
+    }
+
+    /// A column name made safe as a YAML key (quote-free, no leading/trailing junk).
+    private static func yamlKey(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        return trimmed.contains(":") || trimmed.contains("\"") ? "\"\(escape(trimmed))\"" : trimmed
     }
 
     /// Sanitizes a single path component. Keeps "/" out (the caller splits on it

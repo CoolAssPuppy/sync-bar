@@ -26,6 +26,10 @@ struct SourceItem: Sendable, Equatable, Hashable {
     /// folder hierarchy, e.g. ["Bookmarks Bar", "Supabase"]). Empty for sources
     /// with no hierarchy to preserve.
     var folderPath: [String] = []
+    /// Source-provided key/value metadata (a Notion row's column values), carried
+    /// to destinations that record it — e.g. Markdown frontmatter. Empty for
+    /// sources without structured metadata.
+    var metadata: [String: String] = [:]
 }
 
 /// Errors raised by source clients. Source-domain (not destination/OCR domain)

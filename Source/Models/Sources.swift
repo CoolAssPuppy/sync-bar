@@ -125,6 +125,11 @@ struct NotionSourceConfig: Codable, Equatable, Hashable {
     var titleProperty: String = ""
     /// The single-select column whose value becomes the destination folder.
     var categoryProperty: String = NotionSourceConfig.defaultCategoryProperty
+    /// The Notion date column that supplies each note's date (its file/creation
+    /// date and the `{date}` filename token). Empty means use the page's built-in
+    /// `created_time` (which is the migration date for notes imported from
+    /// elsewhere); a date property like "Created Date" recovers the original date.
+    var dateProperty: String = ""
 
     static let defaultCategoryProperty = "Category"
 }

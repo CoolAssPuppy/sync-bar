@@ -51,7 +51,8 @@ struct NotionSourceClient: SourceClient {
         let reader = NotionPageReader(token: try token(for: cfg.workspaceId), session: session)
         let pages = try await reader.queryPages(databaseId: cfg.databaseId,
                                                 titleProperty: cfg.titleProperty,
-                                                categoryProperty: cfg.categoryProperty)
+                                                categoryProperty: cfg.categoryProperty,
+                                                dateProperty: cfg.dateProperty)
         return pages.map { page in
             SourceItem(
                 id: page.id,
@@ -63,7 +64,11 @@ struct NotionSourceClient: SourceClient {
                 tags: [],
                 // The Category value is the destination folder/notebook; blank
                 // categories fall back to the destination's configured folder.
-                folderPath: page.category.map { [$0] } ?? []
+                folderPath: page.category.map { [$0] } ?? [],
+                // Column values for Markdown frontmatter, plus the synced edit time.
+                metadata: page.properties.merging([
+                    "last_edited": Self.versionHash(page.lastEditedTime)
+                ]) { existing, _ in existing }
             )
         }
     }

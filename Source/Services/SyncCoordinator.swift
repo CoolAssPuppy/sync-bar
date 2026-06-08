@@ -245,11 +245,32 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
-        // Render each item once (OCR for reMarkable), reused across every binding
-        // — source cost shouldn't scale with destination count. A render failure
-        // skips that item rather than aborting the whole rule.
+        // First-run adoption (Notion -> Apple Notes) runs before content
+        // production: it links existing notes by title+date using item metadata
+        // only — no page bodies — and seeds their version so they're treated as
+        // already in sync. This is what keeps a 3,000-page backup from fetching
+        // 3,000 page bodies on the first run when almost all already exist.
+        for binding in bindings {
+            await adoptExistingNotesIfFirstRun(rule: rule, binding: binding, items: neededItems)
+        }
+
+        // Produce content (OCR for reMarkable, block fetch for Notion) only for
+        // items some enabled binding will actually write — i.e. whose version
+        // differs from what was last synced there. Adopted/unchanged items are
+        // skipped without paying the per-item source cost, so first-run and steady
+        // -state cycles scale with what changed, not with the whole source.
+        let itemsToProduce = neededItems.filter { item in
+            bindings.contains { binding in
+                binding.accepts(fileTags: item.tags)
+                    && ledger.syncedHash(bindingId: binding.id, pageId: item.id) != item.versionHash
+            }
+        }
+
+        // Render each needed item once, reused across every binding — source cost
+        // shouldn't scale with destination count. A render failure skips that item
+        // rather than aborting the whole rule.
         var contents: [(item: SourceItem, content: NoteContent)] = []
-        for item in neededItems {
+        for item in itemsToProduce {
             do {
                 let content = try await source.content(for: item, config: rule.source)
                 contents.append((item, content))
@@ -287,8 +308,6 @@ final class SyncCoordinator: ObservableObject {
                                client: client, source: source, contents: contents)
             return
         }
-
-        await adoptExistingNotesIfFirstRun(rule: rule, binding: binding, contents: contents)
 
         var notesSynced = 0
         var firstError: String?
@@ -378,15 +397,15 @@ final class SyncCoordinator: ObservableObject {
     /// Notion -> Apple Notes does this; reading the whole Notes account is wasted
     /// for any other pairing.
     private func adoptExistingNotesIfFirstRun(rule: SyncRule, binding: DestinationBinding,
-                                              contents: [(item: SourceItem, content: NoteContent)]) async {
+                                              items: [SourceItem]) async {
         guard case .notion = rule.source, binding.kind == .appleNotes else { return }
         guard !ledger.hasAnySyncedState(bindingId: binding.id) else { return }
 
-        let candidates = contents.map { entry in
-            AdoptionCandidate(notionId: entry.item.id,
-                              title: entry.item.name,
-                              category: entry.item.folderPath.last,
-                              createdAt: entry.item.createdAt)
+        let candidates = items.map { item in
+            AdoptionCandidate(notionId: item.id,
+                              title: item.name,
+                              category: item.folderPath.last,
+                              createdAt: item.createdAt)
         }
         let existing: [ExistingAppleNote]
         do {
@@ -398,7 +417,7 @@ final class SyncCoordinator: ObservableObject {
         let result = NoteAdoptionMatcher.match(notion: candidates, apple: existing)
         // Mark each matched page as synced at its current version, so the first run
         // skips it (no overwrite) but still updates it in place on a future edit.
-        let hashByPage = Dictionary(contents.map { ($0.item.id, $0.item.versionHash) },
+        let hashByPage = Dictionary(items.map { ($0.id, $0.versionHash) },
                                     uniquingKeysWith: { first, _ in first })
         for link in result.links {
             guard let versionHash = hashByPage[link.notionId] else { continue }

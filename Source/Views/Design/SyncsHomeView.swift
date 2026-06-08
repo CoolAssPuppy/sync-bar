@@ -26,13 +26,6 @@ enum SyncListOrder: String, CaseIterable, Identifiable {
         case .groupByDestination: return "Group by Destination"
         }
     }
-    var icon: String {
-        switch self {
-        case .createdDate:        return "calendar"
-        case .groupBySource:      return "tray.and.arrow.up"
-        case .groupByDestination: return "tray.and.arrow.down"
-        }
-    }
     var isGrouped: Bool { self != .createdDate }
 }
 
@@ -150,9 +143,7 @@ struct SyncsHomeView: View {
     private var sortMenu: some View {
         Menu {
             Picker("Order", selection: $orderRaw) {
-                ForEach(SyncListOrder.allCases) { option in
-                    Label(option.label, systemImage: option.icon).tag(option.rawValue)
-                }
+                ForEach(SyncListOrder.allCases) { Text($0.label).tag($0.rawValue) }
             }
             .pickerStyle(.inline)
         } label: {

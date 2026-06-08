@@ -47,11 +47,12 @@ private enum SyncListItem: Identifiable {
         case .task(let t): return t.createdAt
         }
     }
-    /// The "from" name shown on the row.
+    /// The source app (reMarkable, Safari, Notion, Reminders) — the grouping key
+    /// for "Group by Source".
     var sourceLabel: String {
         switch self {
-        case .flow(let f): return f.folderName
-        case .task(let t): return t.remindersListName.isEmpty ? "Reminders" : t.remindersListName
+        case .flow(let f): return f.rule.sourceKind.label
+        case .task:        return "Reminders"
         }
     }
     /// The destination app shown on the row.

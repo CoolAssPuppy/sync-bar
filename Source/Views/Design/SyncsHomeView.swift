@@ -12,6 +12,57 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+/// How the Syncs list is ordered/grouped. Persisted so it survives launches.
+enum SyncListOrder: String, CaseIterable, Identifiable {
+    case createdDate
+    case groupBySource
+    case groupByDestination
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .createdDate:        return "Sort by created date"
+        case .groupBySource:      return "Group by Source"
+        case .groupByDestination: return "Group by Destination"
+        }
+    }
+    var isGrouped: Bool { self != .createdDate }
+}
+
+/// One row in the list — a one-way flow or a two-way task sync — with the keys
+/// the list sorts and groups by, so both kinds order together.
+private enum SyncListItem: Identifiable {
+    case flow(SyncFlow)
+    case task(TaskSync)
+
+    var id: String {
+        switch self {
+        case .flow(let f): return "flow-\(f.id)"
+        case .task(let t): return "task-\(t.id)"
+        }
+    }
+    var createdAt: Date {
+        switch self {
+        case .flow(let f): return f.binding.createdAt
+        case .task(let t): return t.createdAt
+        }
+    }
+    /// The "from" name shown on the row.
+    var sourceLabel: String {
+        switch self {
+        case .flow(let f): return f.folderName
+        case .task(let t): return t.remindersListName.isEmpty ? "Reminders" : t.remindersListName
+        }
+    }
+    /// The destination app shown on the row.
+    var destinationLabel: String {
+        switch self {
+        case .flow(let f): return f.kind.label
+        case .task: return DestinationKind.notion.label
+        }
+    }
+}
+
 struct SyncsHomeView: View {
     @ObservedObject var coordinator: SyncCoordinator
     @ObservedObject var taskCoordinator: TaskSyncCoordinator
@@ -23,9 +74,32 @@ struct SyncsHomeView: View {
     @ObservedObject private var ledger = Ledger.shared
     @Environment(\.theme) private var theme
     @State private var isAddingSource = false
+    @AppStorage("syncs.listOrder") private var orderRaw = SyncListOrder.createdDate.rawValue
+    private var order: SyncListOrder { SyncListOrder(rawValue: orderRaw) ?? .createdDate }
 
     private var flows: [SyncFlow] { ledger.syncFlows }
     private var taskSyncs: [TaskSync] { ledger.taskSyncs }
+
+    /// All syncs as ordered sections. A flat list (one untitled section) for
+    /// "created date"; alphabetically-titled sections for the two groupings.
+    /// Within every section, newest-created first.
+    private var sections: [(title: String?, items: [SyncListItem])] {
+        let items = flows.map(SyncListItem.flow) + taskSyncs.map(SyncListItem.task)
+        switch order {
+        case .createdDate:
+            return [(nil, items.sorted { $0.createdAt > $1.createdAt })]
+        case .groupBySource:
+            return group(items, by: \.sourceLabel)
+        case .groupByDestination:
+            return group(items, by: \.destinationLabel)
+        }
+    }
+
+    private func group(_ items: [SyncListItem], by key: (SyncListItem) -> String) -> [(title: String?, items: [SyncListItem])] {
+        Dictionary(grouping: items, by: key)
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+            .map { (title: $0.key, items: $0.value.sorted { $0.createdAt > $1.createdAt }) }
+    }
     private var hasAnySource: Bool {
         ledger.remarkableAccount != nil || ledger.safariConnected || ledger.remindersConnected
     }
@@ -54,12 +128,40 @@ struct SyncsHomeView: View {
                     .foregroundStyle(theme.muted)
             }
             Spacer()
+            if hasAnySync { sortMenu }
             AppIconButton(systemName: "arrow.clockwise", help: "Sync all", spinOnTap: true) { syncAll() }
             PillButton(title: "New sync", systemImage: "plus") { onNew() }
         }
         .padding(.horizontal, 28)
         .padding(.top, 26)
         .padding(.bottom, 18)
+    }
+
+    /// Sort/group control: a menu of the three orderings, the current one ticked.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Order", selection: $orderRaw) {
+                ForEach(SyncListOrder.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: order.isGrouped ? "rectangle.3.group" : "arrow.up.arrow.down")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(order.isGrouped ? order.label : "Sort")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(theme.foregroundSoft)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort or group the syncs")
     }
 
     private func syncAll() {
@@ -87,31 +189,52 @@ struct SyncsHomeView: View {
             emptyState
         } else {
             ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(flows) { flow in
-                        SyncRowView(
-                            flow: flow,
-                            isSyncing: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
-                            onTap: { onEdit(flow) },
-                            onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
-                        )
-                    }
-                    ForEach(taskSyncs) { sync in
-                        TaskSyncRowView(
-                            // Show "Syncing" for the whole run, not just the one row
-                            // the coordinator happens to be on, so finished rows in a
-                            // batch don't flash "Synced just now" mid-sync.
-                            sync: sync,
-                            isSyncing: taskCoordinator.isSyncing && sync.enabled,
-                            onTap: { onEditTask(sync) },
-                            onSyncNow: { Task { await taskCoordinator.run(sync) } }
-                        )
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(sections, id: \.title) { section in
+                        if let title = section.title {
+                            sectionHeader(title)
+                        }
+                        ForEach(section.items) { item in
+                            row(for: item)
+                        }
                     }
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 28)
             }
         }
+    }
+
+    @ViewBuilder
+    private func row(for item: SyncListItem) -> some View {
+        switch item {
+        case .flow(let flow):
+            SyncRowView(
+                flow: flow,
+                isSyncing: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
+                onTap: { onEdit(flow) },
+                onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
+            )
+        case .task(let sync):
+            // Show "Syncing" for the whole run, not just the row the coordinator
+            // is on, so finished rows in a batch don't flash mid-sync.
+            TaskSyncRowView(
+                sync: sync,
+                isSyncing: taskCoordinator.isSyncing && sync.enabled,
+                onTap: { onEditTask(sync) },
+                onSyncNow: { Task { await taskCoordinator.run(sync) } }
+            )
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .bold))
+            .tracking(0.8)
+            .foregroundStyle(theme.tertiary)
+            .padding(.top, 14)
+            .padding(.bottom, 2)
+            .padding(.leading, 4)
     }
 
     private var emptyState: some View {
@@ -214,10 +337,6 @@ private struct SyncRowView: View {
                         Text(flow.kind.label)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground)
-                            .lineLimit(1)
-                        Text("· \(flow.destinationSummary)")
-                            .font(.system(size: 13))
-                            .foregroundStyle(theme.muted)
                             .lineLimit(1)
                     }
                     Text(flow.howSummary)

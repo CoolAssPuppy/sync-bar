@@ -737,17 +737,17 @@ final class Ledger: ObservableObject {
         if let data = defaults.data(forKey: Self.remarkableAccountKey) {
             remarkableAccount = try? decoder.decode(RemarkableAccount.self, from: data)
         }
-        notionWorkspaces  = decodeArray([NotionWorkspace].self, key: Self.notionWorkspacesKey, defaults: defaults, decoder: decoder)
-        linearAccounts    = decodeArray([LinearAccount].self,   key: Self.linearAccountsKey,   defaults: defaults, decoder: decoder)
-        googleAccounts    = decodeArray([GoogleAccount].self,   key: Self.googleAccountsKey,   defaults: defaults, decoder: decoder)
-        markdownTargets   = decodeArray([MarkdownTarget].self,  key: Self.markdownTargetsKey,  defaults: defaults, decoder: decoder)
-        appleNotesTargets = decodeArray([AppleNotesTarget].self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
-        chromeTargets     = decodeArray([ChromeTarget].self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
+        notionWorkspaces  = decodeArray(NotionWorkspace.self, key: Self.notionWorkspacesKey, defaults: defaults, decoder: decoder)
+        linearAccounts    = decodeArray(LinearAccount.self,   key: Self.linearAccountsKey,   defaults: defaults, decoder: decoder)
+        googleAccounts    = decodeArray(GoogleAccount.self,   key: Self.googleAccountsKey,   defaults: defaults, decoder: decoder)
+        markdownTargets   = decodeArray(MarkdownTarget.self,  key: Self.markdownTargetsKey,  defaults: defaults, decoder: decoder)
+        appleNotesTargets = decodeArray(AppleNotesTarget.self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
+        chromeTargets     = decodeArray(ChromeTarget.self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
         safariConnected   = defaults.bool(forKey: Self.safariConnectedKey)
         remindersConnected = defaults.bool(forKey: Self.remindersConnectedKey)
-        taskSyncs         = decodeArray([TaskSync].self,        key: Self.taskSyncsKey,        defaults: defaults, decoder: decoder)
-        rules             = decodeArray([SyncRule].self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
-        folders         = decodeArray([RmFolder].self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)
+        taskSyncs         = decodeArray(TaskSync.self,        key: Self.taskSyncsKey,        defaults: defaults, decoder: decoder)
+        rules             = decodeArray(SyncRule.self,        key: Self.rulesKey,            defaults: defaults, decoder: decoder)
+        folders         = decodeArray(RmFolder.self,      key: Self.foldersKey,        defaults: defaults, decoder: decoder)
 
         if let data = defaults.data(forKey: Self.syncedPageHashesKey),
            let value = try? decoder.decode([String: String].self, from: data) {
@@ -769,7 +769,7 @@ final class Ledger: ObservableObject {
             events = db.recentEvents(limit: Self.maxEventsRetained)
             taskSyncState = db.allTaskLinks()
         } else {
-            events = decodeArray([SyncEvent].self, key: Self.eventsKey, defaults: defaults, decoder: decoder)
+            events = decodeArray(SyncEvent.self, key: Self.eventsKey, defaults: defaults, decoder: decoder)
             taskSyncState = (defaults.data(forKey: Self.taskSyncStateKey)
                 .flatMap { try? decoder.decode([String: [TaskLink]].self, from: $0) }) ?? [:]
         }
@@ -817,12 +817,34 @@ final class Ledger: ObservableObject {
         }
     }
 
-    private func decodeArray<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults, decoder: JSONDecoder) -> T where T: ExpressibleByArrayLiteral {
-        guard let data = defaults.data(forKey: key),
-              let value = try? decoder.decode(T.self, from: data) else {
+    /// Decodes a persisted array element-by-element. The fast path decodes the
+    /// whole array; if that fails (a single entry written by an older/newer build
+    /// can't decode), it falls back to decoding each entry independently and keeps
+    /// the ones that succeed, logging how many were dropped. This is the safety net
+    /// that stops one bad rule from wiping every sync — a schema change to one
+    /// element type can only ever lose that element, never the whole collection.
+    private func decodeArray<Element: Decodable>(_ elementType: Element.Type, key: String,
+                                                 defaults: UserDefaults, decoder: JSONDecoder) -> [Element] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        if let whole = try? decoder.decode([Element].self, from: data) { return whole }
+        guard let rawItems = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else {
+            Log.ledger.error("Couldn't read \(key, privacy: .public); dropping it")
             return []
         }
-        return value
+        var kept: [Element] = []
+        var dropped = 0
+        for item in rawItems {
+            if let itemData = try? JSONSerialization.data(withJSONObject: item),
+               let element = try? decoder.decode(Element.self, from: itemData) {
+                kept.append(element)
+            } else {
+                dropped += 1
+            }
+        }
+        if dropped > 0 {
+            Log.ledger.error("Recovered \(kept.count, privacy: .public) of \(rawItems.count, privacy: .public) entries for \(key, privacy: .public); skipped \(dropped, privacy: .public) undecodable")
+        }
+        return kept
     }
 
     /// Synchronous encode-and-write. Used for one-off writes where we want

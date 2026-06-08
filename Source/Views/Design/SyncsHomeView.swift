@@ -26,6 +26,13 @@ enum SyncListOrder: String, CaseIterable, Identifiable {
         case .groupByDestination: return "Group by Destination"
         }
     }
+    var icon: String {
+        switch self {
+        case .createdDate:        return "calendar"
+        case .groupBySource:      return "tray.and.arrow.up"
+        case .groupByDestination: return "tray.and.arrow.down"
+        }
+    }
     var isGrouped: Bool { self != .createdDate }
 }
 
@@ -138,26 +145,23 @@ struct SyncsHomeView: View {
         .padding(.bottom, 18)
     }
 
-    /// Sort/group control: a menu of the three orderings, the current one ticked.
+    /// Sort/group control: an icon-only button; the menu lists each ordering with
+    /// its own icon beside the text, the current one ticked.
     private var sortMenu: some View {
         Menu {
             Picker("Order", selection: $orderRaw) {
-                ForEach(SyncListOrder.allCases) { Text($0.label).tag($0.rawValue) }
+                ForEach(SyncListOrder.allCases) { option in
+                    Label(option.label, systemImage: option.icon).tag(option.rawValue)
+                }
             }
             .pickerStyle(.inline)
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: order.isGrouped ? "rectangle.3.group" : "arrow.up.arrow.down")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(order.isGrouped ? order.label : "Sort")
-                    .font(.system(size: 12.5, weight: .semibold))
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
-            }
-            .foregroundStyle(theme.foregroundSoft)
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.card))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.foregroundSoft)
+                .frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

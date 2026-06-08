@@ -127,4 +127,26 @@ final class NotionMarkdownTests: XCTestCase {
         let path = MarkdownDestinationClient.resolveRelativePath(template: "{title}", payload: payload)
         XCTAssertEqual(path, "Codes & Cards.md")
     }
+
+    // MARK: Markdown dry-run report
+
+    private func item(_ id: String, _ title: String, _ category: String) -> SourceItem {
+        SourceItem(id: id, name: title, versionHash: "v", createdAt: Date(timeIntervalSince1970: 0),
+                   folderPath: [category])
+    }
+
+    func testMarkdownPreviewReportClassifiesFreshKeptOrphan() {
+        let report = NotionMarkdownPreview.render(
+            databaseTitle: "Notes", folder: "/notes", pageCount: 3,
+            fresh: [(item("n2", "Benchmarks", "Supabase"), "Supabase/1970-01-01-Benchmarks.md")],
+            keptCount: 2,
+            orphanFiles: ["/notes/Personal/old-deleted.md"],
+            now: Date(timeIntervalSince1970: 0))
+        XCTAssertTrue(report.contains("Nothing was written"))
+        XCTAssertTrue(report.contains("Would **create** new files: **1**"))
+        XCTAssertTrue(report.contains("(matched by notion_id): **2**"))
+        XCTAssertTrue(report.contains("Supabase/1970-01-01-Benchmarks.md"))
+        XCTAssertTrue(report.contains("old-deleted.md"), "orphan files listed by name")
+        XCTAssertTrue(report.contains("| Supabase | 1 |"), "new-files-by-folder tally")
+    }
 }

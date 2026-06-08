@@ -218,9 +218,10 @@ struct SyncEditorView: View {
                 Text(previewError).font(.system(size: 11)).foregroundStyle(theme.destructive).lineLimit(1)
             }
             Spacer()
-            // Dry run: read Notion + Apple Notes, show what a first sync would do,
-            // write nothing. Only meaningful for a Notion source with a database.
-            if sourceKind == .notion, notionSourceDatabaseId != nil {
+            // Dry run: read Notion + the chosen destination, show what a first sync
+            // would do, write nothing. Supported for the adopting destinations.
+            if sourceKind == .notion, notionSourceDatabaseId != nil,
+               toKind == .appleNotes || toKind == .markdownFolder {
                 PillButton(title: previewRunning ? "Generating…" : "Preview (no writes)",
                            systemImage: previewRunning ? nil : "eye",
                            filled: false,
@@ -247,12 +248,24 @@ struct SyncEditorView: View {
             databaseTitle: notionSourceDatabaseName,
             titleProperty: notionSourceTitleProperty,
             categoryProperty: notionSourceCategoryProperty)
+        let destination = toKind
+        let markdownConfig = MarkdownFolderDestinationConfig(
+            folderPath: localMarkdown.folderPath,
+            fileNameTemplate: localMarkdown.fileNameTemplate.isEmpty ? "{date}-{title}" : localMarkdown.fileNameTemplate,
+            includeFrontmatter: localMarkdown.frontmatterMode != .none,
+            frontmatterMode: localMarkdown.frontmatterMode)
         let fallback = localAppleNotes.folderName.isEmpty ? "Notes" : localAppleNotes.folderName
         previewRunning = true
         previewError = nil
         Task {
             do {
-                let url = try await NotionAppleNotesPreview.generate(source: config, fallbackNotebook: fallback)
+                let url: URL
+                switch destination {
+                case .markdownFolder:
+                    url = try await NotionMarkdownPreview.generate(source: config, config: markdownConfig)
+                default:   // .appleNotes
+                    url = try await NotionAppleNotesPreview.generate(source: config, fallbackNotebook: fallback)
+                }
                 await MainActor.run {
                     previewRunning = false
                     NSWorkspace.shared.open(url)

@@ -303,7 +303,7 @@ struct SyncEditorView: View {
     private var remarkableScopePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             CustomDropdown(
-                options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(size: 26)), title: $0.name) },
+                options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(size: 26)), title: $0.name, detail: "(\($0.pageCount) note\($0.pageCount == 1 ? "" : "s"))") },
                 selectedId: folder?.id,
                 placeholder: "Choose a folder",
                 placeholderIcon: AnyView(placeholderSourceIcon),

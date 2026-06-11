@@ -107,6 +107,8 @@ struct DropdownOption: Identifiable {
     let icon: AnyView
     let title: String
     var subtitle: String? = nil
+    /// A muted, smaller note shown inline after the title (e.g. "(2 notes)").
+    var detail: String? = nil
 }
 
 /// A full-width custom dropdown: the whole bar is the control, with a single
@@ -134,10 +136,15 @@ struct CustomDropdown: View {
                 HStack(spacing: 12) {
                     selected?.icon ?? placeholderIcon
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(selected?.title ?? placeholder)
-                            .font(.system(size: 14.5, weight: .semibold))
-                            .foregroundStyle(selected == nil ? theme.muted : theme.foreground)
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(selected?.title ?? placeholder)
+                                .font(.system(size: 14.5, weight: .semibold))
+                                .foregroundStyle(selected == nil ? theme.muted : theme.foreground)
+                                .lineLimit(1)
+                            if let detail = selected?.detail {
+                                Text(detail).font(.system(size: 12)).foregroundStyle(theme.muted).lineLimit(1)
+                            }
+                        }
                         if let sub = selected?.subtitle {
                             Text(sub).font(.system(size: 12)).foregroundStyle(theme.muted).lineLimit(1)
                         }
@@ -168,6 +175,9 @@ struct CustomDropdown: View {
                                     Text(opt.title)
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundStyle(theme.foregroundSoft).lineLimit(1)
+                                    if let detail = opt.detail {
+                                        Text(detail).font(.system(size: 12)).foregroundStyle(theme.muted).lineLimit(1)
+                                    }
                                     Spacer(minLength: 8)
                                     if opt.id == selectedId {
                                         Image(systemName: "checkmark")

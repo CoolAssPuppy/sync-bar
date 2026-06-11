@@ -97,17 +97,23 @@ struct RealRemarkableClient: RemarkableClient {
     private func entries(includeTags: Bool = false) async throws -> [DocumentEntry] {
         let documents = try await rootIndexEntries()
         var result: [DocumentEntry] = []
+        var firstFailure: Error?
         for document in documents {
             do {
                 let components = try await documentComponents(documentHash: document.hash, documentId: document.identifier)
-                guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components),
-                      let metadataData = try? await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier),
-                      let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
+                guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components) else { continue }
+                // The metadata fetch decides whether a document is a live notebook
+                // or a folder, so a *failed* fetch (e.g. a 429) must propagate — not
+                // be swallowed into a skip that looks like an empty account.
+                let metadataData = try await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier)
+                guard let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
                       metadata.isLive else { continue }   // skip deleted AND trashed docs
                 var tags: [String] = []
                 if includeTags,
                    let contentEntry = RemarkableSyncIndex.contentEntry(in: components),
                    let contentData = try? await blob(hash: contentEntry.hash, filename: contentEntry.identifier) {
+                    // Tags are best-effort: a content-blob hiccup drops the tags,
+                    // not the note.
                     tags = (try? RemarkableSyncIndex.parseContentTags(contentData)) ?? []
                 }
                 result.append(DocumentEntry(
@@ -118,8 +124,16 @@ struct RealRemarkableClient: RemarkableClient {
                     tags: tags
                 ))
             } catch {
+                if firstFailure == nil { firstFailure = error }
                 Log.remarkable.error("doc \(document.identifier, privacy: .public) walk failed: \(String(describing: error), privacy: .public)")
             }
+        }
+        // A walk that surfaced nothing *because every document errored* is a
+        // failure, not an empty account. Without this the caller can't tell a
+        // throttled fetch from an empty folder and reports the misleading
+        // "Nothing to sync: … has no notebooks."
+        if result.isEmpty, let firstFailure {
+            throw firstFailure
         }
         return result
     }
@@ -267,19 +281,35 @@ struct RealRemarkableClient: RemarkableClient {
 
     // MARK: Auth
 
+    /// Per-request retry budget for reMarkable's 429s. A listing walks the whole
+    /// account one blob at a time, so the burst can trip the cloud's rate
+    /// limiter; a short exponential backoff lets the walk finish instead of
+    /// dropping documents (and surfacing as "Nothing to sync").
+    private static let rateLimitRetries = 3
+
     private func authedData(path: String, rmFilename: String? = nil) async throws -> Data {
-        var (data, response) = try await send(path: path, rmFilename: rmFilename)
-        if (response as? HTTPURLResponse)?.statusCode == 401 {
-            // The user token is short-lived (a few hours); the device token is
-            // long-lived. A 401 almost always means the cached user token
-            // expired — drop it, mint a fresh one from the device token, and
-            // retry once before declaring the device unpaired.
-            Log.remarkable.info("user token rejected (401); refreshing from device token and retrying")
-            keychain.delete(key: .remarkableUserToken)
-            (data, response) = try await send(path: path, rmFilename: rmFilename)
+        for attempt in 0...Self.rateLimitRetries {
+            var (data, response) = try await send(path: path, rmFilename: rmFilename)
+            if (response as? HTTPURLResponse)?.statusCode == 401 {
+                // The user token is short-lived (a few hours); the device token is
+                // long-lived. A 401 almost always means the cached user token
+                // expired — drop it, mint a fresh one from the device token, and
+                // retry once before declaring the device unpaired.
+                Log.remarkable.info("user token rejected (401); refreshing from device token and retrying")
+                keychain.delete(key: .remarkableUserToken)
+                (data, response) = try await send(path: path, rmFilename: rmFilename)
+            }
+            if (response as? HTTPURLResponse)?.statusCode == 429, attempt < Self.rateLimitRetries {
+                let seconds = UInt64(1 << attempt)   // 1s, 2s, 4s
+                Log.remarkable.info("reMarkable throttled us (429); backing off \(seconds, privacy: .public)s then retrying")
+                try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                continue
+            }
+            try Self.validate(response: response, data: data)
+            return data
         }
-        try Self.validate(response: response, data: data)
-        return data
+        // Unreachable: the final attempt either returns or throws via validate().
+        throw RemarkableError.rateLimited
     }
 
     private func send(path: String, rmFilename: String?) async throws -> (Data, URLResponse) {

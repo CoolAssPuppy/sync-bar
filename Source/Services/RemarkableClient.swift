@@ -52,6 +52,15 @@ protocol RemarkableClient: Sendable {
     func uploadDocument(fileURL: URL,
                         toFolderId folderId: String,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> RmUploadResult
+    /// Drops any cached account listing so the next list call re-reads the cloud.
+    /// Called once at the start of each sync cycle: the cycle's rules then share a
+    /// single fresh walk instead of each re-walking (and re-throttling) the cloud.
+    func refreshListing() async
+}
+
+extension RemarkableClient {
+    /// Clients without a listing cache (the mock, test stubs) need do nothing.
+    func refreshListing() async {}
 }
 
 /// One page's content, split by source: rasterized strokes for OCR and typed

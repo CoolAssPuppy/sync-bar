@@ -184,6 +184,11 @@ final class SyncCoordinator: ObservableObject {
         NotificationCenter.default.post(name: .syncStarted, object: nil)
         let cycleStart = Date()
 
+        // Drop the reMarkable listing cache so this cycle re-reads the cloud once;
+        // every reMarkable rule below then shares that single walk instead of each
+        // re-walking the account and tripping the rate limiter.
+        await remarkable.refreshListing()
+
         for rule in rules {
             activeRuleId = rule.id
             await runRule(rule, restrictedToBindingId: bindingId, explainSkips: explainSkips)

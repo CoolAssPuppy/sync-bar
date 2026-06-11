@@ -19,6 +19,12 @@ import Foundation
 struct RealRemarkableClient: RemarkableClient {
     private let session: URLSession
     private let keychain: KeychainStore
+    /// One account walk shared across a whole sync cycle. Each reMarkable rule
+    /// lists files independently; without this they'd each re-walk the entire
+    /// cloud, and that burst of per-folder walks is what trips the rate limiter
+    /// (so some folders come back empty). `SyncCoordinator` drops it via
+    /// `refreshListing()` at the start of each cycle.
+    private let walkCache = ListingWalkCache<[DocumentEntry]>(ttl: 300)
 
     init(session: URLSession = .shared, keychain: KeychainStore = .shared) {
         self.session = session
@@ -94,23 +100,28 @@ struct RealRemarkableClient: RemarkableClient {
     /// `includeTags` is set, each document's `.content` blob is also read so
     /// document-level tags are available (skipped otherwise to avoid an extra
     /// fetch per document on the cheap listing paths).
-    private func entries(includeTags: Bool = false) async throws -> [DocumentEntry] {
+    /// The account walk, served from a per-cycle cache so every folder shares a
+    /// single pass over the cloud instead of re-walking it (and re-throttling).
+    private func entries() async throws -> [DocumentEntry] {
+        try await walkCache.value { try await self.walkAccount() }
+    }
+
+    /// Walks the root index once and reads every live document's metadata and
+    /// document-level tags. A single corrupt document is skipped; any transport
+    /// failure (rate limit, network, auth) propagates so an incomplete walk is
+    /// reported honestly rather than masquerading as "no notebooks".
+    private func walkAccount() async throws -> [DocumentEntry] {
         let documents = try await rootIndexEntries()
         var result: [DocumentEntry] = []
-        var firstFailure: Error?
         for document in documents {
             do {
                 let components = try await documentComponents(documentHash: document.hash, documentId: document.identifier)
                 guard let metadataEntry = RemarkableSyncIndex.metadataEntry(in: components) else { continue }
-                // The metadata fetch decides whether a document is a live notebook
-                // or a folder, so a *failed* fetch (e.g. a 429) must propagate — not
-                // be swallowed into a skip that looks like an empty account.
                 let metadataData = try await blob(hash: metadataEntry.hash, filename: metadataEntry.identifier)
                 guard let metadata = try? RemarkableSyncIndex.parseMetadata(metadataData),
                       metadata.isLive else { continue }   // skip deleted AND trashed docs
                 var tags: [String] = []
-                if includeTags,
-                   let contentEntry = RemarkableSyncIndex.contentEntry(in: components),
+                if let contentEntry = RemarkableSyncIndex.contentEntry(in: components),
                    let contentData = try? await blob(hash: contentEntry.hash, filename: contentEntry.identifier) {
                     // Tags are best-effort: a content-blob hiccup drops the tags,
                     // not the note.
@@ -123,17 +134,15 @@ struct RealRemarkableClient: RemarkableClient {
                     pageCount: RemarkableSyncIndex.pageBlobHashes(in: components).count,
                     tags: tags
                 ))
-            } catch {
-                if firstFailure == nil { firstFailure = error }
-                Log.remarkable.error("doc \(document.identifier, privacy: .public) walk failed: \(String(describing: error), privacy: .public)")
+            } catch let error as RemarkableSyncError {
+                // A single document with a corrupt index can be skipped without
+                // poisoning the rest of the listing.
+                Log.remarkable.error("doc \(document.identifier, privacy: .public) skipped (bad index): \(String(describing: error), privacy: .public)")
+                continue
             }
-        }
-        // A walk that surfaced nothing *because every document errored* is a
-        // failure, not an empty account. Without this the caller can't tell a
-        // throttled fetch from an empty folder and reports the misleading
-        // "Nothing to sync: … has no notebooks."
-        if result.isEmpty, let firstFailure {
-            throw firstFailure
+            // Any other error (rate limit, network, auth) falls through and
+            // propagates: the walk is incomplete, so reporting it beats silently
+            // dropping notebooks and claiming the folder is empty.
         }
         return result
     }
@@ -163,7 +172,7 @@ struct RealRemarkableClient: RemarkableClient {
 
     func listFiles(inFolderId folderId: String) async throws -> [RmFile] {
         let targetParent = (folderId == unfiledFolderId) ? "" : folderId
-        return try await entries(includeTags: true)
+        return try await entries()
             .filter { $0.metadata.isNotebook && $0.metadata.parent == targetParent }
             .map { file in
                 RmFile(
@@ -181,10 +190,17 @@ struct RealRemarkableClient: RemarkableClient {
     }
 
     func listTags() async throws -> [String] {
-        let all = try await entries(includeTags: true)
+        let all = try await entries()
             .filter { $0.metadata.isNotebook }
             .flatMap(\.tags)
         return Array(Set(all)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Drops the cached account walk so the next listing call re-reads the cloud.
+    /// `SyncCoordinator` calls this once per cycle: the cycle's rules then share a
+    /// single fresh walk instead of each triggering their own.
+    func refreshListing() async {
+        await walkCache.invalidate()
     }
 
     func listPages(notebookId: String) async throws -> [RmPage] {
@@ -363,5 +379,38 @@ struct RealRemarkableClient: RemarkableClient {
         case 429:       throw RemarkableError.rateLimited
         default:        throw RemarkableError.network("reMarkable cloud returned \(http.statusCode).")
         }
+    }
+}
+
+/// A small async cache for one expensive value (here, the account walk). Holds
+/// the last result for up to `ttl` seconds and coalesces concurrent callers onto
+/// a single in-flight fetch, so a sync cycle's rules share one pass over the
+/// cloud. `invalidate()` forces the next call to re-fetch.
+private actor ListingWalkCache<Value: Sendable> {
+    private var cached: (value: Value, at: Date)?
+    private var inflight: Task<Value, Error>?
+    private let ttl: TimeInterval
+
+    init(ttl: TimeInterval) {
+        self.ttl = ttl
+    }
+
+    func invalidate() {
+        cached = nil
+    }
+
+    func value(_ fetch: @Sendable @escaping () async throws -> Value) async throws -> Value {
+        if let cached, Date().timeIntervalSince(cached.at) < ttl {
+            return cached.value
+        }
+        if let inflight {
+            return try await inflight.value
+        }
+        let task = Task { try await fetch() }
+        inflight = task
+        defer { inflight = nil }
+        let value = try await task.value
+        cached = (value, Date())
+        return value
     }
 }

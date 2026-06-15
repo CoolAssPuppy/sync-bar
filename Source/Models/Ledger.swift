@@ -210,6 +210,27 @@ final class Ledger: ObservableObject {
         remarkableNeedsRepair = value
     }
 
+    /// Fully disconnects the reMarkable source — the mirror of pairing. Deletes
+    /// the device + user tokens, drops every reMarkable-sourced rule (cascading
+    /// their synced state), clears the cached folder list, and forgets the paired
+    /// account, leaving the app back at "no source paired". reMarkable is a source
+    /// (not a destination), so there's no per-binding cascade as with destinations:
+    /// its rules belong to it wholesale and go away with it.
+    func disconnectRemarkable() {
+        let hasRemarkableRule = rules.contains { $0.remarkableConfig != nil }
+        guard remarkableAccount != nil || !folders.isEmpty || hasRemarkableRule else { return }
+
+        KeychainStore.shared.delete(key: .remarkableDeviceToken)
+        KeychainStore.shared.delete(key: .remarkableUserToken)
+
+        for rule in rules where rule.remarkableConfig != nil {
+            deleteRule(id: rule.id)
+        }
+        setFolders([])
+        setRemarkableNeedsRepair(false)
+        setRemarkableAccount(nil)
+    }
+
     func upsertNotionWorkspace(_ workspace: NotionWorkspace) {
         upsert(workspace, in: \.notionWorkspaces, key: Self.notionWorkspacesKey,
                notification: .notionWorkspacesChanged)

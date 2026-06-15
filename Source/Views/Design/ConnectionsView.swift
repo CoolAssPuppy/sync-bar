@@ -109,7 +109,8 @@ struct ConnectionsView: View {
                     trailing: {
                         AnyView(AppActionMenu(actions: [
                             AppMenuAction(title: "Upload files", systemImage: "arrow.up.doc") { presentUploadPanel() },
-                            AppMenuAction(title: "Re-pair", systemImage: "qrcode.viewfinder") { isRepairing = true }
+                            AppMenuAction(title: "Re-pair", systemImage: "qrcode.viewfinder") { isRepairing = true },
+                            AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) { ledger.disconnectRemarkable() }
                         ]))
                     }
                 )

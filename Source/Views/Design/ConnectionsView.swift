@@ -19,6 +19,7 @@ struct ConnectionsView: View {
     @State private var isAddingApp = false
     @State private var isAddingSource = false
     @State private var isRepairing = false
+    @State private var isConfirmingRemarkableDisconnect = false
     @State private var linearTeamChoices: LinearTeamChoices?
     @State private var safariHasAccess = false
     @State private var remindersHasAccess = false
@@ -52,6 +53,23 @@ struct ConnectionsView: View {
                 onCancel: { linearTeamChoices = nil }
             )
         }
+        .confirmationDialog("Disconnect reMarkable?", isPresented: $isConfirmingRemarkableDisconnect, titleVisibility: .visible) {
+            Button("Disconnect", role: .destructive) { ledger.disconnectRemarkable() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(remarkableDisconnectWarning)
+        }
+    }
+
+    /// Spells out the blast radius before disconnecting reMarkable: it's the
+    /// source for every reMarkable sync, so disconnecting removes all of them.
+    /// Destinations and other sources (Safari, Reminders) are left untouched.
+    private var remarkableDisconnectWarning: String {
+        let count = ledger.rules.filter { $0.remarkableConfig != nil }.count
+        let syncs = count == 0
+            ? "This removes the pairing and its folders."
+            : "This removes the pairing and \(count) reMarkable sync\(count == 1 ? "" : "s")."
+        return "\(syncs) Your destinations and other sources stay connected. You can re-pair anytime."
     }
 
     private var header: some View {
@@ -109,7 +127,8 @@ struct ConnectionsView: View {
                     trailing: {
                         AnyView(AppActionMenu(actions: [
                             AppMenuAction(title: "Upload files", systemImage: "arrow.up.doc") { presentUploadPanel() },
-                            AppMenuAction(title: "Re-pair", systemImage: "qrcode.viewfinder") { isRepairing = true }
+                            AppMenuAction(title: "Re-pair", systemImage: "qrcode.viewfinder") { isRepairing = true },
+                            AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) { isConfirmingRemarkableDisconnect = true }
                         ]))
                     }
                 )

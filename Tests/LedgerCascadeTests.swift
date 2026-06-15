@@ -117,6 +117,29 @@ final class LedgerCascadeTests: XCTestCase {
         ledger.deleteRule(id: realRule.id)
     }
 
+    func test_disconnecting_remarkable_clears_account_folders_and_rules() {
+        let ledger = Ledger.shared
+
+        ledger.setRemarkableAccount(RemarkableAccount(pairedAt: Date(), userIdentifier: "user-1", lastSyncedAt: nil))
+        ledger.setFolders([RmFolder(id: "f-1", name: "Quarterly", parentFolder: nil, lastModified: Date(), pageCount: 1)])
+
+        var rule = SyncRule.new(notebookId: "f-1", notebookName: "Quarterly")
+        rule.destinations = [DestinationBinding(configuration: .appleNotes(AppleNotesDestinationConfig(folderName: "Notes")))]
+        ledger.upsertRule(rule)
+        ledger.recordSyncedPage(bindingId: rule.destinations[0].id, pageId: "p-1", versionHash: "h1", externalId: "note-1")
+
+        XCTAssertNotNil(ledger.remarkableAccount)
+        XCTAssertTrue(ledger.rules.contains { $0.id == rule.id })
+
+        ledger.disconnectRemarkable()
+
+        XCTAssertNil(ledger.remarkableAccount, "account should be cleared")
+        XCTAssertTrue(ledger.folders.isEmpty, "cached folders should be cleared")
+        XCTAssertFalse(ledger.rules.contains { $0.id == rule.id }, "reMarkable rule should be dropped")
+        XCTAssertNil(ledger.syncedExternalId(bindingId: rule.destinations[0].id, pageId: "p-1"),
+                     "the dropped rule's synced state should be forgotten")
+    }
+
     func test_updateBindingRunResult_skips_unchanged_writes() {
         let ledger = Ledger.shared
         var rule = SyncRule.new(notebookId: "nb-update", notebookName: "Update test")

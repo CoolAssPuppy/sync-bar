@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.3.1</title>
+      <pubDate>Thu, 11 Jun 2026 12:21:12 +0000</pubDate>
+      <sparkle:version>20</sparkle:version>
+      <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Fixed reMarkable folders sometimes syncing as empty ("Nothing to sync: … has no notebooks") when the cloud was busy. The app now reads your reMarkable account once per sync instead of once per folder, so it no longer trips reMarkable's rate limit.</li><li>When the reMarkable cloud does throttle a sync, the app now waits and retries, and shows the real reason instead of claiming a folder has no notebooks.</li><li>The reMarkable folder picker now shows each folder's note count, for example "Personal (2 notes)", so you can tell which folders actually contain notes before picking one.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.3.1.dmg"
+        sparkle:edSignature="4XfEfrKUP3hWaxb25SZKtwLnP2Hbb8R4mxAiFahCcW6jRaLurONEUuQ7xjnZhM2ekfSx1/1tIDGswTecTf4VBg=="
+        length="8507183"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.3.0</title>
       <pubDate>Mon, 08 Jun 2026 14:37:04 +0000</pubDate>
       <sparkle:version>19</sparkle:version>

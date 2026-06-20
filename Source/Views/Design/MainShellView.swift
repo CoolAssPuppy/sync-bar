@@ -138,11 +138,18 @@ struct MainShellView: View {
             KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
         }.value
         if !hasToken {
-            Log.ui.info("reMarkable account present but no device token — resetting to unpaired")
-            ledger.setRemarkableAccount(nil)
-            ledger.setFolders([])
+            // The device token read came back empty. Don't assume the pairing is
+            // gone — a keychain read can fail transiently (a locked keychain, or a
+            // dev rebuild whose new code signature isn't yet trusted for the
+            // item). Wiping the account here would silently drop the source while
+            // leaving its syncs behind. Flag a re-pair instead and keep the
+            // pairing record so a later launch (or a granted keychain prompt) can
+            // recover it.
+            Log.ui.info("reMarkable account present but device token unreadable — flagging re-pair, keeping the pairing")
+            ledger.setRemarkableNeedsRepair(true)
             return
         }
+        ledger.setRemarkableNeedsRepair(false)
         refreshFolders()
     }
 

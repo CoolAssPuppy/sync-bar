@@ -154,7 +154,10 @@ struct MainShellView: View {
                 await MainActor.run {
                     ledger.updateRemarkableHealth(error: nil)
                     ledger.setFolders(folders)
-                    if !folders.isEmpty { ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id))) }
+                    // Remap rules orphaned by an account switch; never delete on a
+                    // missing folder id (that would silently destroy syncs after a
+                    // re-pair, since every folder id changes).
+                    if !folders.isEmpty { ledger.reconcileRemarkableRules(withFolders: folders) }
                 }
             } catch {
                 await MainActor.run { ledger.updateRemarkableHealth(error: error) }

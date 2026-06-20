@@ -76,7 +76,12 @@ struct RemarkablePairPanel: View {
             let account = try await remarkable.pairDevice(oneTimeCode: code)
             KeychainStore.shared.delete(key: .remarkableUserToken)
             Ledger.shared.setRemarkableAccount(account)
-            Ledger.shared.setFolders(try await remarkable.listFolders())
+            let folders = try await remarkable.listFolders()
+            Ledger.shared.setFolders(folders)
+            // A fresh account gives every folder a new id; remap existing rules to
+            // the same-named folders so syncs survive the switch instead of going
+            // silent ("no notebooks").
+            Ledger.shared.reconcileRemarkableRules(withFolders: folders)
             Ledger.shared.updateRemarkableHealth(error: nil)
             Telemetry.capture("remarkable.paired")
             code = ""

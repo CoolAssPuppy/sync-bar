@@ -79,6 +79,53 @@ final class LedgerCascadeTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    func test_reconcile_remaps_orphaned_remarkable_rule_to_same_named_folder() {
+        let ledger = Ledger.shared
+        // A rule pointing at the OLD account's folder id (no longer present).
+        var rule = SyncRule.new(notebookId: "old-id-123", notebookName: "Supabase")
+        rule.destinations = [DestinationBinding(configuration: .appleNotes(
+            AppleNotesDestinationConfig(folderName: "Notes")))]
+        ledger.upsertRule(rule)
+
+        // The new account exposes a same-named folder under a fresh id.
+        let folders = [RmFolder(id: "new-id-456", name: "Supabase", parentFolder: nil,
+                                lastModified: Date(), pageCount: 1)]
+        ledger.reconcileRemarkableRules(withFolders: folders)
+
+        let remapped = ledger.rules.first { $0.id == rule.id }
+        XCTAssertEqual(remapped?.remarkableConfig?.folderId, "new-id-456",
+                       "An orphaned reMarkable rule should remap to the same-named folder's new id")
+        XCTAssertNotNil(ledger.rule(forNotebookId: "new-id-456"),
+                        "The rule should now be findable by the current folder id")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_reconcile_leaves_rule_untouched_when_name_is_ambiguous_or_absent() {
+        let ledger = Ledger.shared
+        var rule = SyncRule.new(notebookId: "old-id-789", notebookName: "Inbox")
+        rule.destinations = [DestinationBinding(configuration: .appleNotes(
+            AppleNotesDestinationConfig(folderName: "Notes")))]
+        ledger.upsertRule(rule)
+
+        // Two folders share the name — remapping would be a guess, so skip it.
+        let ambiguous = [
+            RmFolder(id: "a1", name: "Inbox", parentFolder: nil, lastModified: Date(), pageCount: 0),
+            RmFolder(id: "a2", name: "Inbox", parentFolder: nil, lastModified: Date(), pageCount: 0)
+        ]
+        ledger.reconcileRemarkableRules(withFolders: ambiguous)
+        XCTAssertEqual(ledger.rules.first { $0.id == rule.id }?.remarkableConfig?.folderId, "old-id-789",
+                       "An ambiguous name match must not be remapped")
+
+        // No same-named folder at all — also untouched (left for the user/prune).
+        let unrelated = [RmFolder(id: "z1", name: "Archive", parentFolder: nil, lastModified: Date(), pageCount: 0)]
+        ledger.reconcileRemarkableRules(withFolders: unrelated)
+        XCTAssertEqual(ledger.rules.first { $0.id == rule.id }?.remarkableConfig?.folderId, "old-id-789",
+                       "A rule with no name match must not be remapped")
+
+        ledger.deleteRule(id: rule.id)
+    }
+
     func test_records_and_resets_external_ids_for_update_in_place() {
         let ledger = Ledger.shared
         ledger.recordSyncedPage(bindingId: "b1", pageId: "f1", versionHash: "h1", externalId: "notion-page-1")

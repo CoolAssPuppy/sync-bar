@@ -119,6 +119,10 @@ final class Ledger: ObservableObject {
 
     private init() {
         load()
+        // Heal rules orphaned by a reMarkable account switch using the folders we
+        // just loaded from disk, so a stale folder id doesn't silently skip syncs
+        // before (or instead of) a successful network folder walk.
+        reconcileRemarkableRules(withFolders: folders)
     }
 
     // MARK: Demo mode
@@ -485,6 +489,36 @@ final class Ledger: ObservableObject {
 
     func rule(forNotebookId notebookId: String) -> SyncRule? {
         rules.first { $0.remarkableConfig?.folderId == notebookId }
+    }
+
+    /// Heals reMarkable rules orphaned by an account switch. Re-pairing a fresh
+    /// account gives every folder a brand-new id, so a rule's stored folder id no
+    /// longer matches anything and the rule silently skips ("no notebooks") — or
+    /// gets pruned outright. When the current account has exactly one folder with
+    /// the same name, remap the rule to it so the sync survives the switch.
+    /// Ambiguous or unmatched names are left untouched. Run before `pruneRules`
+    /// so a remapped rule isn't deleted. No-op on an empty folder list.
+    func reconcileRemarkableRules(withFolders folders: [RmFolder]) {
+        guard !folders.isEmpty else { return }
+        let currentIds = Set(folders.map(\.id))
+        var remapped = 0
+        for index in rules.indices {
+            guard let config = rules[index].remarkableConfig,
+                  !currentIds.contains(config.folderId) else { continue }
+            let matches = folders.filter { $0.name.caseInsensitiveCompare(config.folderName) == .orderedSame }
+            guard matches.count == 1, let match = matches.first else { continue }
+            let ruleId = rules[index].id
+            rules[index].updateRemarkable {
+                $0.folderId = match.id
+                $0.folderName = match.name
+            }
+            rules[index].updatedAt = Date()
+            remapped += 1
+            Log.ledger.info("Remapped reMarkable rule \(ruleId, privacy: .public) to folder '\(match.name, privacy: .public)' (\(match.id, privacy: .public)) after an account/folder change")
+        }
+        guard remapped > 0 else { return }
+        persistRules()
+        NotificationCenter.default.post(name: .rulesChanged, object: nil)
     }
 
     /// Drops reMarkable rules whose folder is no longer present (e.g. orphaned by

@@ -84,7 +84,10 @@ final class SyncCoordinator: ObservableObject {
             ledger.updateRemarkableHealth(error: nil)
             guard !folders.isEmpty else { return }
             ledger.setFolders(folders)
-            ledger.pruneRules(keepingFolderIds: Set(folders.map(\.id)))
+            // Remap rules orphaned by an account switch; never delete on a missing
+            // folder id (a re-paired account makes every id look "missing", which
+            // would silently destroy the user's syncs).
+            ledger.reconcileRemarkableRules(withFolders: folders)
         } catch {
             ledger.updateRemarkableHealth(error: error)
             Log.sync.error("Folder refresh failed: \(Formatters.userMessage(for: error), privacy: .public)")

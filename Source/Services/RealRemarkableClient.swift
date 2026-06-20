@@ -349,6 +349,36 @@ struct RealRemarkableClient: RemarkableClient {
         guard let device = keychain.value(for: .remarkableDeviceToken), !device.isEmpty else {
             throw RemarkableError.network("No reMarkable device token. Re-pair the device.")
         }
+        // Minting a user token from a *freshly paired* device often 4xx/5xxs on
+        // the first try: the device registration hasn't fully propagated through
+        // reMarkable's cloud yet. (This is why pairing surfaces an error but the
+        // connection "works on refresh" a moment later.) A short backoff lets the
+        // registration settle instead of bubbling a transient failure to the user.
+        // A 401 is treated as terminal — that's the device token itself being
+        // rejected, which a retry won't fix.
+        var lastError: Error = RemarkableError.network("Couldn't mint a reMarkable user token.")
+        for attempt in 0...Self.userTokenMintRetries {
+            do {
+                return try await mintUserToken(deviceToken: device)
+            } catch RemarkableError.tokenRejected {
+                throw RemarkableError.tokenRejected
+            } catch {
+                lastError = error
+                if attempt < Self.userTokenMintRetries {
+                    let seconds = UInt64(1 << attempt)   // 1s, 2s, 4s
+                    Log.remarkable.info("user-token mint failed (\(String(describing: error), privacy: .public)); retrying in \(seconds, privacy: .public)s")
+                    try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                }
+            }
+        }
+        throw lastError
+    }
+
+    /// Number of extra attempts (beyond the first) to mint a user token from a
+    /// device token, to ride out post-pairing propagation delay in the cloud.
+    private static let userTokenMintRetries = 3
+
+    private func mintUserToken(deviceToken device: String) async throws -> String {
         var request = URLRequest(url: Self.pairBase.appendingPathComponent("/token/json/2/user/new"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(device)", forHTTPHeaderField: "Authorization")

@@ -45,23 +45,33 @@ struct NotionForm: View {
                     }
                     AppRowDivider().padding(.vertical, 10)
                     AppSettingRow("Page or database", description: destinationsHint) {
-                        Picker("", selection: $binding.destinationId) {
-                            Text("Select…").tag("")
-                            ForEach(destinationsList) { destination in
-                                Text("\(destination.icon ?? "•") \(destination.title)").tag(destination.id)
+                        HStack(spacing: 8) {
+                            if showReload {
+                                Button("Reload") {
+                                    Task { await loadDestinations(workspaceId: binding.workspaceId) }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.primary)
                             }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .disabled(!isDestinationsReady)
-                        .onChange(of: binding.destinationId) { _, newValue in
-                            if let dest = destinationsList.first(where: { $0.id == newValue }) {
-                                binding.destinationType = dest.type
-                                binding.destinationTitle = dest.title
-                                if dest.type == .database {
-                                    Task { await loadSchema(destinationId: newValue) }
-                                } else {
-                                    schema = .idle
+                            Picker("", selection: $binding.destinationId) {
+                                Text("Select…").tag("")
+                                ForEach(destinationsList) { destination in
+                                    Text("\(destination.icon ?? "•") \(destination.title)").tag(destination.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                            .disabled(!isDestinationsReady)
+                            .onChange(of: binding.destinationId) { _, newValue in
+                                if let dest = destinationsList.first(where: { $0.id == newValue }) {
+                                    binding.destinationType = dest.type
+                                    binding.destinationTitle = dest.title
+                                    if dest.type == .database {
+                                        Task { await loadSchema(destinationId: newValue) }
+                                    } else {
+                                        schema = .idle
+                                    }
                                 }
                             }
                         }
@@ -75,6 +85,12 @@ struct NotionForm: View {
             }
         }
         .task {
+            // With a single connected workspace there's nothing to choose, so
+            // pre-select it; otherwise the page/database picker sits disabled and
+            // looks like Notion has nothing to offer.
+            if binding.workspaceId.isEmpty, workspaces.count == 1 {
+                binding.workspaceId = workspaces[0].id
+            }
             await loadDestinations(workspaceId: binding.workspaceId)
             if binding.destinationType == .database {
                 await loadSchema(destinationId: binding.destinationId)
@@ -88,15 +104,29 @@ struct NotionForm: View {
     }
 
     private var isDestinationsReady: Bool {
-        if case .loaded = destinations { return true }
+        if case .loaded(let list) = destinations { return !list.isEmpty }
         return false
+    }
+
+    /// Show a Reload affordance whenever a fetch returned nothing useful: an empty
+    /// share (the common Notion case) or an outright failure. Lets the user share
+    /// pages in Notion and retry without re-running OAuth.
+    private var showReload: Bool {
+        switch destinations {
+        case .failed: return true
+        case .loaded(let list): return list.isEmpty
+        default: return false
+        }
     }
 
     private var destinationsHint: LocalizedStringKey? {
         switch destinations {
         case .idle:    return nil
         case .loading: return "Loading from Notion…"
-        case .loaded:  return nil
+        case .loaded(let list):
+            // A 200 with no results means nothing is shared with the integration —
+            // the silent empty picker reads as a bug, so say what to do.
+            return list.isEmpty ? "No pages or databases are shared with Sync Bar yet. Share them in Notion, then Reload." : nil
         case .failed(let message): return LocalizedStringKey(message)
         }
     }

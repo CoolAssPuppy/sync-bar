@@ -90,6 +90,11 @@ struct SyncEditorView: View {
     // To
     @State private var toKind: DestinationKind?
     @State private var toAccountId: String?
+    // To — Notion (one-way page/database). The workspace is the chosen destination
+    // account, so it lives in toAccountId; only the page/database is picked here.
+    @State private var notionDestinations: [NotionDestination] = []
+    @State private var notionDestLoading = false
+    @State private var notionDestSchema: [NotionDatabaseProperty] = []
     // To — Notion database (two-way)
     @State private var taskWorkspaceId: String?
     @State private var taskDatabases: [NotionDestination] = []
@@ -169,7 +174,7 @@ struct SyncEditorView: View {
                         if taskDatabaseId != nil { mapStep; filterStep }
                     } else {
                         toStep
-                        if toKind != nil { customizeStep }
+                        if showCustomize { customizeStep }
                         if sourceKind == .remarkable { howStep }
                     }
                 }
@@ -430,6 +435,35 @@ struct SyncEditorView: View {
                 placeholderIcon: AnyView(placeholderDestIcon),
                 onSelect: { id in if let app = ledger.connectedApps.first(where: { $0.id == id }) { selectDestination(app) } }
             )
+            // The workspace is already chosen above (the Notion account is the
+            // workspace), so pick the page/database right here instead of asking
+            // for the workspace again down in Customize.
+            if toKind == .notion { notionDestinationPicker }
+        }
+    }
+
+    /// One-way Notion destination: the page or database to write into. Styled like
+    /// the other "To" controls and grouped under the same step.
+    private var notionDestinationPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            CustomDropdown(
+                options: notionDestinations.map { dest in
+                    DropdownOption(id: dest.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)),
+                                   title: dest.icon.map { "\($0) \(dest.title)" } ?? dest.title)
+                },
+                selectedId: localNotion.destinationId.isEmpty ? nil : localNotion.destinationId,
+                placeholder: notionDestLoading ? "Loading pages & databases…" : "Choose a page or database",
+                placeholderIcon: AnyView(placeholderDestIcon),
+                onSelect: { id in selectNotionDestination(id) }
+            )
+            if !notionDestLoading && notionDestinations.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Nothing is shared with Sync Bar yet.").font(.system(size: 11)).foregroundStyle(theme.muted)
+                    Button("Reload") { loadNotionDestinations() }
+                        .buttonStyle(.plain).font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.primary)
+                }
+                .padding(.horizontal, 4)
+            }
         }
     }
 
@@ -616,10 +650,21 @@ struct SyncEditorView: View {
         }
     }
 
+    /// Whether the Customize step has anything to show. Notion's only one-way
+    /// customization is database column mapping (the page/database itself is now
+    /// chosen up in the To step), so it's hidden for page destinations.
+    private var showCustomize: Bool {
+        guard let toKind else { return false }
+        if toKind == .notion {
+            return localNotion.destinationType == .database && !localNotion.destinationId.isEmpty
+        }
+        return true
+    }
+
     @ViewBuilder
     private var destinationForm: some View {
         switch toKind {
-        case .notion:         NotionForm(binding: $localNotion, workspaces: ledger.notionWorkspaces)
+        case .notion:         notionMappingForm
         case .linear:         LinearForm(binding: $localLinear, accounts: ledger.linearAccounts)
         case .googleDocs:     GoogleDocsForm(binding: $localGoogle)
         case .appleNotes:     AppleNotesForm(binding: $localAppleNotes, routesByCategory: sourceKind == .notion)
@@ -652,6 +697,41 @@ struct SyncEditorView: View {
                     .textFieldStyle(.roundedBorder)
             }
         }
+    }
+
+    /// Mapping-only Notion form: the page/database is chosen in the To step, so
+    /// Customize just maps note fields onto the database's columns.
+    private var notionMappingForm: some View {
+        AppCard("Column Mapping") {
+            if notionDestSchema.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading database schema…").font(.system(size: 11)).foregroundStyle(theme.muted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Fill database columns with fields from each note.")
+                        .font(.system(size: 11)).foregroundStyle(theme.muted)
+                    FieldMappingControl(rows: $localNotion.mappingRows, columns: notionMappingColumns)
+                }
+            }
+        }
+    }
+
+    /// Mappable columns (the title column is set from the title strategy, so it's
+    /// excluded); select / multi_select / status columns carry their options.
+    private var notionMappingColumns: [MappingColumn] {
+        let optionTypes: Set<String> = ["select", "multi_select", "status"]
+        return notionDestSchema
+            .filter { $0.type != "title" }
+            .map { property in
+                MappingColumn(
+                    name: property.name,
+                    options: optionTypes.contains(property.type) ? property.options : [],
+                    allowsMultiple: property.type == "multi_select"
+                )
+            }
     }
 
     // MARK: How
@@ -804,6 +884,10 @@ struct SyncEditorView: View {
             loadNotionSourceSchema()
         }
         loadFormState(from: flow.binding.configuration)
+        if toKind == .notion {
+            loadNotionDestinations()
+            if localNotion.destinationType == .database { loadNotionDestSchema() }
+        }
     }
 
     private func loadTask(_ sync: TaskSync) {
@@ -946,6 +1030,36 @@ struct SyncEditorView: View {
         }
     }
 
+    private func loadNotionDestinations() {
+        guard let id = toAccountId else { return }
+        notionDestLoading = true
+        Task {
+            let client = NotionClientFactory.make(workspaceId: id)
+            let all = (try? await client.listDestinations(workspaceId: id)) ?? []
+            await MainActor.run { notionDestinations = all; notionDestLoading = false }
+        }
+    }
+
+    private func selectNotionDestination(_ id: String) {
+        guard let dest = notionDestinations.first(where: { $0.id == id }) else { return }
+        localNotion.destinationId = dest.id
+        localNotion.destinationType = dest.type
+        localNotion.destinationTitle = dest.title
+        localNotion.mappingRows = []
+        notionDestSchema = []
+        if dest.type == .database { loadNotionDestSchema() }
+    }
+
+    private func loadNotionDestSchema() {
+        guard let id = toAccountId, !localNotion.destinationId.isEmpty else { return }
+        let destinationId = localNotion.destinationId
+        Task {
+            let client = NotionClientFactory.make(workspaceId: id)
+            let props = (try? await client.databaseSchema(destinationId: destinationId, workspaceId: id)) ?? []
+            await MainActor.run { notionDestSchema = props }
+        }
+    }
+
     private func loadFormState(from configuration: DestinationConfiguration) {
         switch configuration {
         case .notion(let cfg):
@@ -982,7 +1096,10 @@ struct SyncEditorView: View {
         toKind = app.kind
         toAccountId = app.id
         switch app.kind {
-        case .notion:     localNotion = NotionFormState(workspaceId: app.id)
+        case .notion:
+            localNotion = NotionFormState(workspaceId: app.id)
+            notionDestinations = []; notionDestSchema = []
+            loadNotionDestinations()
         case .linear:     localLinear = LinearFormState(workspaceId: app.id)
         case .googleDocs: localGoogle = GoogleFormState(email: app.id)
         case .appleNotes: localAppleNotes = AppleNotesFormState()

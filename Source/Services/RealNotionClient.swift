@@ -39,66 +39,109 @@ struct RealNotionClient: NotionClient {
     }
 
     func listDestinations(workspaceId: String) async throws -> [NotionDestination] {
-        var request = URLRequest(url: URL(staticString: "https://api.notion.com/v1/search"))
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "query": "",
-            "page_size": 50,
-            "sort": ["direction": "descending", "timestamp": "last_edited_time"]
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        try Self.validate(response: response, data: data)
-        return try Self.parseDestinations(data)
+        // `/v1/search` returns pages and databases interleaved, newest-edited
+        // first. In a busy workspace the first page is dominated by database
+        // *rows* (which are pages), so the actual databases get buried past
+        // page_size and never appear. Query each object type explicitly and page
+        // through the cursor so every database — and every top-level page —
+        // surfaces no matter how many rows the workspace holds.
+        async let databases = searchItems(objectType: "database", maxRequests: 12)
+        async let pages = searchItems(objectType: "page", maxRequests: 6)
+        let items = try await databases + pages
+        return Self.buildDestinations(from: items)
     }
 
-    /// Parses a Notion `/v1/search` response into destinations. Databases carry
-    /// their title at the top level; a page's title lives in whichever property
-    /// has type `title` (its key is the column name, e.g. "Name", not literally
-    /// "title"), which is why the old key-based lookup showed everything as
-    /// "Untitled". Databases are sorted first, then alphabetically.
-    static func parseDestinations(_ data: Data) throws -> [NotionDestination] {
-        struct Inner: Decodable { let plain_text: String? }
-        struct PageProperty: Decodable {
-            let type: String?
-            let title: [Inner]?
-            enum CodingKeys: String, CodingKey { case type, title }
-            init(from decoder: Decoder) throws {
-                let c = try decoder.container(keyedBy: CodingKeys.self)
-                type = try c.decodeIfPresent(String.self, forKey: .type)
-                // A page's title property holds an array of rich text; a database's
-                // title schema holds an object. Take the array, ignore anything else.
-                title = try? c.decodeIfPresent([Inner].self, forKey: .title)
-            }
+    /// Pages through `/v1/search` for a single object type ("database" or "page"),
+    /// following `next_cursor` until exhausted or `maxRequests` is hit (a safety
+    /// cap so a huge workspace can't loop unbounded).
+    private func searchItems(objectType: String, maxRequests: Int) async throws -> [SearchItem] {
+        var collected: [SearchItem] = []
+        var cursor: String?
+        for _ in 0..<maxRequests {
+            var request = URLRequest(url: URL(staticString: "https://api.notion.com/v1/search"))
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("2022-06-28", forHTTPHeaderField: "Notion-Version")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            var body: [String: Any] = [
+                "query": "",
+                "page_size": 100,
+                "filter": ["property": "object", "value": objectType],
+                "sort": ["direction": "descending", "timestamp": "last_edited_time"]
+            ]
+            if let cursor { body["start_cursor"] = cursor }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response: response, data: data)
+            let page = try JSONDecoder().decode(SearchPage.self, from: data)
+            collected.append(contentsOf: page.results.compactMap(\.item))
+            guard (page.has_more ?? false), let next = page.next_cursor, !next.isEmpty else { break }
+            cursor = next
         }
-        struct Parent: Decodable { let type: String?; let page_id: String? }
-        struct Icon: Decodable { let emoji: String? }
-        struct Item: Decodable {
-            let id: String
-            let object: String  // "page" or "database"
-            let properties: [String: PageProperty]?
-            let parent: Parent?
-            let icon: Icon?
-            let title: [Inner]?  // databases ship their title at the top level
-        }
-        // Decode each result independently so one unexpected item can't fail the
-        // whole response.
-        struct Skippable: Decodable {
-            let item: Item?
-            init(from decoder: Decoder) throws { item = try? Item(from: decoder) }
-        }
-        struct SearchResponse: Decodable { let results: [Skippable] }
+        return collected
+    }
 
-        let items = try JSONDecoder().decode(SearchResponse.self, from: data).results.compactMap(\.item)
-        let known = Set(items.map(\.id))
+    // MARK: Search decoding
+
+    struct SearchInner: Decodable { let plain_text: String? }
+    struct SearchPageProperty: Decodable {
+        let type: String?
+        let title: [SearchInner]?
+        enum CodingKeys: String, CodingKey { case type, title }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            type = try c.decodeIfPresent(String.self, forKey: .type)
+            // A page's title property holds an array of rich text; a database's
+            // title schema holds an object. Take the array, ignore anything else.
+            title = try? c.decodeIfPresent([SearchInner].self, forKey: .title)
+        }
+    }
+    struct SearchParent: Decodable { let type: String?; let page_id: String? }
+    struct SearchIcon: Decodable { let emoji: String? }
+    struct SearchItem: Decodable {
+        let id: String
+        let object: String  // "page" or "database"
+        let properties: [String: SearchPageProperty]?
+        let parent: SearchParent?
+        let icon: SearchIcon?
+        let title: [SearchInner]?  // databases ship their title at the top level
+    }
+    /// Decode each result independently so one unexpected item can't fail the
+    /// whole response.
+    struct SearchSkippable: Decodable {
+        let item: SearchItem?
+        init(from decoder: Decoder) throws { item = try? SearchItem(from: decoder) }
+    }
+    struct SearchPage: Decodable {
+        let results: [SearchSkippable]
+        let has_more: Bool?
+        let next_cursor: String?
+    }
+
+    /// Parses a single Notion `/v1/search` response into destinations. Retained as
+    /// the unit-tested entry point; the live path accumulates items across pages
+    /// and object types and calls `buildDestinations` directly.
+    static func parseDestinations(_ data: Data) throws -> [NotionDestination] {
+        let page = try JSONDecoder().decode(SearchPage.self, from: data)
+        return buildDestinations(from: page.results.compactMap(\.item))
+    }
+
+    /// Turns raw search items into the destination dropdown. Databases carry their
+    /// title at the top level; a page's title lives in whichever property has type
+    /// `title` (its key is the column name, e.g. "Name", not literally "title"),
+    /// which is why a key-based lookup would show everything as "Untitled".
+    /// Databases are sorted first, then alphabetically.
+    static func buildDestinations(from items: [SearchItem]) -> [NotionDestination] {
+        // De-dup by id: pages can recur across cursors when edits shift pagination
+        // mid-walk. Keep first occurrence so order stays stable before the sort.
+        var seen = Set<String>()
+        let unique = items.filter { seen.insert($0.id).inserted }
+        let known = Set(unique.map(\.id))
         // Top-level only: keep all databases, plus pages at the workspace root or
         // the root of a shared subtree; drop pages nested under another shared
         // page and drop database rows. Trims the dropdown from every descendant
         // down to the handful you'd actually pick.
-        func isTopLevel(_ item: Item) -> Bool {
+        func isTopLevel(_ item: SearchItem) -> Bool {
             if item.object == "database" { return true }
             switch item.parent?.type {
             case "workspace":   return true
@@ -107,7 +150,7 @@ struct RealNotionClient: NotionClient {
             default:            return true
             }
         }
-        return items.filter(isTopLevel).map { item -> NotionDestination in
+        return unique.filter(isTopLevel).map { item -> NotionDestination in
             let extractedTitle: String = {
                 if let dbTitle = item.title?.compactMap(\.plain_text).joined(), !dbTitle.isEmpty {
                     return dbTitle

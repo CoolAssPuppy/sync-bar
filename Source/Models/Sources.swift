@@ -16,6 +16,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
     case remarkable
     case safari
     case notion
+    case x
 
     var id: String { rawValue }
 
@@ -24,6 +25,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "reMarkable"
         case .safari:     return "Safari"
         case .notion:     return "Notion"
+        case .x:          return "X"
         }
     }
 
@@ -33,6 +35,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "Tablet notebooks and documents"
         case .safari:     return "Browser bookmarks"
         case .notion:     return "Database pages, backed up"
+        case .x:          return "Bookmarks, likes, and posts"
         }
     }
 
@@ -42,6 +45,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "rectangle.portrait.on.rectangle.portrait"
         case .safari:     return "safari"
         case .notion:     return "square.grid.3x3.fill"
+        case .x:          return "bird"
         }
     }
 
@@ -52,16 +56,20 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "Remarkable"
         case .safari:     return "Safari"
         case .notion:     return "Destinations/Notion"
+        case .x:          return "Sources/X"
         }
     }
 
     /// Whether the brand mark is a single-color silhouette that must be tinted
     /// to stay visible across themes (see DestinationKind for the same idea).
+    /// The X mark is a solid black glyph and would vanish on dark themes, so it
+    /// renders as a template tinted to the foreground.
     var brandMarkIsMonochrome: Bool {
         switch self {
         case .remarkable: return false
         case .safari:     return false
         case .notion:     return false
+        case .x:          return true
         }
     }
 
@@ -73,6 +81,67 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return true
         case .safari:     return false
         case .notion:     return false
+        case .x:          return false
+        }
+    }
+}
+
+// MARK: - X content streams
+
+/// One independently-synced X content type. Each is its own sync stream with its
+/// own cursor and dedup state (see `XStreamSyncState`); a rule targets exactly
+/// one. The three map onto distinct X API v2 endpoints and OAuth scopes.
+enum XStream: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+    case bookmarks
+    case likes
+    case posts
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .bookmarks: return "Bookmarks"
+        case .likes:     return "Likes"
+        case .posts:     return "Posts"
+        }
+    }
+
+    /// One-line description for the connect flow's content-type picker.
+    var subtitle: String {
+        switch self {
+        case .bookmarks: return "Tweets you've bookmarked"
+        case .likes:     return "Tweets you've liked"
+        case .posts:     return "Your own posts"
+        }
+    }
+
+    /// The path segment under `/2/users/{id}/` this stream reads from.
+    var apiPathComponent: String {
+        switch self {
+        case .bookmarks: return "bookmarks"
+        case .likes:     return "liked_tweets"
+        case .posts:     return "tweets"
+        }
+    }
+
+    /// The single OAuth 2.0 scope this stream requires beyond the always-needed
+    /// `tweet.read` / `users.read`. Posts need no extra scope (tweet.read covers
+    /// the timeline), so it has none.
+    var requiredScope: String? {
+        switch self {
+        case .bookmarks: return "bookmark.read"
+        case .likes:     return "like.read"
+        case .posts:     return nil
+        }
+    }
+
+    /// Whether the endpoint honors `since_id` for incremental fetches. The
+    /// bookmarks endpoint does not, so that stream stops on a known content ID
+    /// instead (see the spec's dedup-by-ID requirement).
+    var supportsSinceId: Bool {
+        switch self {
+        case .bookmarks: return false
+        case .likes, .posts: return true
         }
     }
 }
@@ -160,6 +229,16 @@ struct NotionSourceConfig: Codable, Equatable, Hashable {
     }
 }
 
+/// X source settings: which connected account and which content stream
+/// (bookmarks / likes / posts) this rule pulls. The stream is the scope a rule
+/// targets; each tweet in it becomes one item. The account id is the X user id,
+/// which is also the keychain token key and the `/2/users/{id}/…` path segment.
+struct XSourceConfig: Codable, Equatable, Hashable {
+    var accountId: String          // X user id (numeric, as a string)
+    var username: String           // @handle, for canonical URLs and labels
+    var stream: XStream
+}
+
 // MARK: - Polymorphic configuration
 
 /// The source half of a sync, mirroring `DestinationConfiguration`. One case per
@@ -169,12 +248,14 @@ enum SourceConfiguration: Codable, Equatable, Hashable {
     case remarkable(RemarkableSourceConfig)
     case safari(SafariSourceConfig)
     case notion(NotionSourceConfig)
+    case x(XSourceConfig)
 
     var kind: SourceKind {
         switch self {
         case .remarkable: return .remarkable
         case .safari:     return .safari
         case .notion:     return .notion
+        case .x:          return .x
         }
     }
 
@@ -185,6 +266,7 @@ enum SourceConfiguration: Codable, Equatable, Hashable {
         case .remarkable(let config): return config.folderName
         case .safari(let config):     return config.folderName
         case .notion(let config):     return config.databaseTitle
+        case .x(let config):          return "\(config.username) · \(config.stream.label)"
         }
     }
 }

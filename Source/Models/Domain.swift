@@ -94,6 +94,43 @@ struct NotionDatabaseProperty: Codable, Equatable, Hashable {
     var options: [String]
 }
 
+// MARK: - X (Twitter)
+
+/// One connected X account. The id is the X user id (also the keychain token
+/// key and the `/2/users/{id}/…` path segment). `selectedStreams` records which
+/// content types the user opted into at connect time — only those have the OAuth
+/// scopes required to read them, so the sync editor offers exactly these.
+struct XAccount: Codable, Equatable, Identifiable, Hashable {
+    var id: String              // X user id
+    var username: String        // @handle, without the leading @
+    var displayName: String
+    var connectedAt: Date
+    var selectedStreams: [XStream]
+
+    /// The handle shown in the UI, with the conventional leading @.
+    var handle: String { username.hasPrefix("@") ? username : "@\(username)" }
+
+    // Tolerant decoder so an account persisted before `selectedStreams` existed
+    // still loads (defaulting to all three streams rather than dropping the row).
+    init(id: String, username: String, displayName: String, connectedAt: Date,
+         selectedStreams: [XStream] = XStream.allCases) {
+        self.id = id
+        self.username = username
+        self.displayName = displayName
+        self.connectedAt = connectedAt
+        self.selectedStreams = selectedStreams
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        username = try c.decode(String.self, forKey: .username)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        connectedAt = try c.decode(Date.self, forKey: .connectedAt)
+        selectedStreams = try c.decodeIfPresent([XStream].self, forKey: .selectedStreams) ?? XStream.allCases
+    }
+}
+
 // MARK: - Sync rule
 
 enum TitleStrategy: String, Codable, CaseIterable, Identifiable {

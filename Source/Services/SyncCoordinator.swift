@@ -52,6 +52,7 @@ final class SyncCoordinator: ObservableObject {
             case .remarkable: return RemarkableSourceClient(remarkable: remarkable)
             case .safari:     return SafariSourceClient()
             case .notion:     return NotionSourceClient(keychain: keychain)
+            case .x:          return XSourceClient(keychain: keychain)
             }
         }
         self.destinationClientFor = destinationClient ?? { DestinationRouter.client(for: $0) }
@@ -301,6 +302,7 @@ final class SyncCoordinator: ObservableObject {
         case .remarkable: ledger.updateRemarkableHealth(error: error)
         case .safari:     break   // Safari is a local file; no connection health to track.
         case .notion:     break   // Notion source health isn't tracked yet.
+        case .x:          break   // X source health isn't tracked yet.
         }
     }
 

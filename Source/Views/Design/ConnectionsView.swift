@@ -114,7 +114,8 @@ struct ConnectionsView: View {
             sectionHeader("Sources") {
                 Button(action: { isAddingSource = true }) { addGlyph }.buttonStyle(.plain)
             }
-            if ledger.remarkableAccount == nil && !ledger.safariConnected && !ledger.remindersConnected {
+            if ledger.remarkableAccount == nil && !ledger.safariConnected
+                && !ledger.remindersConnected && ledger.xAccounts.isEmpty {
                 Text("No sources yet. Add one with the + above.")
                     .font(.system(size: 13)).foregroundStyle(theme.muted).padding(.vertical, 4)
             }
@@ -155,7 +156,34 @@ struct ConnectionsView: View {
                     }
                 )
             }
+            ForEach(ledger.xAccounts) { account in
+                ConnectionCard(
+                    icon: { AnyView(SourceIcon(kind: .x, size: 38)) },
+                    title: account.handle,
+                    subtitle: xSubtitle(account),
+                    status: .connected,
+                    trailing: { AnyView(AppActionMenu(actions: xActions(account))) }
+                )
+            }
         }
+    }
+
+    private func xSubtitle(_ account: XAccount) -> String {
+        let streams = account.selectedStreams.map(\.label).joined(separator: ", ")
+        let count = ledger.rules.filter { if case .x(let c) = $0.source { return c.accountId == account.id }; return false }.count
+        let base = streams.isEmpty ? "Connected" : "Connected · \(streams)"
+        return count == 0 ? base : "\(base) · \(count) sync\(count == 1 ? "" : "s")"
+    }
+
+    private func xActions(_ account: XAccount) -> [AppMenuAction] {
+        [
+            AppMenuAction(title: "Reconnect", systemImage: "arrow.clockwise") {
+                Task { await reconnect { ledger.upsertXAccount(try await XAuthService.shared.connect(streams: account.selectedStreams)) } }
+            },
+            AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true) {
+                ledger.removeXAccount(id: account.id)
+            }
+        ]
     }
 
     private var safariActions: [AppMenuAction] {

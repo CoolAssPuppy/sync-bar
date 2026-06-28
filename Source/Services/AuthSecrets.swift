@@ -22,10 +22,16 @@ enum AuthSecrets {
     static var linearClientSecret: String { value(infoKey: "LinearClientSecret", env: "LINEAR_CLIENT_SECRET") }
     static var googleClientId: String { value(infoKey: "GoogleClientID", env: "GOOGLE_CLIENT_ID") }
     static var googleClientSecret: String { value(infoKey: "GoogleClientSecret", env: "GOOGLE_CLIENT_SECRET") }
+    static var xClientId: String { value(infoKey: "XClientID", env: "X_CLIENT_ID") }
+    static var xClientSecret: String { value(infoKey: "XClientSecret", env: "X_CLIENT_SECRET") }
 
     static var isNotionConfigured: Bool { !notionClientId.isEmpty && !notionClientSecret.isEmpty }
     static var isLinearConfigured: Bool { !linearClientId.isEmpty && !linearClientSecret.isEmpty }
     static var isGoogleConfigured: Bool { !googleClientId.isEmpty && !googleClientSecret.isEmpty }
+    /// X supports both confidential (client id + secret) and public (PKCE-only)
+    /// OAuth 2.0 clients, so a client id alone is enough to start the flow —
+    /// "bring your own Twitter key" works with just the id.
+    static var isXConfigured: Bool { !xClientId.isEmpty }
 
     private static func value(infoKey: String, env: String) -> String {
         if let fromEnv = ProcessInfo.processInfo.environment[env], !fromEnv.isEmpty {

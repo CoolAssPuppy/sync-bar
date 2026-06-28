@@ -19,12 +19,13 @@ struct AddSourceSheet: View {
     /// What's addable here. Reminders is offered as a source even though it isn't
     /// a one-way SourceClient — it's the Reminders half of a two-way TaskSync.
     private enum AddableSource: Hashable, Identifiable, CaseIterable {
-        case remarkable, safari, reminders
+        case remarkable, safari, x, reminders
         var id: String { "\(self)" }
         var label: String {
             switch self {
             case .remarkable: return SourceKind.remarkable.label
             case .safari:     return SourceKind.safari.label
+            case .x:          return SourceKind.x.label
             case .reminders:  return "Reminders"
             }
         }
@@ -32,6 +33,7 @@ struct AddSourceSheet: View {
             switch self {
             case .remarkable: return SourceKind.remarkable.subtitle
             case .safari:     return SourceKind.safari.subtitle
+            case .x:          return SourceKind.x.subtitle
             case .reminders:  return "Two-way sync with Notion"
             }
         }
@@ -40,6 +42,11 @@ struct AddSourceSheet: View {
     @State private var selected: AddableSource = .remarkable
     @State private var showingPair = false
     @State private var safariHasAccess = false
+    /// The X content streams the user has opted into; only their scopes are
+    /// requested at connect time. Defaults to all three.
+    @State private var xStreams: Set<XStream> = Set(XStream.allCases)
+    @State private var xConnecting = false
+    @State private var xError: String?
 
     var body: some View {
         let theme = themeStore.palette
@@ -104,6 +111,7 @@ struct AddSourceSheet: View {
         switch source {
         case .remarkable: SourceIcon(kind: .remarkable, size: 28)
         case .safari:     SourceIcon(kind: .safari, size: 28)
+        case .x:          SourceIcon(kind: .x, size: 28)
         case .reminders:
             Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 28, height: 28)
         }
@@ -123,17 +131,56 @@ struct AddSourceSheet: View {
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
                 }
             }
+        case .x:
+            xDetails(theme: theme)
         case .reminders:
             Text("Keep an Apple Reminders list and a Notion database in sync, both ways. Sync Bar will ask for Reminders access; then create a two-way sync from the Syncs screen.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 
+    @ViewBuilder private func xDetails(theme: ThemePalette) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Sync your X content into any destination. Choose which content types to pull — each becomes its own sync stream with its own history. Sync Bar requests only the access the types you pick need.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(XStream.allCases) { stream in
+                    streamToggle(stream, theme: theme)
+                }
+            }
+            if !AuthSecrets.isXConfigured {
+                Text("X isn't configured yet — add its OAuth client id (see the README) and rebuild to connect.")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
+            }
+            if let xError {
+                Text(xError).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
+            }
+        }
+    }
+
+    private func streamToggle(_ stream: XStream, theme: ThemePalette) -> some View {
+        let isOn = xStreams.contains(stream)
+        return Button(action: {
+            if isOn { xStreams.remove(stream) } else { xStreams.insert(stream) }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13)).foregroundStyle(isOn ? theme.primary : theme.muted)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(stream.label).font(.system(size: 12, weight: .medium)).foregroundStyle(theme.foreground)
+                    Text(stream.subtitle).font(.system(size: 10)).foregroundStyle(theme.muted)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+
     private func footer(theme: ThemePalette) -> some View {
         HStack {
             Spacer()
             AppSecondaryButton(title: "Cancel") { isPresented = false }
-            AppPrimaryButton(title: primaryTitle, systemImage: primaryIcon, isDisabled: false) { primaryAction() }
+            AppPrimaryButton(title: primaryTitle, systemImage: primaryIcon, isDisabled: primaryDisabled) { primaryAction() }
         }
         .padding(.horizontal, 20).padding(.vertical, 14).background(theme.surface)
     }
@@ -142,6 +189,7 @@ struct AddSourceSheet: View {
         switch selected {
         case .remarkable: return "Pair reMarkable"
         case .safari:     return "Connect Safari"
+        case .x:          return xConnecting ? "Connecting…" : "Connect X"
         case .reminders:  return "Connect Reminders"
         }
     }
@@ -150,6 +198,7 @@ struct AddSourceSheet: View {
         switch selected {
         case .remarkable: return "qrcode.viewfinder"
         case .safari:     return "externaldrive"
+        case .x:          return "at"
         case .reminders:  return "checklist"
         }
     }
@@ -158,6 +207,8 @@ struct AddSourceSheet: View {
         switch selected {
         case .remarkable:
             showingPair = true
+        case .x:
+            connectX()
         case .safari:
             ledger.setSafariConnected(true)
             safariHasAccess = FullDiskAccessProbe.hasAccess()
@@ -173,6 +224,37 @@ struct AddSourceSheet: View {
                     ledger.setRemindersConnected(true)
                     isPresented = false
                 }
+            }
+        }
+    }
+
+    /// Whether the primary action is unavailable for the current selection.
+    private var primaryDisabled: Bool {
+        switch selected {
+        case .x: return xConnecting || !AuthSecrets.isXConfigured || xStreams.isEmpty
+        default: return false
+        }
+    }
+
+    /// Runs the X OAuth flow for the chosen streams, stores the account, closes.
+    private func connectX() {
+        guard !xConnecting, !xStreams.isEmpty else { return }
+        xConnecting = true
+        xError = nil
+        let streams = XStream.allCases.filter { xStreams.contains($0) }
+        Task {
+            do {
+                let account = try await XAuthService.shared.connect(streams: streams)
+                await MainActor.run {
+                    ledger.upsertXAccount(account)
+                    xConnecting = false
+                    isPresented = false
+                }
+            } catch OAuthError.userCancelled {
+                await MainActor.run { xConnecting = false }
+            } catch {
+                let message = Formatters.userMessage(for: error)
+                await MainActor.run { xConnecting = false; xError = message }
             }
         }
     }

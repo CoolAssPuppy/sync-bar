@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **X (Twitter) as a source.** Connect an X account with OAuth 2.0 + PKCE and
+  sync three independent content streams — Bookmarks, Likes, and your own Posts —
+  into any destination. Only the scopes the chosen streams need are requested,
+  and refresh tokens are stored in the Keychain.
+  - Each stream is its own sync with its own state: newest-synced id (incremental
+    cursor), a durable processed-id set (dedup by content id, since bookmarks
+    expose no timestamp or `since_id`), and last-attempted/last-successful times
+    (`XSyncStateStore`). Initial sync crawls the full history; later runs fetch
+    newest-first and stop the moment they hit an already-synced item.
+  - Every tweet is normalized into a neutral content object (`XContent`) and
+    carried through the existing `SourceItem` / `NoteContent` seam, so all
+    destinations (Markdown, Notion, …) consume it unchanged.
+  - New: `XAPIClient`, `XAuthService` / `XTokens`, `XSourceClient`,
+    `XSyncStateStore`, `XAccount`, `XStream`, `XSourceConfig`. New secrets
+    `X_CLIENT_ID` / `X_CLIENT_SECRET`.
+
 ## 0.3.0-dev — 2026-05-20 (overnight)
 
 UI polish, real branding, audit-driven cleanup. Visible additions:

@@ -99,6 +99,7 @@ enum SourceRouter {
         case .remarkable: return RemarkableSourceClient()
         case .safari:     return SafariSourceClient()
         case .notion:     return NotionSourceClient()
+        case .x:          return XSourceClient()
         }
     }
 }

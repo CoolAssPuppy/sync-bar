@@ -82,6 +82,9 @@ struct SyncEditorView: View {
     @State private var notionSourceDateProperty: String = ""
     @State private var notionSourceDatabases: [NotionDestination] = []
     @State private var notionSourceSchema: [NotionDatabaseProperty] = []
+    // From — X (one content stream of one connected account)
+    @State private var xSourceAccountId: String?
+    @State private var xSourceStream: XStream = .bookmarks
     // From — Reminders (two-way)
     @State private var reminderLists: [ReminderList] = []
     @State private var remindersLoading = false
@@ -148,6 +151,7 @@ struct SyncEditorView: View {
         case .kind(.remarkable): return folder != nil
         case .kind(.safari):     return safariScopeId != nil
         case .kind(.notion):     return notionSourceDatabaseId != nil
+        case .kind(.x):          return xSourceAccountId != nil
         case .reminders:         return true   // all lists; no single list to choose
         }
     }
@@ -159,8 +163,19 @@ struct SyncEditorView: View {
         if ledger.safariConnected { out.append(.kind(.safari)) }
         // A connected Notion workspace can be a backup source (Notion -> notes).
         if !ledger.notionWorkspaces.isEmpty { out.append(.kind(.notion)) }
+        if !ledger.xAccounts.isEmpty { out.append(.kind(.x)) }
         if ledger.remindersConnected { out.append(.reminders) }
         return out.isEmpty ? [.kind(.remarkable)] : out
+    }
+
+    /// The X account currently chosen in the FROM step, defaulting to the first.
+    private var selectedXAccount: XAccount? {
+        ledger.xAccounts.first { $0.id == xSourceAccountId } ?? ledger.xAccounts.first
+    }
+
+    /// The streams the chosen X account opted into (and thus has scopes for).
+    private var xSourceStreams: [XStream] {
+        selectedXAccount?.selectedStreams ?? XStream.allCases
     }
 
     var body: some View {
@@ -300,8 +315,33 @@ struct SyncEditorView: View {
             case .kind(.remarkable): remarkableScopePicker
             case .kind(.safari):     safariScopePicker
             case .kind(.notion):     notionSourceScopePicker
+            case .kind(.x):          xSourceScopePicker
             case .reminders:         remindersListPicker
             }
+        }
+    }
+
+    /// X-as-source picker: the account (when several) and the content stream
+    /// (bookmarks / likes / posts) this sync pulls. Each stream is its own
+    /// independent sync with its own history.
+    private var xSourceScopePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if ledger.xAccounts.count > 1 {
+                CustomDropdown(
+                    options: ledger.xAccounts.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(kind: .x, size: 24)), title: $0.handle) },
+                    selectedId: xSourceAccountId,
+                    placeholder: "Choose an account",
+                    placeholderIcon: AnyView(SourceIcon(kind: .x, size: 24)),
+                    onSelect: { id in selectXAccount(id) }
+                )
+            }
+            CustomDropdown(
+                options: xSourceStreams.map { DropdownOption(id: $0.rawValue, icon: AnyView(SourceIcon(kind: .x, size: 24)), title: $0.label, detail: $0.subtitle) },
+                selectedId: xSourceStream.rawValue,
+                placeholder: "Choose what to sync",
+                placeholderIcon: AnyView(placeholderSourceIcon),
+                onSelect: { id in if let stream = XStream(rawValue: id) { xSourceStream = stream } }
+            )
         }
     }
 
@@ -843,6 +883,7 @@ struct SyncEditorView: View {
                 notionSourceWorkspaceId = ledger.notionWorkspaces.first?.id
                 loadNotionSourceDatabases()
             }
+            else if sourceKind == .x { applyXDefaults() }
         case .edit(let flow):
             loadOneWay(flow)
         case .editTask(let sync):
@@ -882,6 +923,10 @@ struct SyncEditorView: View {
             notionSourceDateProperty = cfg.dateProperty
             loadNotionSourceDatabases()
             loadNotionSourceSchema()
+        case .x(let cfg):
+            source = .kind(.x)
+            xSourceAccountId = cfg.accountId
+            xSourceStream = cfg.stream
         }
         loadFormState(from: flow.binding.configuration)
         if toKind == .notion {
@@ -918,6 +963,8 @@ struct SyncEditorView: View {
             notionSourceDatabaseId = nil; notionSourceDatabaseName = ""; notionSourceSchema = []
             if notionSourceWorkspaceId == nil { notionSourceWorkspaceId = ledger.notionWorkspaces.first?.id }
             loadNotionSourceDatabases()
+        case .kind(.x):
+            applyXDefaults()
         case .reminders:
             reminderListId = nil; reminderListName = ""; mapRows = []
             loadReminderLists()
@@ -930,6 +977,26 @@ struct SyncEditorView: View {
         Task {
             let scopes = await coordinator.scopes(for: .safari)
             await MainActor.run { safariScopes = scopes }
+        }
+    }
+
+    // MARK: X source
+
+    /// Picks the first connected X account and a valid stream for it. Streams are
+    /// static (no network), so the picker needs no loader.
+    private func applyXDefaults() {
+        if xSourceAccountId == nil { xSourceAccountId = ledger.xAccounts.first?.id }
+        if !xSourceStreams.contains(xSourceStream) {
+            xSourceStream = xSourceStreams.first ?? .bookmarks
+        }
+    }
+
+    private func selectXAccount(_ id: String) {
+        guard id != xSourceAccountId else { return }
+        xSourceAccountId = id
+        // Keep the chosen stream valid for the newly-selected account.
+        if !xSourceStreams.contains(xSourceStream) {
+            xSourceStream = xSourceStreams.first ?? .bookmarks
         }
     }
 
@@ -1185,6 +1252,7 @@ struct SyncEditorView: View {
         case .kind(.remarkable): saveRemarkable(binding: binding)
         case .kind(.safari):     saveSafari(binding: binding)
         case .kind(.notion):     saveNotionSource(binding: binding)
+        case .kind(.x):          saveXSource(binding: binding)
         case .reminders:         break
         }
         onClose()
@@ -1304,6 +1372,23 @@ struct SyncEditorView: View {
             titleProperty: notionSourceTitleProperty,
             categoryProperty: notionSourceCategoryProperty,
             dateProperty: notionSourceDateProperty))
+        if let origRuleId = originalRuleId {
+            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
+                rule.source = source
+                ledger.upsertRule(rule)
+            }
+            ledger.updateBinding(ruleId: origRuleId, binding: binding)
+        } else {
+            var rule = SyncRule(source: source)
+            rule.destinations = [binding]
+            ledger.upsertRule(rule)
+        }
+    }
+
+    private func saveXSource(binding: DestinationBinding) {
+        guard let account = selectedXAccount else { return }
+        let source = SourceConfiguration.x(XSourceConfig(
+            accountId: account.id, username: account.handle, stream: xSourceStream))
         if let origRuleId = originalRuleId {
             if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
                 rule.source = source

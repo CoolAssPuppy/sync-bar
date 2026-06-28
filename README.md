@@ -165,10 +165,10 @@ See `ARCHITECTURE.md` for the full diagram and the data flow per sync cycle.
 
 ## OAuth and developer app setup
 
-Notion, Linear, and Google connect through OAuth. Each needs a developer app you
-register once, plus client credentials stored in the Doppler `sync-bar` project
-and baked into the build. reMarkable uses an eight-character device code and
-needs no developer app. Apple Notes and Markdown are local and need nothing.
+Notion, Linear, Google, and X connect through OAuth. Each needs a developer app
+you register once, plus client credentials stored in the Doppler `sync-bar`
+project and baked into the build. reMarkable uses an eight-character device code
+and needs no developer app. Apple Notes and Markdown are local and need nothing.
 
 ### How credentials flow
 
@@ -220,6 +220,23 @@ The redirect URIs below are exact. Register them verbatim.
    the docs it creates).
 5. Copy the **Client ID** and **Client secret**.
 
+### X (Twitter)
+
+1. Go to https://developer.x.com, create a project + app, and enable
+   **OAuth 2.0** under the app's user-authentication settings.
+2. Set the app type to **Native App** and add the callback URL:
+   `syncbar://oauth/x` (X allows custom URL schemes, so this uses the in-app
+   web session). Set the website URL to anything you control.
+3. Sync Bar uses **PKCE** and requests only the scopes the content types you
+   pick need: always `tweet.read`, `users.read`, `offline.access` (for a refresh
+   token), plus `bookmark.read` for Bookmarks and `like.read` for Likes.
+4. Copy the **OAuth 2.0 Client ID** (and the **Client Secret** if you created a
+   confidential client; a public PKCE client needs only the id).
+
+Each content type — Bookmarks, Likes, Posts — becomes its own sync stream with
+its own history, so you can send (say) bookmarks to Markdown and likes to Notion
+independently.
+
 ### reMarkable
 
 No developer app. Sign in at https://my.remarkable.com, open **Connect**, and
@@ -240,6 +257,8 @@ Add these to the Doppler `sync-bar` project (config `dev`).
 | `LINEAR_CLIENT_SECRET` | Linear OAuth application |
 | `GOOGLE_CLIENT_ID` | Google Cloud OAuth client (Desktop app) |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth client (Desktop app) |
+| `X_CLIENT_ID` | X developer app (OAuth 2.0) |
+| `X_CLIENT_SECRET` | X developer app (optional; confidential clients only) |
 
 Then run `./scripts/pull-secrets.sh` and rebuild.
 

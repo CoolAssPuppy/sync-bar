@@ -24,6 +24,7 @@ final class Ledger: ObservableObject {
     private static let markdownTargetsKey   = "ledger.markdownTargets"
     private static let appleNotesTargetsKey = "ledger.appleNotesTargets"
     private static let chromeTargetsKey     = "ledger.chromeTargets"
+    private static let xAccountsKey         = "ledger.xAccounts"
     private static let safariConnectedKey   = "ledger.safariConnected"
     private static let remindersConnectedKey = "ledger.remindersConnected"
     private static let taskSyncsKey         = "ledger.taskSyncs"
@@ -50,6 +51,9 @@ final class Ledger: ObservableObject {
     @Published private(set) var markdownTargets: [MarkdownTarget] = []
     @Published private(set) var appleNotesTargets: [AppleNotesTarget] = []
     @Published private(set) var chromeTargets: [ChromeTarget] = []
+    /// Connected X (Twitter) accounts. A source, so — like reMarkable — its rules
+    /// belong to it wholesale and are removed with it (see `removeXAccount`).
+    @Published private(set) var xAccounts: [XAccount] = []
     /// Whether the user has added Safari as a source. Safari needs no account —
     /// just Full Disk Access — so this is a simple "added it" flag, not a record.
     @Published private(set) var safariConnected: Bool = false
@@ -169,6 +173,7 @@ final class Ledger: ObservableObject {
         persist(value: markdownTargets, key: Self.markdownTargetsKey)
         persist(value: appleNotesTargets, key: Self.appleNotesTargetsKey)
         persist(value: chromeTargets, key: Self.chromeTargetsKey)
+        persist(value: xAccounts, key: Self.xAccountsKey)
         store.set(safariConnected, forKey: Self.safariConnectedKey)
         store.set(remindersConnected, forKey: Self.remindersConnectedKey)
         persist(value: taskSyncs, key: Self.taskSyncsKey)
@@ -397,6 +402,32 @@ final class Ledger: ObservableObject {
                    let othersSameProfile = (self?.chromeTargets ?? []).contains { $0.profileDirName == removedProfile }
                    return !othersSameProfile
                })
+    }
+
+    // MARK: X (Twitter) source accounts
+
+    /// Adds or updates a connected X account. A source account, so changes post
+    /// `.foldersChanged` (the "sources changed" signal Safari/Reminders use too).
+    func upsertXAccount(_ account: XAccount) {
+        upsert(account, in: \.xAccounts, key: Self.xAccountsKey, notification: .foldersChanged)
+    }
+
+    /// Fully disconnects an X account — the mirror of pairing reMarkable. Drops
+    /// every rule sourced from it (cascading per-binding synced state), forgets
+    /// the per-stream sync cursors, and deletes the stored tokens. X is a source,
+    /// so its rules belong to it wholesale and go away with it.
+    func removeXAccount(id: String) {
+        guard xAccounts.contains(where: { $0.id == id }) else { return }
+        for rule in rules {
+            if case .x(let cfg) = rule.source, cfg.accountId == id { deleteRule(id: rule.id) }
+        }
+        XSyncStateStore.shared.resetAll(accountId: id)
+        KeychainStore.shared.delete(key: .xAccessToken(accountId: id))
+        KeychainStore.shared.delete(key: .xRefreshToken(accountId: id))
+        KeychainStore.shared.delete(key: .xTokenExpiry(accountId: id))
+        xAccounts.removeAll { $0.id == id }
+        persist(value: xAccounts, key: Self.xAccountsKey)
+        NotificationCenter.default.post(name: .foldersChanged, object: nil)
     }
 
     func upsertAppleNotesTarget(_ target: AppleNotesTarget) {
@@ -761,6 +792,7 @@ final class Ledger: ObservableObject {
             let googleAccounts: [GoogleAccount]
             let markdownTargets: [MarkdownTarget]
             let appleNotesTargets: [AppleNotesTarget]
+            let xAccounts: [XAccount]
             let rules: [SyncRule]
             let events: [SyncEvent]
             let folders: [RmFolder]
@@ -773,6 +805,7 @@ final class Ledger: ObservableObject {
             googleAccounts: googleAccounts,
             markdownTargets: markdownTargets,
             appleNotesTargets: appleNotesTargets,
+            xAccounts: xAccounts,
             rules: rules,
             events: events,
             folders: folders
@@ -798,6 +831,7 @@ final class Ledger: ObservableObject {
         markdownTargets   = decodeArray(MarkdownTarget.self,  key: Self.markdownTargetsKey,  defaults: defaults, decoder: decoder)
         appleNotesTargets = decodeArray(AppleNotesTarget.self, key: Self.appleNotesTargetsKey, defaults: defaults, decoder: decoder)
         chromeTargets     = decodeArray(ChromeTarget.self,    key: Self.chromeTargetsKey,    defaults: defaults, decoder: decoder)
+        xAccounts         = decodeArray(XAccount.self,        key: Self.xAccountsKey,        defaults: defaults, decoder: decoder)
         safariConnected   = defaults.bool(forKey: Self.safariConnectedKey)
         remindersConnected = defaults.bool(forKey: Self.remindersConnectedKey)
         taskSyncs         = decodeArray(TaskSync.self,        key: Self.taskSyncsKey,        defaults: defaults, decoder: decoder)

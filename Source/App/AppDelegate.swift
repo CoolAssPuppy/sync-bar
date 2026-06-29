@@ -229,7 +229,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quit: { NSApp.terminate(nil) }
         )
         let view = MenuBarPopover(coordinator: coordinator, taskCoordinator: taskCoordinator, actions: actions)
-        popover.contentViewController = NSHostingController(rootView: view)
+        // Make all text (errors especially) selectable/copyable; propagates to
+        // descendants and presented sheets.
+        popover.contentViewController = NSHostingController(rootView: view.textSelection(.enabled))
         return popover
     }
 
@@ -247,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.contentView = NSHostingView(rootView: MainShellView(coordinator: coordinator, taskCoordinator: taskCoordinator))
+        window.contentView = NSHostingView(rootView: MainShellView(coordinator: coordinator, taskCoordinator: taskCoordinator).textSelection(.enabled))
         window.title = "Sync Bar"
         window.toolbar = nil
         window.titlebarAppearsTransparent = true

@@ -74,11 +74,23 @@ struct XSourceClient: SourceClient {
         stateStore.recordAttempt(accountId: cfg.accountId, stream: cfg.stream)
         let isInitial = state.isInitialSync
 
+        // Monthly read cap: a flat-rate subscriber's API cost is bounded by stopping
+        // crawls once the month's read budget is spent. The cursor is left untouched
+        // when there's no budget, so the next cycle (or next month, after the budget
+        // resets) resumes from here.
+        let budget = ReadBudget()
+        let now = Date()
+        let remainingReads = budget.remaining(now: now)
+        guard remainingReads > 0 else { return [] }
+
         var collected: [XContent] = []
         var pageToken: String?
         var pages = 0
+        // Posts the API returned — the billable unit (X charges per post read,
+        // whether or not we keep it after dedup), so the cap counts these.
+        var fetched = 0
 
-        crawl: while pages < maxPagesPerCrawl {
+        crawl: while pages < maxPagesPerCrawl && fetched < remainingReads {
             let page = try await api.page(
                 stream: cfg.stream,
                 userId: cfg.accountId,
@@ -88,6 +100,7 @@ struct XSourceClient: SourceClient {
                 // it; the stop-at-processed check below is the universal guard.
                 sinceId: isInitial ? nil : state.newestSyncedId)
 
+            fetched += page.items.count
             for item in page.items {
                 if !isInitial, item.id == state.newestSyncedId || state.hasProcessed(item.id) {
                     break crawl   // newest-first: everything from here on is already synced
@@ -108,6 +121,7 @@ struct XSourceClient: SourceClient {
             accountId: cfg.accountId, stream: cfg.stream,
             newestId: collected.first?.id, processedIds: collected.map(\.id))
 
+        budget.record(reads: fetched, now: now)
         await emitUsage(cfg: cfg, itemsSynced: collected.count, pages: pages, isInitial: isInitial)
 
         return collected.map(Self.makeItem)

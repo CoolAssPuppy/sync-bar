@@ -231,6 +231,13 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
+        // Monthly read cap: bound a flat-rate subscriber's API cost. Once the
+        // month's budget is spent, paid-source rules pause until it resets.
+        if let feature = rule.sourceKind.paidFeature, ReadBudget().isExhausted(now: Date()) {
+            if explainSkips { recordSkip(.monthlyReadLimit(feature: feature.displayName), ruleId: rule.id) }
+            return
+        }
+
         let source = sourceClientFor(rule.sourceKind)
 
         var items: [SourceItem] = []
@@ -566,9 +573,12 @@ final class SyncCoordinator: ObservableObject {
         case noEnabledDestinations(folder: String)
         case allNotesFilteredOut(folder: String)
         case paidSourceInactive(feature: String)
+        case monthlyReadLimit(feature: String)
 
         var message: String {
             switch self {
+            case .monthlyReadLimit(let feature):
+                return "\(feature) reached this month's sync limit. It resumes next month."
             case .paidSourceInactive(let feature):
                 return "\(feature) sync paused — subscription inactive. Re-subscribe to resume."
             case .noAccountPaired:
@@ -599,7 +609,8 @@ final class SyncCoordinator: ObservableObject {
                  .noEnabledDestinations(let folder),
                  .allNotesFilteredOut(let folder):
                 return folder
-            case .noAccountPaired, .syncingPaused, .noConnectedFolders, .paidSourceInactive:
+            case .noAccountPaired, .syncingPaused, .noConnectedFolders,
+                 .paidSourceInactive, .monthlyReadLimit:
                 return nil
             }
         }

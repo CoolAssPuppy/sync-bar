@@ -32,6 +32,10 @@ final class SyncCoordinator: ObservableObject {
     /// Resolves the destination client for a binding's kind. Injectable so tests
     /// can pass a spy; defaults to the production `DestinationRouter`.
     private let destinationClientFor: @MainActor (DestinationKind) -> DestinationClient
+    /// The paid-source gate: returns false for a source whose paid class isn't
+    /// entitled, so its rules never run (and never spend the maker's API budget).
+    /// Free sources always pass. Injectable so tests stay independent of billing.
+    private let isEntitledForSource: @MainActor (SourceKind) -> Bool
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
@@ -41,8 +45,10 @@ final class SyncCoordinator: ObservableObject {
          remarkable: RemarkableClient = RemarkableClientFactory.make(),
          engine: RulesEngine = RulesEngine(),
          sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil,
-         destinationClient: (@MainActor (DestinationKind) -> DestinationClient)? = nil) {
+         destinationClient: (@MainActor (DestinationKind) -> DestinationClient)? = nil,
+         entitlementForSource: (@MainActor (SourceKind) -> Bool)? = nil) {
         self.ledger = ledger ?? Ledger.shared
+        self.isEntitledForSource = entitlementForSource ?? { EntitlementManager.shared.isEntitled(forSource: $0) }
         self.settings = settings ?? AppSettings.shared
         self.keychain = keychain
         self.remarkable = remarkable
@@ -213,6 +219,18 @@ final class SyncCoordinator: ObservableObject {
 
     private func runRule(_ rule: SyncRule, restrictedToBindingId: String?, explainSkips: Bool) async {
         let folderName = rule.sourceSummary
+
+        // Paid-source gate: a lapsed (or never-subscribed) paid class never runs,
+        // so we never spend the maker's API budget on it. The config is untouched;
+        // the row shows inactive and re-subscribing resumes it.
+        guard isEntitledForSource(rule.sourceKind) else {
+            if explainSkips {
+                let feature = rule.sourceKind.paidFeature?.displayName ?? folderName
+                recordSkip(.paidSourceInactive(feature: feature), ruleId: rule.id)
+            }
+            return
+        }
+
         let source = sourceClientFor(rule.sourceKind)
 
         var items: [SourceItem] = []
@@ -547,9 +565,12 @@ final class SyncCoordinator: ObservableObject {
         case selectedNotesMissing(folder: String)
         case noEnabledDestinations(folder: String)
         case allNotesFilteredOut(folder: String)
+        case paidSourceInactive(feature: String)
 
         var message: String {
             switch self {
+            case .paidSourceInactive(let feature):
+                return "\(feature) sync paused — subscription inactive. Re-subscribe to resume."
             case .noAccountPaired:
                 return "Nothing to sync: no reMarkable account is paired."
             case .syncingPaused:
@@ -578,7 +599,7 @@ final class SyncCoordinator: ObservableObject {
                  .noEnabledDestinations(let folder),
                  .allNotesFilteredOut(let folder):
                 return folder
-            case .noAccountPaired, .syncingPaused, .noConnectedFolders:
+            case .noAccountPaired, .syncingPaused, .noConnectedFolders, .paidSourceInactive:
                 return nil
             }
         }

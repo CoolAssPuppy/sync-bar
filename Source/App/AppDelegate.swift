@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let coordinator = SyncCoordinator()
     let taskCoordinator = TaskSyncCoordinator()
+    private let entitlement = EntitlementManager.shared
     private let launchAtLogin = LaunchAtLoginManager.shared
     private let updater = UpdaterManager.shared
 
@@ -35,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
         subscribeToNotifications()
         coordinator.start()
+        // Validate the paid-source subscription on launch and schedule the daily
+        // 00:00 Pacific re-check, so a lapse takes effect even if the app stays open.
+        entitlement.start()
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error {

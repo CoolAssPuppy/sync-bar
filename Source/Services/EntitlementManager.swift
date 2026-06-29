@@ -28,19 +28,16 @@ struct EntitlementRecord: Codable, Equatable, Sendable {
     var lastValidatedAt: Date?
 
     var state: LicenseStatus.State { LicenseStatus.State(rawValue: statusRaw) ?? .unknown }
+}
 
-    init(statusRaw: String, expiresAt: Date?, customerId: String?, lastValidatedAt: Date?) {
-        self.statusRaw = statusRaw
-        self.expiresAt = expiresAt
-        self.customerId = customerId
-        self.lastValidatedAt = lastValidatedAt
-    }
-
+extension EntitlementRecord {
+    /// Folds a provider status into a cached record at a given time. Declared in an
+    /// extension so the memberwise initializer stays synthesized.
     init(from status: LicenseStatus, validatedAt: Date) {
-        self.statusRaw = status.state.rawValue
-        self.expiresAt = status.expiresAt
-        self.customerId = status.customerId
-        self.lastValidatedAt = validatedAt
+        self.init(statusRaw: status.state.rawValue,
+                  expiresAt: status.expiresAt,
+                  customerId: status.customerId,
+                  lastValidatedAt: validatedAt)
     }
 }
 
@@ -71,7 +68,7 @@ final class EntitlementManager: ObservableObject {
          keychain: KeychainStore = .shared,
          defaults: UserDefaults = AppSettings.defaults,
          clock: @escaping @Sendable () -> Date = { Date() },
-         timeZone: TimeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current) {
+         timeZone: TimeZone = .pacific) {
         self.provider = provider
         self.keychain = keychain
         self.defaults = defaults

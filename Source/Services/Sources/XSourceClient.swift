@@ -84,7 +84,8 @@ struct XSourceClient: SourceClient {
         // when there's no budget, so the next cycle (or next month, after the budget
         // resets) resumes from here.
         let now = Date()
-        guard readBudget.remaining(now: now) > 0 else { return [] }
+        let budgetLeft = readBudget.remaining(now: now)
+        guard budgetLeft > 0 else { return [] }
 
         var collected: [XContent] = []
         var pageToken: String?
@@ -92,8 +93,13 @@ struct XSourceClient: SourceClient {
         // Posts the API returned — the billable unit (X charges per post read,
         // whether or not we keep it after dedup), so the cap and the meter count these.
         var reads = 0
+        // Charge the cap once, on the way out. `defer` runs even if a page throws,
+        // so reads X has already billed for are counted on a mid-crawl failure too
+        // (a reliably-failing stream can't re-bill uncapped) — and a single write
+        // avoids a UserDefaults round-trip per page.
+        defer { readBudget.record(reads: reads, now: now) }
 
-        crawl: while pagesFetched < maxPagesPerCrawl, readBudget.remaining(now: now) > 0 {
+        crawl: while pagesFetched < maxPagesPerCrawl, reads < budgetLeft {
             let page = try await api.page(
                 stream: cfg.stream,
                 userId: cfg.accountId,
@@ -105,10 +111,6 @@ struct XSourceClient: SourceClient {
 
             pagesFetched += 1
             reads += page.items.count
-            // X has already billed for this page, so charge the cap immediately —
-            // not after the loop, where a later page throwing would leak the cost
-            // and let a reliably-failing stream re-bill every cycle uncapped.
-            readBudget.record(reads: page.items.count, now: now)
 
             for item in page.items {
                 if !isInitial, item.id == state.newestSyncedId || state.hasProcessed(item.id) {

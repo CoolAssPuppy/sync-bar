@@ -111,7 +111,7 @@ struct PolarLicenseClient: LicenseProvider {
 
     static func status(from payload: KeyPayload) -> LicenseStatus {
         let state = LicenseStatus.State(rawValue: payload.status ?? "") ?? .unknown
-        let expiresAt = payload.expires_at.flatMap(parseDate)
+        let expiresAt = payload.expires_at.flatMap(Formatters.parseISO8601)
         return LicenseStatus(state: state, expiresAt: expiresAt, customerId: payload.customer?.id)
     }
 
@@ -126,14 +126,6 @@ struct PolarLicenseClient: LicenseProvider {
         if let error = object["error"] as? String { return error }
         if let list = object["detail"] as? [[String: Any]], let msg = list.first?["msg"] as? String { return msg }
         return "Unknown error"
-    }
-
-    private static func parseDate(_ raw: String) -> Date? {
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return withFraction.date(from: raw) ?? plain.date(from: raw)
     }
 
     // Decoding shapes mirroring Polar's license-key payloads.

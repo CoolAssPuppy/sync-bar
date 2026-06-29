@@ -201,18 +201,13 @@ struct XAPIClient: Sendable {
             (envelope.includes?.users ?? []).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first })
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plainFormatter = ISO8601DateFormatter()
-        plainFormatter.formatOptions = [.withInternetDateTime]
-
         let items: [XContent] = (envelope.data ?? []).map { tweet in
             let user = tweet.author_id.flatMap { usersById[$0] }
             let author = XAuthor(
                 id: tweet.author_id ?? user?.id ?? "",
                 username: user?.username ?? "",
                 displayName: user?.name ?? user?.username ?? "")
-            let createdAt = tweet.created_at.flatMap { formatter.date(from: $0) ?? plainFormatter.date(from: $0) }
+            let createdAt = tweet.created_at.flatMap(Formatters.parseISO8601)
                 ?? Date(timeIntervalSince1970: 0)
             let links: [URL] = (tweet.entities?.urls ?? []).compactMap { entity in
                 let raw = entity.unwound_url ?? entity.expanded_url

@@ -254,10 +254,11 @@ struct SettingsView: View {
     }
 
     private var subscriptionBlurb: String {
+        let price = PaidFeature.twitter.monthlyPriceLabel
         switch entitlement.state(for: .twitter) {
-        case .active: return "$6.99/month. Your Twitter syncs are running."
+        case .active: return "\(price). Your Twitter syncs are running."
         case .lapsed: return "Your subscription lapsed. Twitter syncs are paused until you re-subscribe."
-        case .none:   return "Twitter is a paid source: $6.99/month."
+        case .none:   return "Twitter is a paid source: \(price)."
         }
     }
 

@@ -36,7 +36,7 @@ struct ReadBudget {
     // developer's real defaults. The call sites (XSourceClient, SyncCoordinator) take
     // an injectable budget for exactly this.
     init(defaults: UserDefaults = .standard,
-         timeZone: TimeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current) {
+         timeZone: TimeZone = .pacific) {
         self.defaults = defaults
         self.timeZone = timeZone
     }

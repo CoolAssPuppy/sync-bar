@@ -226,11 +226,7 @@ struct RealNotionTaskClient: TaskProvider {
             formatter.dateFormat = "yyyy-MM-dd"
             if let date = formatter.date(from: string) { return date }
         }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = iso.date(from: string) { return date }
-        iso.formatOptions = [.withInternetDateTime]
-        return iso.date(from: string)
+        return Formatters.parseISO8601(string)
     }
 
     // MARK: Pure encoding (testable)

@@ -8,6 +8,18 @@
 import Foundation
 
 enum Formatters {
+    /// Parses an ISO 8601 timestamp, tolerating both fractional-second
+    /// (`2026-06-20T12:00:00.000Z`) and plain (`2026-06-20T12:00:00Z`) forms —
+    /// the two shapes the X, Notion, and Polar APIs all return interchangeably.
+    static func parseISO8601(_ string: String) -> Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: string) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: string)
+    }
+
     /// `4:32 PM` style label for last-checked timestamps.
     static let shortTime: DateFormatter = {
         let formatter = DateFormatter()

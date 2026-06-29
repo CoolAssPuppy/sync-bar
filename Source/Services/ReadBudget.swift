@@ -29,8 +29,12 @@ struct ReadBudget {
     private let defaults: UserDefaults
     private let timeZone: TimeZone
 
-    // Defaults to `.standard` (what `AppSettings` uses in production) rather than
-    // `AppSettings.defaults`, which is main-actor isolated; tests inject a suite.
+    // Defaults to `.standard` because `AppSettings.defaults` is main-actor isolated
+    // and this is constructed from non-isolated call sites. In production that is
+    // the same store AppSettings writes to; under XCTest it is NOT (AppSettings uses
+    // a throwaway suite), so tests MUST inject an isolated suite to avoid writing the
+    // developer's real defaults. The call sites (XSourceClient, SyncCoordinator) take
+    // an injectable budget for exactly this.
     init(defaults: UserDefaults = .standard,
          timeZone: TimeZone = TimeZone(identifier: "America/Los_Angeles") ?? .current) {
         self.defaults = defaults

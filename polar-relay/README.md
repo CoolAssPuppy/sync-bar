@@ -63,7 +63,10 @@ This is a billing sink, so the handler enforces defense in depth:
 - **Bounded input.** `reads` must be a positive integer no larger than `MAX_READS`,
   so a single request can't inflate a bill with an absurd value.
 - **Shared-secret gate.** With `RELAY_SHARED_SECRET` set, anonymous callers are
-  rejected, keeping random traffic off the sink and off your Polar quota.
+  rejected, keeping random traffic off the sink and off your Polar quota. This is a
+  speed bump, not authentication: the app ships the secret in its bundle, so anyone
+  who extracts it can still call the relay. The bounded `reads` and server-side
+  license validation are what actually limit the damage.
 - **Authoritative attribution.** The customer is resolved by validating the license
   key server-side, not trusted from the client, so a caller can't bill someone else.
 - **No error leakage.** Polar's error text is logged, never echoed to the caller.

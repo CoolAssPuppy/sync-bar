@@ -10,11 +10,15 @@
 // This is a billing sink, so it is hardened accordingly:
 //   * `reads` is bounded — an attacker can't inflate a bill with a huge value.
 //   * an optional shared secret (`RELAY_SHARED_SECRET`) gates the endpoint so it
-//     isn't open to anonymous drive-by abuse / Polar-quota burn.
+//     isn't open to anonymous drive-by abuse / Polar-quota burn. NOTE: the app
+//     ships this secret in its bundle, so it stops anonymous callers, not anyone
+//     who extracts it. Treat it as a speed bump, not authentication.
 //   * Polar's raw error text is logged, never echoed to the caller.
-//   * an idempotency key is forwarded so a deployment with KV-backed dedup (see
-//     README) can drop replays.
-// Rate limiting belongs at the platform edge (e.g. Vercel Firewall) — see README.
+//   * `reads` is bounded by MAX_READS (default near the app's real per-report max).
+// NOT implemented here: replay dedup. Polar events are append-only and this handler
+// does not dedup on `idempotency_key`, so a replayed POST double-counts. Add a
+// KV-backed check (see README) before relying on metered billing. Rate limiting
+// belongs at the platform edge (e.g. Vercel Firewall).
 //
 // Deploy on Vercel (this file is a serverless function at /api/usage) or port the
 // handler to any runtime.
@@ -28,14 +32,17 @@
 // Optional:
 //   POLAR_API_BASE        - defaults to https://api.polar.sh
 //   POLAR_EVENT_NAME      - the meter event name, defaults to x.sync.usage
-//   MAX_READS             - upper bound on a single report, defaults to 25000
-//                           (the app's own crawl ceiling: 250 pages * 100 per page)
+//   MAX_READS             - upper bound on a single report, defaults to 1000. A
+//                           legitimate report is one crawl, itself bounded by the
+//                           app's ~650/month read cap, so 1000 leaves headroom
+//                           without letting one call post an absurd number. Raise
+//                           it only if you raise the app's monthly cap.
 
 import crypto from "node:crypto";
 
 const API_BASE = process.env.POLAR_API_BASE || "https://api.polar.sh";
 const EVENT_NAME = process.env.POLAR_EVENT_NAME || "x.sync.usage";
-const MAX_READS = Number(process.env.MAX_READS || 25000);
+const MAX_READS = Number(process.env.MAX_READS || 1000);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

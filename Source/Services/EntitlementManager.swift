@@ -84,8 +84,16 @@ final class EntitlementManager: ObservableObject {
 
     /// Validates on launch and schedules the daily 00:00 Pacific re-check.
     func start() {
-        Task { await validateNow() }
+        Task { await validateAll() }
         scheduleDailyCheck()
+    }
+
+    /// Re-validates every paid feature. NOTE: license storage is currently a
+    /// single keychain key shared across features, so this is correct only while
+    /// there is one paid feature. A second `PaidFeature` needs per-feature key
+    /// storage (and a product -> feature mapping) before this loop is meaningful.
+    private func validateAll() async {
+        for feature in PaidFeature.allCases { await validateNow(for: feature) }
     }
 
     func stop() {
@@ -214,7 +222,7 @@ final class EntitlementManager: ObservableObject {
                 let seconds = Self.secondsUntilNextMidnight(after: self.clock(), in: self.timeZone)
                 try? await Task.sleep(for: .seconds(seconds))
                 if Task.isCancelled { return }
-                await self.validateNow()
+                await self.validateAll()
             }
         }
     }

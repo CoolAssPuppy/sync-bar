@@ -254,9 +254,36 @@ final class SyncCoordinatorTests: XCTestCase {
         let spy = SpySourceClient(items: [
             SourceItem(id: "t1", name: "Tweet", versionHash: "h1", createdAt: Date(), tags: [])
         ])
-        let coordinator = SyncCoordinator(sourceClient: { _ in spy }, entitlementForSource: { _ in false })
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          entitlementForSource: { _ in false },
+                                          readBudgetExhausted: { false })
         let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
         XCTAssertFalse(spy.contentCalled, "a non-entitled paid source must never run")
+        XCTAssertNotEqual(binding?.lastRunStatus, .success)
+
+        ledger.deleteRule(id: rule.id)
+    }
+
+    func test_paid_source_is_skipped_when_read_budget_is_spent() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        var rule = SyncRule(source: .x(XSourceConfig(accountId: "1", username: "@u", stream: .bookmarks)))
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        let bindingId = rule.destinations[0].id
+
+        let spy = SpySourceClient(items: [
+            SourceItem(id: "t1", name: "Tweet", versionHash: "h1", createdAt: Date(), tags: [])
+        ])
+        // Entitled, but the monthly read budget is spent.
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { true })
+        let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
+        XCTAssertFalse(spy.contentCalled, "a spent budget must pause the paid source")
         XCTAssertNotEqual(binding?.lastRunStatus, .success)
 
         ledger.deleteRule(id: rule.id)
@@ -276,7 +303,9 @@ final class SyncCoordinatorTests: XCTestCase {
         let spy = SpySourceClient(items: [
             SourceItem(id: "t1", name: "Tweet", versionHash: "h1", createdAt: Date(), tags: [])
         ])
-        let coordinator = SyncCoordinator(sourceClient: { _ in spy }, entitlementForSource: { _ in true })
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { false })
         let binding = await runAndWait(coordinator, ruleId: rule.id, bindingId: bindingId)
         XCTAssertTrue(spy.contentCalled, "an entitled paid source must run")
         XCTAssertEqual(binding?.lastRunStatus, .success)

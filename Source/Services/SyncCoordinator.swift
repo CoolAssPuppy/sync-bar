@@ -36,6 +36,9 @@ final class SyncCoordinator: ObservableObject {
     /// entitled, so its rules never run (and never spend the maker's API budget).
     /// Free sources always pass. Injectable so tests stay independent of billing.
     private let isEntitledForSource: @MainActor (SourceKind) -> Bool
+    /// Whether the month's paid-read budget is spent. Injectable so tests don't
+    /// read the developer's real `.standard` budget store.
+    private let isReadBudgetExhausted: @MainActor () -> Bool
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
@@ -46,9 +49,11 @@ final class SyncCoordinator: ObservableObject {
          engine: RulesEngine = RulesEngine(),
          sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil,
          destinationClient: (@MainActor (DestinationKind) -> DestinationClient)? = nil,
-         entitlementForSource: (@MainActor (SourceKind) -> Bool)? = nil) {
+         entitlementForSource: (@MainActor (SourceKind) -> Bool)? = nil,
+         readBudgetExhausted: (@MainActor () -> Bool)? = nil) {
         self.ledger = ledger ?? Ledger.shared
         self.isEntitledForSource = entitlementForSource ?? { EntitlementManager.shared.isEntitled(forSource: $0) }
+        self.isReadBudgetExhausted = readBudgetExhausted ?? { ReadBudget().isExhausted(now: Date()) }
         self.settings = settings ?? AppSettings.shared
         self.keychain = keychain
         self.remarkable = remarkable
@@ -237,7 +242,7 @@ final class SyncCoordinator: ObservableObject {
 
         // Monthly read cap: bound a flat-rate subscriber's API cost. Once the
         // month's budget is spent, paid-source rules pause until it resets.
-        if let feature = rule.sourceKind.paidFeature, ReadBudget().isExhausted(now: Date()) {
+        if let feature = rule.sourceKind.paidFeature, isReadBudgetExhausted() {
             if explainSkips { recordSkip(.monthlyReadLimit(feature: feature.displayName), ruleId: rule.id) }
             return
         }

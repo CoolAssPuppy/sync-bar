@@ -73,8 +73,10 @@ struct SyncsHomeView: View {
     var onRefresh: () -> Void
 
     @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject private var entitlement = EntitlementManager.shared
     @Environment(\.theme) private var theme
     @State private var isAddingSource = false
+    @State private var reactivateFeature: PaidFeature?
     @AppStorage("syncs.listOrder") private var orderRaw = SyncListOrder.createdDate.rawValue
     private var order: SyncListOrder { SyncListOrder(rawValue: orderRaw) ?? .createdDate }
 
@@ -114,6 +116,22 @@ struct SyncsHomeView: View {
         }
         .background(theme.background)
         .sheet(isPresented: $isAddingSource) { AddSourceSheet(isPresented: $isAddingSource) }
+        .sheet(item: $reactivateFeature) { feature in
+            // Already consented when the source was added, so reactivation only
+            // needs payment — no consent checkbox.
+            TwitterPaywallSheet(feature: feature, requireConsent: false,
+                                onContinue: { reactivateFeature = nil },
+                                onClose: { reactivateFeature = nil })
+        }
+    }
+
+    /// A paid sync whose subscription has lapsed (or was never active): its config
+    /// is preserved but it won't run, so the row reads inactive and tapping it
+    /// opens the reactivate dialog instead of the editor.
+    private func paidInactiveFeature(for flow: SyncFlow) -> PaidFeature? {
+        guard let feature = flow.rule.sourceKind.paidFeature,
+              !entitlement.isEntitled(to: feature) else { return nil }
+        return feature
     }
 
     // MARK: Header
@@ -205,10 +223,14 @@ struct SyncsHomeView: View {
     private func row(for item: SyncListItem) -> some View {
         switch item {
         case .flow(let flow):
+            let inactiveFeature = paidInactiveFeature(for: flow)
             SyncRowView(
                 flow: flow,
                 isSyncing: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
-                onTap: { onEdit(flow) },
+                isPaidInactive: inactiveFeature != nil,
+                onTap: {
+                    if let inactiveFeature { reactivateFeature = inactiveFeature } else { onEdit(flow) }
+                },
                 onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
             )
         case .task(let sync):
@@ -312,6 +334,7 @@ struct SyncsHomeView: View {
 private struct SyncRowView: View {
     let flow: SyncFlow
     let isSyncing: Bool
+    var isPaidInactive: Bool = false
     let onTap: () -> Void
     let onSyncNow: () -> Void
 
@@ -341,9 +364,12 @@ private struct SyncRowView: View {
                         .padding(.leading, 40)
                         .lineLimit(1)
                 }
+                .opacity(isPaidInactive ? 0.55 : 1)
                 Spacer(minLength: 12)
                 statusPill
-                syncNowButton
+                // A paused paid sync can't run, so don't offer "Sync now" — the
+                // row taps through to the reactivate dialog instead.
+                if !isPaidInactive { syncNowButton }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(theme.tertiary)
@@ -390,6 +416,7 @@ private struct SyncRowView: View {
     }
 
     private var statusText: String {
+        if isPaidInactive { return "Subscription inactive" }
         if isSyncing { return "Syncing now…" }
         if !flow.isEnabled { return "Off" }
         switch flow.status {
@@ -404,6 +431,7 @@ private struct SyncRowView: View {
     }
 
     private var statusColor: Color {
+        if isPaidInactive { return theme.warning }
         if isSyncing { return theme.primary }
         if !flow.isEnabled { return theme.tertiary }
         switch flow.status {

@@ -13,8 +13,10 @@
 
 import Foundation
 
-enum PaidFeature: String, CaseIterable, Codable, Sendable {
+enum PaidFeature: String, CaseIterable, Codable, Sendable, Identifiable {
     case twitter
+
+    var id: String { rawValue }
 
     /// The source kinds that belong to this paid class today. The mapping is the
     /// one place that decides what costs money; widen it (or move to per-sync /

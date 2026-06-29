@@ -8,12 +8,12 @@ The body below still describes the design, but two choices changed after it was 
   `LicenseProvider` protocol; `PolarLicenseClient` is the conformer. Polar's
   customer-portal license-key `validate`/`activate`/`deactivate` endpoints need no auth
   (body carries `key` + `organization_id`), so the entitlement gate stays serverless.
-- **Pricing is $4.99/month flat base + metered usage**, not $19.95 flat. The flat base
-  (a Polar subscription with a License Keys benefit) is the entitlement gate. Every
-  tweet read is metered. X itself now bills pay-per-use at $0.005/read, so the metered
-  pass-through is fair. Metered ingestion needs an Organization Access Token, which must
-  not ship in the app, so usage events post to a small server-side relay
-  (`POLAR_USAGE_RELAY_URL`); the app's `UsageReporter` no-ops when the URL is unset.
+- **Pricing is $6.99/month flat (Option A)**, not $19.95 and not metered. A Polar
+  subscription with a License Keys benefit is the entitlement gate. There is no
+  per-tweet charge; instead a client-side monthly read cap (`ReadBudget`, 650 reads)
+  bounds the maker's X cost (~$3.25/subscriber at $0.005/read, under the price). The
+  metered relay (`polar-relay/`, `UsageReporter`, `POLAR_USAGE_RELAY_URL`) is built but
+  DORMANT — deploy it later to switch on per-read billing. Activation limit: 2 devices.
 - **Optionality:** Twitter is the first instance of a general "paid Sync class". Gating
   routes through a `PaidFeature` abstraction (sync -> feature -> entitlement), so a
   future paywall over another sync or a group is a data change, not a code sweep.

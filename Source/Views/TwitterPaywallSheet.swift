@@ -33,7 +33,10 @@ struct TwitterPaywallSheet: View {
     @State private var showingLicenseField = false
 
     /// The required consent copy. Exact wording — it is the user's data agreement.
-    private let consentCopy = "I agree this source shares personal information with the app maker, such as your Twitter handle and how many times you sync. Your content is never shared."
+    private let consentCopy = """
+        I agree this source shares personal information with the app maker, such as \
+        your Twitter handle and how many times you sync. Your content is never shared.
+        """
 
     private var isEntitled: Bool { entitlement.isEntitled(to: feature) }
     private var canProceed: Bool { isEntitled && (consented || !requireConsent) }
@@ -186,7 +189,11 @@ struct TwitterPaywallSheet: View {
     // MARK: Fine print
 
     private func finePrint(theme: ThemePalette) -> some View {
-        Text("The Twitter API costs real money to run. Your fee defrays those API calls and the billing provider's fee. Usage is capped at our cost, so when you reach the monthly limit, syncing pauses until the next month begins.")
+        Text("""
+            The Twitter API costs real money to run. Your fee defrays those API calls and the \
+            billing provider's fee. Usage is capped at our cost, so when you reach the monthly \
+            limit, syncing pauses until the next month begins.
+            """)
             .font(.system(size: 9.5))
             .foregroundStyle(theme.tertiary)
             .fixedSize(horizontal: false, vertical: true)

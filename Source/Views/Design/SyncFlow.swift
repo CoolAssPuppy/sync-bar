@@ -38,8 +38,19 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
         return binding.lastRunStatus
     }
 
+    /// The Twitter stream this sync pulls (Bookmarks / Likes / Posts), or nil
+    /// when the source isn't Twitter.
+    private var xStreamLabel: String? {
+        if case .x(let cfg) = rule.source { return cfg.stream.label }
+        return nil
+    }
+
     /// The muted one-line summary under a sync row.
     var howSummary: String {
+        // Twitter has no OCR/title; describe what's flowing where.
+        if let stream = xStreamLabel {
+            return "Syncing \(stream) to \(destinationSummary)"
+        }
         // Bookmark sources have no OCR/title; describe the mirror instead.
         if rule.sourceKind == .safari {
             if case .chrome(let cfg) = binding.configuration {

@@ -91,8 +91,13 @@ enum Telemetry {
     /// Captures a business-meaningful event. `properties` must never carry
     /// PII — no emails, no workspace/notebook names, no URLs, no transcribed
     /// text. `source` and `app_version` are attached automatically.
-    static func capture(_ event: String, properties: [String: Any] = [:]) {
-        guard isOptedIn else { return }
+    ///
+    /// `bypassOptOut` is the single exception to the analytics opt-out: it is for
+    /// billing/abuse metering of a paid Sync class (e.g. `x.sync.usage`), which
+    /// the user consents to when adding the paid source. Every other event must
+    /// leave it `false` and stays opt-in.
+    static func capture(_ event: String, properties: [String: Any] = [:], bypassOptOut: Bool = false) {
+        guard bypassOptOut || isOptedIn else { return }
         var props = properties
         if let source = Bundle.main.object(forInfoDictionaryKey: "TELEMETRY_SOURCE") as? String,
            !source.isEmpty {
@@ -102,7 +107,17 @@ enum Telemetry {
             props["app_version"] = version
         }
         backend?.capture(event: event, properties: props)
+        #if DEBUG
+        testHook?(event, props)
+        #endif
     }
+
+    #if DEBUG
+    /// Test seam. Fires for every event that passes the opt-in / bypass guard,
+    /// so tests can assert capture behavior without a live PostHog backend.
+    /// Compiled out of Release builds entirely.
+    nonisolated(unsafe) static var testHook: ((String, [String: Any]) -> Void)?
+    #endif
 
     // MARK: - Private helpers
 

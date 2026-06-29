@@ -34,10 +34,10 @@ enum PaidFeature: String, CaseIterable, Codable, Sendable, Identifiable {
         }
     }
 
-    /// Monthly base price shown in the paywall. Usage is metered on top.
+    /// Flat monthly price shown in the paywall.
     var monthlyPriceLabel: String {
         switch self {
-        case .twitter: return "$4.99/month"
+        case .twitter: return "$6.99/month"
         }
     }
 }

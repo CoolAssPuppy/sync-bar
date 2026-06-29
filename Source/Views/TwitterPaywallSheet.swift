@@ -93,9 +93,9 @@ struct TwitterPaywallSheet: View {
                 .frame(width: 36, height: 36)
                 .background(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.primary.opacity(0.1)))
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(feature.monthlyPriceLabel) plus usage")
+                Text(feature.monthlyPriceLabel)
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.foreground)
-                Text("A base subscription plus a small charge for the tweets you sync.")
+                Text("A flat monthly subscription for syncing your Twitter.")
                     .font(.system(size: 11)).foregroundStyle(theme.muted)
             }
             Spacer(minLength: 0)
@@ -136,7 +136,7 @@ struct TwitterPaywallSheet: View {
 
     @ViewBuilder private func subscribeSection(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppPrimaryButton(title: "Subscribe (\(feature.monthlyPriceLabel) + usage)",
+            AppPrimaryButton(title: "Subscribe (\(feature.monthlyPriceLabel))",
                              systemImage: "arrow.up.forward.app",
                              isDisabled: AuthSecrets.polarCheckoutURL == nil) { subscribe() }
             if AuthSecrets.polarCheckoutURL == nil {

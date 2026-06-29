@@ -6,11 +6,13 @@
   is safe in the client (`POST /v1/customer-portal/license-keys/validate`, body `key`
   + `organization_id`). Event ingestion (metered) needs an Organization Access Token,
   so it runs through a small server-side relay.
-- **Billing: $4.99/month flat base + metered usage.** The flat base (a Polar
-  subscription with a License Keys benefit) is the entitlement gate. Every tweet read
-  is metered and billed (not overage — usage from read #1).
+- **Billing (final): $6.99/month flat, Option A.** A Polar subscription with a
+  License Keys benefit is the entitlement gate. No per-tweet charge; instead a
+  client-side monthly read cap (`ReadBudget`, 650 reads) bounds the maker's X cost
+  to ~$3.25/subscriber, under the price. The metered relay is built but DORMANT
+  (deploy it later to switch on per-read billing). Activation limit: 2 devices.
 - **X cost reality:** pay-per-use, $0.005 per post read, 2M reads/mo cap, 24h dedup.
-  The app already counts reads, so metered billing is fair and computable.
+  650 reads/mo caps cost at ~$3.25; worst case 2 devices ~$6.50, still under $6.99.
 
 ## Architecture for optionality (per user directive)
 

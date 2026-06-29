@@ -19,8 +19,8 @@ import Foundation
 
 struct ReadBudget {
     /// Monthly read ceiling per subscriber. ~$3.25 of X reads at $0.005 each,
-    /// comfortably under the $4.99 base price. One number to tune (derived as a
-    /// recent real sync of ~26 reads times a 25x headroom factor).
+    /// comfortably under the $6.99 price. One number to tune (derived as a recent
+    /// real sync of ~26 reads times a 25x headroom factor).
     static let monthlyCap = 650
 
     private static let monthDefaultsKey = "settings.readBudget.month"

@@ -1,0 +1,10 @@
+{
+  "name": "polar-usage-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Server-side relay that ingests Sync Bar paid-class usage into Polar metered billing.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}

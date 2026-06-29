@@ -161,6 +161,10 @@ final class SyncCoordinator: ObservableObject {
     }
 
     private func runCycle(ruleId: String?, bindingId: String?, trigger: SyncTrigger) async {
+        // Never run two cycles at once. `syncNow` already guards, but a scheduled
+        // tick reaches `runCycle` directly; without this, an overlapping cycle could
+        // each read the read-budget before either records and together exceed the cap.
+        guard !isSyncing else { return }
         guard !ledger.isDemoMode else { return }
         // A manual "Sync now" always explains itself in the visible log; scheduled
         // ticks stay quiet so an idle account doesn't flood the log every interval.

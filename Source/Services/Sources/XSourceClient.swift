@@ -43,17 +43,22 @@ struct XSourceClient: SourceClient {
     /// run cut short by rate limiting) resumes on the next cycle, deduped by the
     /// processed-id set, so no item is delivered twice.
     private let maxPagesPerCrawl: Int
+    /// The monthly read-cap accountant. Injectable so tests get an isolated store
+    /// instead of touching the real defaults.
+    private let readBudget: ReadBudget
 
     init(account: XAccount? = nil,
          keychain: KeychainStore = .shared,
          session: URLSession = .shared,
          stateStore: XSyncStateStore = .shared,
-         maxPagesPerCrawl: Int = 250) {
+         maxPagesPerCrawl: Int = 250,
+         readBudget: ReadBudget = ReadBudget()) {
         self.account = account
         self.keychain = keychain
         self.session = session
         self.stateStore = stateStore
         self.maxPagesPerCrawl = maxPagesPerCrawl
+        self.readBudget = readBudget
     }
 
     // MARK: Scopes (the account's content streams)
@@ -78,19 +83,17 @@ struct XSourceClient: SourceClient {
         // crawls once the month's read budget is spent. The cursor is left untouched
         // when there's no budget, so the next cycle (or next month, after the budget
         // resets) resumes from here.
-        let budget = ReadBudget()
         let now = Date()
-        let remainingReads = budget.remaining(now: now)
-        guard remainingReads > 0 else { return [] }
+        guard readBudget.remaining(now: now) > 0 else { return [] }
 
         var collected: [XContent] = []
         var pageToken: String?
-        var pages = 0
+        var pagesFetched = 0
         // Posts the API returned — the billable unit (X charges per post read,
-        // whether or not we keep it after dedup), so the cap counts these.
-        var fetched = 0
+        // whether or not we keep it after dedup), so the cap and the meter count these.
+        var reads = 0
 
-        crawl: while pages < maxPagesPerCrawl && fetched < remainingReads {
+        crawl: while pagesFetched < maxPagesPerCrawl, readBudget.remaining(now: now) > 0 {
             let page = try await api.page(
                 stream: cfg.stream,
                 userId: cfg.accountId,
@@ -100,7 +103,13 @@ struct XSourceClient: SourceClient {
                 // it; the stop-at-processed check below is the universal guard.
                 sinceId: isInitial ? nil : state.newestSyncedId)
 
-            fetched += page.items.count
+            pagesFetched += 1
+            reads += page.items.count
+            // X has already billed for this page, so charge the cap immediately —
+            // not after the loop, where a later page throwing would leak the cost
+            // and let a reliably-failing stream re-bill every cycle uncapped.
+            readBudget.record(reads: page.items.count, now: now)
+
             for item in page.items {
                 if !isInitial, item.id == state.newestSyncedId || state.hasProcessed(item.id) {
                     break crawl   // newest-first: everything from here on is already synced
@@ -110,7 +119,6 @@ struct XSourceClient: SourceClient {
 
             guard let next = page.nextToken else { break }
             pageToken = next
-            pages += 1
         }
 
         cache.store(collected)
@@ -121,8 +129,8 @@ struct XSourceClient: SourceClient {
             accountId: cfg.accountId, stream: cfg.stream,
             newestId: collected.first?.id, processedIds: collected.map(\.id))
 
-        budget.record(reads: fetched, now: now)
-        await emitUsage(cfg: cfg, itemsSynced: collected.count, pages: pages, isInitial: isInitial)
+        await emitUsage(cfg: cfg, itemsSynced: collected.count, reads: reads,
+                        pages: pagesFetched, isInitial: isInitial)
 
         return collected.map(Self.makeItem)
     }
@@ -131,7 +139,7 @@ struct XSourceClient: SourceClient {
     /// event (so the maker sees who consumes the X budget) and a best-effort post
     /// to the metered-billing relay. Consented to when the source was added. The
     /// analytics event bypasses the opt-out; both never affect the sync's outcome.
-    private func emitUsage(cfg: XSourceConfig, itemsSynced: Int, pages: Int, isInitial: Bool) async {
+    private func emitUsage(cfg: XSourceConfig, itemsSynced: Int, reads: Int, pages: Int, isInitial: Bool) async {
         let handle = cfg.username.hasPrefix("@") ? cfg.username : "@\(cfg.username)"
         let customerId = await EntitlementManager.shared.customerId(for: .twitter)
         Telemetry.capture("x.sync.usage", properties: [
@@ -140,6 +148,9 @@ struct XSourceClient: SourceClient {
             "stream": cfg.stream.rawValue,
             "pages_fetched": pages,
             "items_synced": itemsSynced,
+            // The billable unit (posts the API returned), which is what maps to the
+            // maker's X cost — distinct from items_synced (the deduped new items).
+            "reads": reads,
             "is_initial_sync": isInitial,
             "license_customer_id": customerId ?? ""
         ], bypassOptOut: true)
@@ -150,7 +161,7 @@ struct XSourceClient: SourceClient {
         let accountId = cfg.accountId
         let streamRaw = cfg.stream.rawValue
         Task.detached {
-            await UsageReporter().report(reads: itemsSynced, licenseKey: licenseKey, properties: [
+            await UsageReporter().report(reads: reads, licenseKey: licenseKey, properties: [
                 "x_user_id": accountId,
                 "stream": streamRaw,
                 "is_initial": String(isInitial)

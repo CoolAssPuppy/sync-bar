@@ -76,6 +76,14 @@ final class XSourceClientTests: XCTestCase {
         return XSyncStateStore(store: defaults)
     }
 
+    /// An isolated read budget so crawl tests never touch the real defaults.
+    private func makeBudget() -> ReadBudget {
+        let name = "x.client.budget.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return ReadBudget(defaults: defaults, timeZone: TimeZone(identifier: "America/Los_Angeles")!)
+    }
+
     /// Seeds a long-lived access token so `validAccessToken` returns without a
     /// network refresh, and returns a cleanup closure.
     private func seedToken(accountId: String) -> () -> Void {
@@ -111,7 +119,7 @@ final class XSourceClientTests: XCTestCase {
             return (200, self.timelineJSON(ids: ["3", "2"], nextToken: "P2"))
         }
         let store = makeStateStore()
-        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store, maxPagesPerCrawl: 10)
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store, maxPagesPerCrawl: 10, readBudget: makeBudget())
         let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
 
         let items = try await client.listItems(config: config)
@@ -141,11 +149,65 @@ final class XSourceClientTests: XCTestCase {
             // stopped at the overlap rather than paging on.
             return (200, self.timelineJSON(ids: ["4", "3", "2", "1"], nextToken: "LOOP"))
         }
-        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store, maxPagesPerCrawl: 10)
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store, maxPagesPerCrawl: 10, readBudget: makeBudget())
         let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
 
         let items = try await client.listItems(config: config)
         XCTAssertEqual(items.map(\.id), ["4", "3"], "stops the moment it reaches the synced id 2")
         XCTAssertEqual(store.state(accountId: "u1", stream: .posts).newestSyncedId, "4")
+    }
+
+    // MARK: Read-budget accounting (the flat-rate cost ceiling)
+
+    func test_crawl_records_every_billed_read_to_the_budget() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        StubURLProtocol.handler = { request, _ in
+            if self.paginationToken(request) == "P2" {
+                return (200, self.timelineJSON(ids: ["1"], nextToken: nil))
+            }
+            return (200, self.timelineJSON(ids: ["3", "2"], nextToken: "P2"))
+        }
+        let budget = makeBudget()
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: budget)
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
+
+        _ = try await client.listItems(config: config)
+        XCTAssertEqual(budget.reads(now: Date()), 3, "all returned posts are charged against the cap")
+    }
+
+    func test_reads_are_charged_even_when_a_later_page_throws() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        // Page 1 returns two posts; page 2 rate-limits, so listItems throws.
+        StubURLProtocol.handler = { request, _ in
+            if self.paginationToken(request) == "P2" { return (429, Data("{}".utf8)) }
+            return (200, self.timelineJSON(ids: ["3", "2"], nextToken: "P2"))
+        }
+        let budget = makeBudget()
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: budget)
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
+
+        do {
+            _ = try await client.listItems(config: config)
+            XCTFail("expected the rate-limited page to throw")
+        } catch {
+            // expected
+        }
+        XCTAssertEqual(budget.reads(now: Date()), 2, "page 1's billed reads are charged even though page 2 failed")
+    }
+
+    func test_crawl_is_skipped_when_the_monthly_budget_is_spent() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let budget = makeBudget()
+        budget.record(reads: ReadBudget.monthlyCap, now: Date())   // exhaust it
+        StubURLProtocol.handler = { _, _ in (200, self.timelineJSON(ids: ["3", "2", "1"], nextToken: nil)) }
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: budget)
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
+
+        let items = try await client.listItems(config: config)
+        XCTAssertTrue(items.isEmpty, "no crawl runs when the monthly budget is spent")
+        XCTAssertEqual(budget.reads(now: Date()), ReadBudget.monthlyCap, "no extra reads are charged")
     }
 }

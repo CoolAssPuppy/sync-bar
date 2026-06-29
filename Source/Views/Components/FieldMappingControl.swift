@@ -107,6 +107,38 @@ enum NoteFieldKind: String, CaseIterable, Identifiable {
     }
 }
 
+/// A source field offered in the mapping's "from" dropdown: a friendly label
+/// paired with the title-template token it resolves to. The list is supplied by
+/// the caller so the picker is source-aware (reMarkable note fields vs Twitter
+/// tweet fields), rather than a fixed note-shaped set.
+struct MappingFieldOption: Identifiable, Hashable {
+    let label: String
+    let token: String
+    var id: String { token }
+
+    /// reMarkable / generic note fields (the historical default).
+    static let remarkable: [MappingFieldOption] = [
+        .init(label: "Title of note", token: "{title}"),
+        .init(label: "Note name", token: "{notebook}"),
+        .init(label: "Folder name", token: "{folder_name}"),
+        .init(label: "Note date", token: "{date}"),
+        .init(label: "Today's date", token: "{today}")
+    ]
+
+    /// Twitter tweet fields.
+    static let twitter: [MappingFieldOption] = [
+        .init(label: "Tweet text", token: "{title}"),
+        .init(label: "Author handle", token: "{author}"),
+        .init(label: "Author name", token: "{author_name}"),
+        .init(label: "Tweet URL", token: "{tweet_url}"),
+        .init(label: "Tweet date", token: "{date}"),
+        .init(label: "Tweet id", token: "{tweet_id}")
+    ]
+
+    /// Sentinel tag for the "Custom text" entry (free text, not a preset token).
+    static let customTag = "__custom__"
+}
+
 /// A destination column the user can map to, plus its selectable options when
 /// it's a select / multi_select / status column.
 struct MappingColumn: Identifiable, Equatable {
@@ -138,11 +170,19 @@ struct FieldMappingControl: View {
     @Binding var rows: [FieldMapping]
     let columns: [MappingColumn]
     var keyLabel: String = "Column"
+    /// The source fields offered in the "from" dropdown. Defaults to the
+    /// reMarkable note fields so existing callers are unchanged.
+    var fieldOptions: [MappingFieldOption] = MappingFieldOption.remarkable
 
     @Environment(\.theme) private var theme
 
     private func column(named name: String) -> MappingColumn? {
         columns.first(where: { $0.name == name })
+    }
+
+    /// The default "from" value for a freshly-added non-option row.
+    private var defaultFieldValue: NoteFieldValue {
+        NoteFieldValue(token: fieldOptions.first?.token ?? "{title}")
     }
 
     var body: some View {
@@ -174,7 +214,7 @@ struct FieldMappingControl: View {
                     if isOption, row.wrappedValue.value.kind != .options {
                         row.wrappedValue.value = .options([])
                     } else if !isOption, row.wrappedValue.value.kind == .options {
-                        row.wrappedValue.value = .noteName
+                        row.wrappedValue.value = defaultFieldValue
                     }
                 }
             )) {
@@ -192,18 +232,28 @@ struct FieldMappingControl: View {
             if let selectedColumn, selectedColumn.isOptionBased {
                 optionsMenu(row: row, column: selectedColumn)
             } else {
+                let token = row.wrappedValue.value.token
+                let isPreset = fieldOptions.contains { $0.token == token }
                 Picker("", selection: Binding(
-                    get: { row.wrappedValue.value.kind },
-                    set: { row.wrappedValue.value = .make(kind: $0, custom: row.wrappedValue.value.customText) }
-                )) {
-                    ForEach(NoteFieldKind.textKinds) { kind in
-                        Text(kind.label).tag(kind)
+                    get: { isPreset ? token : MappingFieldOption.customTag },
+                    set: { newTag in
+                        if newTag == MappingFieldOption.customTag {
+                            // Keep any existing free text; presets start blank.
+                            row.wrappedValue.value = .custom(isPreset ? "" : token)
+                        } else {
+                            row.wrappedValue.value = NoteFieldValue(token: newTag)
+                        }
                     }
+                )) {
+                    ForEach(fieldOptions) { option in
+                        Text(option.label).tag(option.token)
+                    }
+                    Text("Custom text").tag(MappingFieldOption.customTag)
                 }
                 .labelsHidden()
                 .fixedSize()
 
-                if row.wrappedValue.value.kind == .custom {
+                if !isPreset {
                     TextField("Custom text", text: Binding(
                         get: { row.wrappedValue.value.customText },
                         set: { row.wrappedValue.value = .custom($0) }
@@ -274,7 +324,7 @@ struct FieldMappingControl: View {
     private func addRow() {
         let used = Set(rows.map(\.key))
         guard let nextColumn = columns.first(where: { !used.contains($0.name) }) ?? columns.first else { return }
-        let value: NoteFieldValue = nextColumn.isOptionBased ? .options([]) : .noteTitle
+        let value: NoteFieldValue = nextColumn.isOptionBased ? .options([]) : defaultFieldValue
         rows.append(FieldMapping(key: nextColumn.name, value: value))
     }
 

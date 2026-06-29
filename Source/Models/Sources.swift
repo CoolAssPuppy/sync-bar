@@ -116,6 +116,15 @@ enum XStream: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
         }
     }
 
+    /// Singular noun for the "Twitter <noun>" tag written to a destination.
+    var singularNoun: String {
+        switch self {
+        case .bookmarks: return "Bookmark"
+        case .likes:     return "Like"
+        case .posts:     return "Post"
+        }
+    }
+
     /// The path segment under `/2/users/{id}/` this stream reads from.
     var apiPathComponent: String {
         switch self {

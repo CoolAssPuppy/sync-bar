@@ -98,6 +98,8 @@ struct SyncEditorView: View {
     @State private var notionDestinations: [NotionDestination] = []
     @State private var notionDestLoading = false
     @State private var notionDestSchema: [NotionDatabaseProperty] = []
+    @State private var notionDestSchemaLoading = false
+    @State private var notionDestSchemaError: String?
     // To — Notion database (two-way)
     @State private var taskWorkspaceId: String?
     @State private var taskDatabases: [NotionDestination] = []
@@ -743,20 +745,39 @@ struct SyncEditorView: View {
     /// Customize just maps note fields onto the database's columns.
     private var notionMappingForm: some View {
         AppCard("Column Mapping") {
-            if notionDestSchema.isEmpty {
+            if notionDestSchemaLoading {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Loading database schema…").font(.system(size: 11)).foregroundStyle(theme.muted)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let error = notionDestSchemaError {
+                Text(error)
+                    .font(.system(size: 11)).foregroundStyle(theme.destructive)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if notionDestSchema.isEmpty {
+                Text("Choose a database in the To step to map its columns.")
+                    .font(.system(size: 11)).foregroundStyle(theme.muted)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Fill database columns with fields from each note.")
+                    Text("Fill the database's columns with fields from each \(mappingSourceNoun).")
                         .font(.system(size: 11)).foregroundStyle(theme.muted)
-                    FieldMappingControl(rows: $localNotion.mappingRows, columns: notionMappingColumns)
+                    FieldMappingControl(rows: $localNotion.mappingRows,
+                                        columns: notionMappingColumns,
+                                        fieldOptions: mappingFieldOptions)
                 }
             }
         }
+    }
+
+    /// The "from" fields offered in the column mapping, by source.
+    private var mappingFieldOptions: [MappingFieldOption] {
+        sourceKind == .x ? MappingFieldOption.twitter : MappingFieldOption.remarkable
+    }
+
+    /// Noun for the mapping helper text ("…from each tweet" / "…from each note").
+    private var mappingSourceNoun: String {
+        sourceKind == .x ? "tweet" : "note"
     }
 
     /// Mappable columns (the title column is set from the title strategy, so it's
@@ -1114,17 +1135,71 @@ struct SyncEditorView: View {
         localNotion.destinationTitle = dest.title
         localNotion.mappingRows = []
         notionDestSchema = []
+        notionDestSchemaError = nil
+        notionDestSchemaLoading = dest.type == .database
         if dest.type == .database { loadNotionDestSchema() }
     }
 
     private func loadNotionDestSchema() {
         guard let id = toAccountId, !localNotion.destinationId.isEmpty else { return }
         let destinationId = localNotion.destinationId
+        notionDestSchemaLoading = true
+        notionDestSchemaError = nil
+        notionDestSchema = []
         Task {
-            let client = NotionClientFactory.make(workspaceId: id)
-            let props = (try? await client.databaseSchema(destinationId: destinationId, workspaceId: id)) ?? []
-            await MainActor.run { notionDestSchema = props }
+            do {
+                let props = try await NotionClientFactory.make(workspaceId: id)
+                    .databaseSchema(destinationId: destinationId, workspaceId: id)
+                await MainActor.run {
+                    notionDestSchema = props
+                    notionDestSchemaLoading = false
+                    notionDestSchemaError = props.isEmpty
+                        ? "Sync Bar can read this database but it has no mappable columns."
+                        : nil
+                    seedTwitterMappingDefaults()
+                }
+            } catch {
+                await MainActor.run {
+                    notionDestSchema = []
+                    notionDestSchemaLoading = false
+                    notionDestSchemaError = "Couldn't read this database's columns: \(Formatters.userMessage(for: error)) Make sure it's shared with Sync Bar's Notion connection."
+                }
+            }
         }
+    }
+
+    /// Pre-fills the column mapping with sensible Twitter → Notion defaults the
+    /// first time a database's schema arrives for a Twitter source. Only columns
+    /// whose names/types we recognize are filled; everything stays editable.
+    private func seedTwitterMappingDefaults() {
+        guard sourceKind == .x, localNotion.mappingRows.isEmpty, !notionDestSchema.isEmpty else { return }
+        let streamTag = "Twitter \(xSourceStream.singularNoun)"
+        var rows: [FieldMapping] = []
+        for property in notionDestSchema where property.type != "title" {
+            let name = property.name.lowercased()
+            let isOption = ["select", "multi_select", "status"].contains(property.type)
+            func option(_ wanted: String) -> NoteFieldValue? {
+                property.options.first { $0.caseInsensitiveCompare(wanted) == .orderedSame }.map { .options([$0]) }
+            }
+            var value: NoteFieldValue?
+            if property.type == "url" || name == "url" {
+                value = .custom("{tweet_url}")
+            } else if name.contains("author") {
+                value = .custom("{author}")
+            } else if name == "site" {
+                value = .custom("twitter.com")
+            } else if name == "source" && isOption {
+                value = option("Twitter")
+            } else if name == "tags" || name == "tag" {
+                value = isOption ? .options([streamTag]) : .custom(streamTag)
+            } else if property.type == "date" {
+                value = .custom("{date}")
+            } else if name == "status" && isOption {
+                value = option("Inbox")
+            }
+            if let value { rows.append(FieldMapping(key: property.name, value: value)) }
+        }
+        localNotion.mappingRows = rows
     }
 
     private func loadFormState(from configuration: DestinationConfiguration) {
@@ -1166,6 +1241,7 @@ struct SyncEditorView: View {
         case .notion:
             localNotion = NotionFormState(workspaceId: app.id)
             notionDestinations = []; notionDestSchema = []
+            notionDestSchemaError = nil; notionDestSchemaLoading = false
             loadNotionDestinations()
         case .linear:     localLinear = LinearFormState(workspaceId: app.id)
         case .googleDocs: localGoogle = GoogleFormState(email: app.id)

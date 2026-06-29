@@ -17,8 +17,24 @@ enum TitleToken: String, CaseIterable {
     case date
     case today
     case title
+    // Source-specific fields, resolved from each item's metadata (e.g. Twitter).
+    // They expand to empty for sources that don't supply them.
+    case author
+    case authorName  = "author_name"
+    case tweetUrl    = "tweet_url"
+    case tweetId     = "tweet_id"
+    case stream
 
     var placeholder: String { "{\(rawValue)}" }
+
+    /// Source-specific tokens are hidden from the generic title-template hint so
+    /// they don't clutter reMarkable/Markdown fields where they never apply.
+    var isSourceSpecific: Bool {
+        switch self {
+        case .author, .authorName, .tweetUrl, .tweetId, .stream: return true
+        default: return false
+        }
+    }
 
     var helpText: String {
         switch self {
@@ -28,6 +44,11 @@ enum TitleToken: String, CaseIterable {
         case .date:       return "Note creation date (yyyy-MM-dd)"
         case .today:      return "Today's date when synced (yyyy-MM-dd)"
         case .title:      return "Resolved note title"
+        case .author:     return "Author handle (@username)"
+        case .authorName: return "Author display name"
+        case .tweetUrl:   return "Canonical tweet URL"
+        case .tweetId:    return "Tweet id"
+        case .stream:     return "Stream (bookmarks / likes / posts)"
         }
     }
 }
@@ -43,6 +64,9 @@ struct TitleTemplateContext {
     var folderName: String = ""
     /// "Today" at resolution time. Defaults to now; injectable for tests.
     var today: Date = Date()
+    /// Source-specific fields (e.g. Twitter author / canonical URL / stream),
+    /// keyed as the source emits them in `SourceItem.metadata`.
+    var metadata: [String: String] = [:]
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -58,6 +82,11 @@ struct TitleTemplateContext {
         case .date:       return Self.dateFormatter.string(from: date)
         case .today:      return Self.dateFormatter.string(from: today)
         case .title:      return title
+        case .author:     return metadata["author"] ?? ""
+        case .authorName: return metadata["author_name"] ?? ""
+        case .tweetUrl:   return metadata["canonical_url"] ?? ""
+        case .tweetId:    return metadata["id"] ?? ""
+        case .stream:     return metadata["stream"] ?? ""
         }
     }
 
@@ -74,7 +103,10 @@ struct TitleTemplateContext {
 /// what tokens are available.
 enum TitleTemplateHelp {
     static let inlineHint: String = {
-        let tokens = TitleToken.allCases.map(\.placeholder).joined(separator: ", ")
+        let tokens = TitleToken.allCases
+            .filter { !$0.isSourceSpecific }
+            .map(\.placeholder)
+            .joined(separator: ", ")
         return "Tokens: \(tokens)"
     }()
 }

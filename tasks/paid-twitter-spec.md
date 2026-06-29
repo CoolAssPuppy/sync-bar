@@ -1,5 +1,25 @@
 # Spec: paid Twitter source (entitlement, consent, usage metering)
 
+## Decisions that supersede this spec (2026-06-29)
+
+The body below still describes the design, but two choices changed after it was written:
+
+- **Provider is Polar.sh, not Lemon Squeezy.** The entitlement layer is built behind a
+  `LicenseProvider` protocol; `PolarLicenseClient` is the conformer. Polar's
+  customer-portal license-key `validate`/`activate`/`deactivate` endpoints need no auth
+  (body carries `key` + `organization_id`), so the entitlement gate stays serverless.
+- **Pricing is $4.99/month flat base + metered usage**, not $19.95 flat. The flat base
+  (a Polar subscription with a License Keys benefit) is the entitlement gate. Every
+  tweet read is metered. X itself now bills pay-per-use at $0.005/read, so the metered
+  pass-through is fair. Metered ingestion needs an Organization Access Token, which must
+  not ship in the app, so usage events post to a small server-side relay
+  (`POLAR_USAGE_RELAY_URL`); the app's `UsageReporter` no-ops when the URL is unset.
+- **Optionality:** Twitter is the first instance of a general "paid Sync class". Gating
+  routes through a `PaidFeature` abstraction (sync -> feature -> entitlement), so a
+  future paywall over another sync or a group is a data change, not a code sweep.
+
+Read `tasks/todo.md` for the commit-by-commit plan.
+
 ## Goal
 
 Make Twitter a paid source at **$19.95 USD/month** via Lemon Squeezy (merchant of

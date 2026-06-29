@@ -55,6 +55,7 @@ struct TwitterPaywallSheet: View {
                 }
                 .padding(20)
             }
+            finePrint(theme: theme)
             Divider().background(theme.divider)
             footer(theme: theme)
         }
@@ -180,6 +181,18 @@ struct TwitterPaywallSheet: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    // MARK: Fine print
+
+    private func finePrint(theme: ThemePalette) -> some View {
+        Text("The Twitter API costs real money to run. Your fee defrays those API calls and the billing provider's fee. Usage is capped at our cost, so when you reach the monthly limit, syncing pauses until the next month begins.")
+            .font(.system(size: 9.5))
+            .foregroundStyle(theme.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
     }
 
     // MARK: Footer

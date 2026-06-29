@@ -42,9 +42,6 @@ struct AddSourceSheet: View {
     @State private var selected: AddableSource = .remarkable
     @State private var showingPair = false
     @State private var safariHasAccess = false
-    /// The X content streams the user has opted into; only their scopes are
-    /// requested at connect time. Defaults to all three.
-    @State private var xStreams: Set<XStream> = Set(XStream.allCases)
     @State private var xConnecting = false
     @State private var xError: String?
 
@@ -141,13 +138,8 @@ struct AddSourceSheet: View {
 
     @ViewBuilder private func xDetails(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Sync your Twitter content into any destination. Choose which content types to pull — each becomes its own sync stream with its own history. Sync Bar requests only the access the types you pick need.")
+            Text("Connect your Twitter account. Sync Bar can pull your bookmarks, likes, and posts — you pick which one each sync uses when you create it.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(XStream.allCases) { stream in
-                    streamToggle(stream, theme: theme)
-                }
-            }
             if !AuthSecrets.isXConfigured {
                 Text("Twitter isn't configured yet — add its OAuth client id (see the README) and rebuild to connect.")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
@@ -156,24 +148,6 @@ struct AddSourceSheet: View {
                 Text(xError).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
             }
         }
-    }
-
-    private func streamToggle(_ stream: XStream, theme: ThemePalette) -> some View {
-        let isOn = xStreams.contains(stream)
-        return Button(action: {
-            if isOn { xStreams.remove(stream) } else { xStreams.insert(stream) }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: isOn ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 13)).foregroundStyle(isOn ? theme.primary : theme.muted)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(stream.label).font(.system(size: 12, weight: .medium)).foregroundStyle(theme.foreground)
-                    Text(stream.subtitle).font(.system(size: 10)).foregroundStyle(theme.muted)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain)
     }
 
     private func footer(theme: ThemePalette) -> some View {
@@ -231,20 +205,21 @@ struct AddSourceSheet: View {
     /// Whether the primary action is unavailable for the current selection.
     private var primaryDisabled: Bool {
         switch selected {
-        case .x: return xConnecting || !AuthSecrets.isXConfigured || xStreams.isEmpty
+        case .x: return xConnecting || !AuthSecrets.isXConfigured
         default: return false
         }
     }
 
-    /// Runs the X OAuth flow for the chosen streams, stores the account, closes.
+    /// Runs the Twitter OAuth flow, stores the account, closes. Connecting grants
+    /// every stream's scope; the per-sync stream (bookmarks / likes / posts) is
+    /// chosen later, when a sync is created.
     private func connectX() {
-        guard !xConnecting, !xStreams.isEmpty else { return }
+        guard !xConnecting else { return }
         xConnecting = true
         xError = nil
-        let streams = XStream.allCases.filter { xStreams.contains($0) }
         Task {
             do {
-                let account = try await XAuthService.shared.connect(streams: streams)
+                let account = try await XAuthService.shared.connect(streams: XStream.allCases)
                 await MainActor.run {
                     ledger.upsertXAccount(account)
                     xConnecting = false

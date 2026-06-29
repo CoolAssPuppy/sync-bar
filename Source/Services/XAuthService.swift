@@ -82,7 +82,7 @@ enum XTokens {
 
     static func refresh(accountId: String, keychain: KeychainStore = .shared,
                         session: URLSession = .shared) async throws -> String {
-        guard AuthSecrets.isXConfigured else { throw OAuthError.notConfigured(provider: "X") }
+        guard AuthSecrets.isXConfigured else { throw OAuthError.notConfigured(provider: "Twitter") }
         guard let refreshToken = keychain.value(for: .xRefreshToken(accountId: accountId)), !refreshToken.isEmpty else {
             throw OAuthError.tokenExchangeFailed("X sign-in has expired. Reconnect the account.")
         }
@@ -183,7 +183,7 @@ final class XAuthService {
     /// account. Tokens are stored in the keychain keyed by the X user id.
     @discardableResult
     func connect(streams: [XStream]) async throws -> XAccount {
-        guard AuthSecrets.isXConfigured else { throw OAuthError.notConfigured(provider: "X") }
+        guard AuthSecrets.isXConfigured else { throw OAuthError.notConfigured(provider: "Twitter") }
         let streams = streams.isEmpty ? XStream.allCases : streams
 
         let state = OAuth.randomState()

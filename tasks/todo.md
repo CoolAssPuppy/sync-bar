@@ -50,4 +50,38 @@ abstraction, not hardcoded `.x` checks:
 
 ## Review
 
-(to be filled in as commits land)
+All 12 commits landed on branch `paid-twitter-source`, building green with `make build`
+and `make test` (388 tests, 0 failures) between each. Not pushed.
+
+What shipped:
+- Provider-neutral entitlement layer (`LicenseProvider` + `PolarLicenseClient`), so the
+  subscription provider stays swappable.
+- `PaidFeature` abstraction (Twitter = first instance) — every gate routes through it,
+  never a bare `.x` check, so a future paywall over another sync or a group is a data
+  change in `PaidFeature.sourceKinds`, not a sweep.
+- `EntitlementManager`: state machine with grace via `expiresAt`, daily 00:00 Pacific
+  re-check + launch check, pure unit-tested midnight + reduce/isEntitled helpers.
+- Un-disableable `x.sync.usage` (telemetry `bypassOptOut`) + best-effort `UsageReporter`
+  to the metered-billing relay.
+- Gates: add (paywall before OAuth), run (skip lapsed paid rules), row (inactive +
+  reactivate dialog). Settings subscription section + honest analytics copy.
+- `polar-relay/` scaffold for the metered-billing endpoint (user deploys).
+
+Deviation from the original spec, by user decision: provider is Polar (not Lemon
+Squeezy); pricing is $4.99/mo base + metered usage (not $19.95 flat). Entitlement
+persistence lives in `EntitlementManager` (keyed by feature) rather than three
+Twitter-specific `AppSettings` fields, for optionality.
+
+Manual setup still owned by the user (flagged, stubbed in code):
+- Create the Polar org + $4.99/mo product (License Keys benefit) + Meter + metered price;
+  put `POLAR_ORG_ID`, `POLAR_CHECKOUT_URL`, `POLAR_PORTAL_URL` in Doppler `sync-bar`.
+- Deploy `polar-relay/`, set `POLAR_USAGE_RELAY_URL` in Doppler.
+- Host a privacy policy; replace the placeholder `AuthSecrets.privacyPolicyURL`.
+
+Not verifiable without that setup: live activation, checkout, portal, and metered
+ingestion (the entitlement state machine, gates, and parsing are unit-tested against
+Polar's documented response shapes).
+
+Pre-existing lint note: `make lint` exits non-zero on a `force_try` in
+`NotionPageReaderTests.swift` (on `main`, untouched here). New code adds only
+force-unwrap warnings in tests, matching the existing test-suite convention.

@@ -41,6 +41,7 @@ struct AddSourceSheet: View {
 
     @State private var selected: AddableSource = .remarkable
     @State private var showingPair = false
+    @State private var showingXPaywall = false
     @State private var safariHasAccess = false
     @State private var xConnecting = false
     @State private var xError: String?
@@ -69,6 +70,12 @@ struct AddSourceSheet: View {
             RemarkablePairPanel(title: "Pair your reMarkable",
                                 onClose: { showingPair = false },
                                 onPaired: { showingPair = false; isPresented = false })
+        }
+        .sheet(isPresented: $showingXPaywall) {
+            TwitterPaywallSheet(
+                feature: .twitter,
+                onContinue: { showingXPaywall = false; connectX() },
+                onClose: { showingXPaywall = false })
         }
     }
 
@@ -182,7 +189,9 @@ struct AddSourceSheet: View {
         case .remarkable:
             showingPair = true
         case .x:
-            connectX()
+            // The paid + consent gate stands in front of OAuth: only its Continue
+            // (entitled + consented) reaches connectX.
+            showingXPaywall = true
         case .safari:
             ledger.setSafariConnected(true)
             safariHasAccess = FullDiskAccessProbe.hasAccess()

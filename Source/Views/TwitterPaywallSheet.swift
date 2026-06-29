@@ -30,6 +30,7 @@ struct TwitterPaywallSheet: View {
     @State private var licenseKey = ""
     @State private var activating = false
     @State private var errorMessage: String?
+    @State private var showingLicenseField = false
 
     /// The required consent copy. Exact wording — it is the user's data agreement.
     private let consentCopy = "I agree this source shares personal information with the app maker, such as your Twitter handle and how many times you sync. Your content is never shared."
@@ -144,17 +145,29 @@ struct TwitterPaywallSheet: View {
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Already have a license key?")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.tertiary)
+            // The license path is for the few who already paid, so it stays
+            // collapsed behind a link until asked for.
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showingLicenseField.toggle() } }) {
+                HStack(spacing: 4) {
+                    Text("Already have a license key?")
+                        .font(.system(size: 11, weight: .medium))
+                    Image(systemName: showingLicenseField ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundStyle(theme.primary)
+            }
+            .buttonStyle(.plain)
+
+            if showingLicenseField {
                 HStack(spacing: 8) {
                     TextField("Paste your license key", text: $licenseKey)
                         .textFieldStyle(.roundedBorder)
                     AppSecondaryButton(title: activating ? "Activating…" : "Activate", tint: .primary) { activate() }
                 }
-            }
-            if let errorMessage {
-                Text(errorMessage).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                if let errorMessage {
+                    Text(errorMessage).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
+                }
             }
         }
     }

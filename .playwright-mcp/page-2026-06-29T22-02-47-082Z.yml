@@ -1,0 +1,106 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]: Changes you make here don't affect your live account · Payments are not processed
+    - link "Exit sandbox" [ref=e5] [cursor=pointer]:
+      - /url: https://polar.sh/start
+  - generic [ref=e8]:
+    - generic [ref=e10]:
+      - generic [ref=e12]:
+        - img "Strategic Nerds Sandbox" [ref=e15]
+        - generic [ref=e16]: Strategic Nerds Sandbox
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - generic [ref=e21]: Sync Bar Twitter SANDBOX
+          - generic [ref=e23]:
+            - text: $5.99
+            - generic [ref=e24]: / mo
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: Subtotal
+              - generic [ref=e31]:
+                - text: $4.87
+                - generic [ref=e32]: / mo
+            - generic [ref=e33]:
+              - generic [ref=e35]: Taxes (included)
+              - generic [ref=e36]: $1.12
+            - generic [ref=e37]:
+              - generic [ref=e39]: Monthly
+              - generic [ref=e41]:
+                - text: $5.99
+                - generic [ref=e42]: / mo
+          - button "Add discount code" [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]: Add discount code
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e53]: Email
+              - textbox "Email" [ref=e55]
+            - iframe [ref=e58]:
+              - generic [ref=f4e7]:
+                - tablist "Payment Methods" [ref=f4e8]:
+                  - tab "Card" [selected] [ref=f4e9]:
+                    - generic [ref=f4e12]: Card
+                  - tab "Cash App Pay" [ref=f4e13] [cursor=pointer]:
+                    - generic [ref=f4e15]: Cash App Pay
+                - tabpanel "Card" [ref=f4e16]:
+                  - generic [ref=f4e19]:
+                    - generic [ref=f4e22]:
+                      - generic [ref=f4e24]:
+                        - generic [ref=f4e25]: Card number
+                        - generic [ref=f4e27]:
+                          - textbox "Card number" [ref=f4e29]:
+                            - /placeholder: 1234 1234 1234 1234
+                          - generic:
+                            - option "Select card brand (optional)" [disabled] [selected]
+                          - generic:
+                            - generic:
+                              - generic:
+                                - paragraph: Supported cards include Visa, Mastercard, and Discover.
+                                - generic:
+                                  - img
+                      - generic [ref=f4e31]:
+                        - generic [ref=f4e32]:
+                          - text: Expiration date
+                          - generic [ref=f4e33]: MM / YY
+                        - textbox "Expiration date MM / YY" [ref=f4e37]:
+                          - /placeholder: MM / YY
+                      - generic [ref=f4e39]:
+                        - generic [ref=f4e40]: Security code
+                        - generic [ref=f4e42]:
+                          - textbox "Security code" [ref=f4e44]:
+                            - /placeholder: CVC
+                          - generic:
+                            - generic: 3-digit code on back of card
+                            - generic:
+                              - img
+                    - button
+            - generic [ref=e59]:
+              - generic [ref=e60]: Cardholder name
+              - textbox "Cardholder name" [ref=e62]
+            - generic [ref=e63]:
+              - generic [ref=e64]: Billing address
+              - combobox [ref=e65] [cursor=pointer]:
+                - generic:
+                  - generic:
+                    - generic: Portugal
+                - img [ref=e66]
+              - combobox [ref=e68]
+            - generic [ref=e70]:
+              - checkbox "I'm purchasing as a business" [ref=e71] [cursor=pointer]
+              - checkbox
+              - generic [ref=e72] [cursor=pointer]: I'm purchasing as a business
+          - button "Subscribe now" [ref=e74] [cursor=pointer]:
+            - generic [ref=e75]: Subscribe now
+        - paragraph [ref=e77]:
+          - text: By clicking "Subscribe now," you authorize Polar Software, Inc., our online reseller and merchant of record, to immediately charge your selected payment method in the amount shown above and to charge the same amount on each subsequent billing date until you cancel, and agree to the
+          - link "Buyer Terms" [ref=e78] [cursor=pointer]:
+            - /url: https://polar.sh/legal/checkout-buyer-terms
+          - text: .
+      - link "Powered by" [ref=e79] [cursor=pointer]:
+        - /url: https://polar.sh?utm_source=checkout
+        - generic [ref=e80]: Powered by
+        - img [ref=e81]
+  - alert [ref=e90]

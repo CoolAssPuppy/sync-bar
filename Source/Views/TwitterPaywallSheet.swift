@@ -159,15 +159,25 @@ struct TwitterPaywallSheet: View {
             .buttonStyle(.plain)
 
             if showingLicenseField {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     TextField("Paste your license key", text: $licenseKey)
-                        .textFieldStyle(.roundedBorder)
-                    AppSecondaryButton(title: activating ? "Activating…" : "Activate", tint: .primary) { activate() }
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.foreground)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .background(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).fill(theme.cardInset))
+                        .overlay(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                    HStack {
+                        Spacer()
+                        AppPrimaryButton(title: activating ? "Activating…" : "Activate",
+                                         isDisabled: licenseKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || activating) { activate() }
+                    }
+                    if let errorMessage {
+                        Text(errorMessage).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
+                    }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
-                if let errorMessage {
-                    Text(errorMessage).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
-                }
             }
         }
     }

@@ -24,6 +24,12 @@ reporter no-ops; entitlement still works.
    - `POLAR_ORG_ID` — your Polar organization UUID (same value as the app's).
    - `POLAR_ACCESS_TOKEN` — an Organization Access Token (Polar → Settings →
      Developers). Secret.
+   - `RELAY_SHARED_SECRET` — recommended. A secret the app sends in `x-relay-token`.
+     When set, the relay rejects requests without it. Put the same value in Doppler
+     `sync-bar` as `POLAR_RELAY_TOKEN` so the app sends it. Always set this in
+     production.
+   - optional `MAX_READS` (defaults to `25000`, the app's per-crawl ceiling). A
+     single report above this is rejected.
    - optional `POLAR_API_BASE` (defaults to `https://api.polar.sh`; use the
      sandbox base while testing).
    - optional `POLAR_EVENT_NAME` (defaults to `x.sync.usage`; must match the Meter
@@ -45,9 +51,31 @@ POST /api/usage
   "x_user_id": "123", "is_initial": "false" }
 ```
 
-Returns `200 { ok: true, reads }` on success, `402` for an invalid/inactive
-license, `502` if Polar ingestion fails. The app treats every response as
+Returns `200 { ok: true, reads }` on success, `400` for a malformed/out-of-range
+request, `401` for a missing/wrong shared secret, `402` for an invalid/inactive
+license, `502` if Polar is unreachable. The app treats every response as
 best-effort and never blocks a sync on it.
+
+## Security posture
+
+This is a billing sink, so the handler enforces defense in depth:
+
+- **Bounded input.** `reads` must be a positive integer no larger than `MAX_READS`,
+  so a single request can't inflate a bill with an absurd value.
+- **Shared-secret gate.** With `RELAY_SHARED_SECRET` set, anonymous callers are
+  rejected, keeping random traffic off the sink and off your Polar quota.
+- **Authoritative attribution.** The customer is resolved by validating the license
+  key server-side, not trusted from the client, so a caller can't bill someone else.
+- **No error leakage.** Polar's error text is logged, never echoed to the caller.
+
+Two controls you must add at deploy time:
+
+- **Rate limiting.** Put a per-IP / per-route limit at the edge (Vercel Firewall or
+  equivalent). The function itself is stateless and can't rate-limit reliably.
+- **Replay dedup (optional but recommended).** The app sends a fresh
+  `idempotency_key` per report; back the relay with a KV store (e.g. Vercel KV) and
+  drop a key you've already seen, so a captured request can't be replayed to
+  accumulate charges. Polar events are immutable, so dedup must happen before ingest.
 
 ## A note on double counting
 

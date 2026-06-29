@@ -52,6 +52,10 @@ enum AuthSecrets {
     /// `UsageReporter` no-ops (entitlement still works without it).
     static var polarUsageRelayURL: URL? { url(infoKey: "PolarUsageRelayURL", env: "POLAR_USAGE_RELAY_URL") }
 
+    /// Shared secret sent to the usage relay (header `x-relay-token`) so the
+    /// billing sink rejects anonymous callers. Empty until the relay is deployed.
+    static var polarRelayToken: String { value(infoKey: "PolarRelayToken", env: "POLAR_RELAY_TOKEN") }
+
     /// License keys can be validated without a server, so a Polar org id alone is
     /// enough to gate the paid source and show the paste field.
     static var isPolarConfigured: Bool { !polarOrganizationId.isEmpty }

@@ -20,15 +20,22 @@ import Foundation
 
 struct UsageReporter: Sendable {
     private let relayURL: URL?
+    private let relayToken: String
     private let session: URLSession
 
-    init(relayURL: URL? = AuthSecrets.polarUsageRelayURL, session: URLSession = .shared) {
+    init(relayURL: URL? = AuthSecrets.polarUsageRelayURL,
+         relayToken: String = AuthSecrets.polarRelayToken,
+         session: URLSession = .shared) {
         self.relayURL = relayURL
+        self.relayToken = relayToken
         self.session = session
     }
 
     /// Posts a read count to the relay. No-ops when there's nothing to bill, no
     /// relay deployed, or no license key. Never throws — billing must not break a sync.
+    /// Sends the shared-secret header (so the relay can reject anonymous callers)
+    /// and a fresh idempotency key per report (so a relay with replay-dedup can
+    /// drop resends).
     func report(reads: Int, licenseKey: String?, properties: [String: String] = [:]) async {
         guard reads > 0,
               let relayURL,
@@ -37,10 +44,14 @@ struct UsageReporter: Sendable {
         var body: [String: Any] = properties
         body["license_key"] = licenseKey
         body["reads"] = reads
+        body["idempotency_key"] = UUID().uuidString
 
         var request = URLRequest(url: relayURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !relayToken.isEmpty {
+            request.setValue(relayToken, forHTTPHeaderField: "x-relay-token")
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await session.data(for: request)
     }

@@ -87,5 +87,7 @@
 	<string>$(POLAR_PORTAL_URL)</string>
 	<key>PolarUsageRelayURL</key>
 	<string>$(POLAR_USAGE_RELAY_URL)</string>
+	<key>PolarRelayToken</key>
+	<string>$(POLAR_RELAY_TOKEN)</string>
 </dict>
 </plist>

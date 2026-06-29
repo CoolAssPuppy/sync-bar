@@ -56,6 +56,13 @@ enum AuthSecrets {
     /// billing sink rejects anonymous callers. Empty until the relay is deployed.
     static var polarRelayToken: String { value(infoKey: "PolarRelayToken", env: "POLAR_RELAY_TOKEN") }
 
+    /// Polar API base. Lets dev/staging point at Polar's sandbox
+    /// (`https://sandbox-api.polar.sh`, no real money) while production uses the
+    /// live API. Defaults to the live API when unset.
+    static var polarAPIBaseURL: URL {
+        url(infoKey: "PolarAPIBase", env: "POLAR_API_BASE") ?? URL(staticString: "https://api.polar.sh")
+    }
+
     /// License keys can be validated without a server, so a Polar org id alone is
     /// enough to gate the paid source and show the paste field.
     static var isPolarConfigured: Bool { !polarOrganizationId.isEmpty }

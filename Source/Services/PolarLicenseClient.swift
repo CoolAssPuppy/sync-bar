@@ -21,7 +21,7 @@ struct PolarLicenseClient: LicenseProvider {
 
     init(organizationId: String = AuthSecrets.polarOrganizationId,
          session: URLSession = .shared,
-         baseURL: URL = URL(staticString: "https://api.polar.sh")) {
+         baseURL: URL = AuthSecrets.polarAPIBaseURL) {
         self.organizationId = organizationId
         self.session = session
         self.baseURL = baseURL

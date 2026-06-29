@@ -6,15 +6,20 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject private var entitlement = EntitlementManager.shared
     @Environment(\.theme) private var theme
 
     @State private var openaiKey: String = ""
     @State private var anthropicKey: String = ""
     @State private var telemetryOptedIn = Telemetry.isOptedIn
+    @State private var licenseKeyInput: String = ""
+    @State private var activatingLicense = false
+    @State private var licenseError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,6 +33,7 @@ struct SettingsView: View {
 
                 VStack(spacing: 14) {
                     folderVisibilityCard
+                    subscriptionCard
                     notificationsCard
                     updatesCard
                     contactCard
@@ -78,7 +84,7 @@ struct SettingsView: View {
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Send anonymous usage data",
-                              description: "Anonymous metrics to help improve Sync Bar. Never any personal data.") {
+                              description: "Anonymous metrics to improve Sync Bar. Paid Twitter syncs separately report usage (your handle and sync counts) you consented to when adding the source.") {
                     Toggle("", isOn: Binding(
                         get: { telemetryOptedIn },
                         set: { newValue in
@@ -183,6 +189,100 @@ struct SettingsView: View {
                     Toggle("", isOn: $settings.ignoreUnfiledNotes)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
+            }
+        }
+    }
+
+    // MARK: Subscription
+
+    private var subscriptionCard: some View {
+        AppCard("Subscription") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Twitter")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.foreground)
+                    Spacer()
+                    subscriptionBadge
+                }
+                Text(subscriptionBlurb)
+                    .font(.system(size: 11)).foregroundStyle(theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if entitlement.state(for: .twitter) == .active {
+                    HStack(spacing: 8) {
+                        AppSecondaryButton(title: "Manage subscription", systemImage: "creditcard",
+                                           tint: .primary) { openPortal() }
+                            .disabled(AuthSecrets.polarPortalURL == nil)
+                        AppSecondaryButton(title: "Remove key", systemImage: "trash",
+                                           tint: .warning) { removeLicense() }
+                    }
+                } else {
+                    AppPrimaryButton(title: "Subscribe", systemImage: "arrow.up.forward.app",
+                                     isDisabled: AuthSecrets.polarCheckoutURL == nil) { openCheckout() }
+                    HStack(spacing: 6) {
+                        SecureField("Paste license key", text: $licenseKeyInput)
+                            .textFieldStyle(.roundedBorder)
+                        AppSecondaryButton(title: activatingLicense ? "Activating…" : "Activate",
+                                           tint: .primary) { activateLicense() }
+                    }
+                    if let licenseError {
+                        Text(licenseError).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.destructive)
+                    }
+                }
+
+                Link(destination: AuthSecrets.privacyPolicyURL) {
+                    Text("Privacy policy").font(.system(size: 11)).foregroundStyle(theme.primary)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var subscriptionBadge: some View {
+        let (label, color): (String, Color) = {
+            switch entitlement.state(for: .twitter) {
+            case .active: return ("Active", theme.success)
+            case .lapsed: return ("Inactive", theme.warning)
+            case .none:   return ("Not subscribed", theme.muted)
+            }
+        }()
+        return Text(label)
+            .font(.system(size: 10.5, weight: .semibold)).foregroundStyle(color)
+            .padding(.horizontal, 9).frame(height: 22)
+            .background(Capsule().fill(color.opacity(0.12)))
+    }
+
+    private var subscriptionBlurb: String {
+        switch entitlement.state(for: .twitter) {
+        case .active: return "$4.99/month plus usage. Your Twitter syncs are running."
+        case .lapsed: return "Your subscription lapsed. Twitter syncs are paused until you re-subscribe."
+        case .none:   return "Twitter is a paid source: $4.99/month plus usage for the tweets you sync."
+        }
+    }
+
+    private func openCheckout() {
+        if let url = AuthSecrets.polarCheckoutURL { NSWorkspace.shared.open(url) }
+    }
+    private func openPortal() {
+        if let url = AuthSecrets.polarPortalURL { NSWorkspace.shared.open(url) }
+    }
+    private func removeLicense() {
+        Task { await entitlement.removeLicense(for: .twitter) }
+    }
+    private func activateLicense() {
+        let key = licenseKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !activatingLicense else { return }
+        activatingLicense = true
+        licenseError = nil
+        Task {
+            do {
+                try await entitlement.activate(key: key, for: .twitter)
+                activatingLicense = false
+                licenseKeyInput = ""
+            } catch {
+                activatingLicense = false
+                licenseError = Formatters.userMessage(for: error)
             }
         }
     }

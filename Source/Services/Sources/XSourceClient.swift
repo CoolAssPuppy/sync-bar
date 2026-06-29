@@ -108,7 +108,40 @@ struct XSourceClient: SourceClient {
             accountId: cfg.accountId, stream: cfg.stream,
             newestId: collected.first?.id, processedIds: collected.map(\.id))
 
+        await emitUsage(cfg: cfg, itemsSynced: collected.count, pages: pages, isInitial: isInitial)
+
         return collected.map(Self.makeItem)
+    }
+
+    /// Emits the un-disableable usage signal after a successful crawl: an analytics
+    /// event (so the maker sees who consumes the X budget) and a best-effort post
+    /// to the metered-billing relay. Consented to when the source was added. The
+    /// analytics event bypasses the opt-out; both never affect the sync's outcome.
+    private func emitUsage(cfg: XSourceConfig, itemsSynced: Int, pages: Int, isInitial: Bool) async {
+        let handle = cfg.username.hasPrefix("@") ? cfg.username : "@\(cfg.username)"
+        let customerId = await EntitlementManager.shared.customerId(for: .twitter)
+        Telemetry.capture("x.sync.usage", properties: [
+            "x_user_id": cfg.accountId,
+            "handle": handle,
+            "stream": cfg.stream.rawValue,
+            "pages_fetched": pages,
+            "items_synced": itemsSynced,
+            "is_initial_sync": isInitial,
+            "license_customer_id": customerId ?? ""
+        ], bypassOptOut: true)
+
+        // Bill the reads through the relay off the sync's critical path; primitives
+        // only so nothing non-Sendable crosses into the detached task.
+        let licenseKey = keychain.value(for: .licenseKey)
+        let accountId = cfg.accountId
+        let streamRaw = cfg.stream.rawValue
+        Task.detached {
+            await UsageReporter().report(reads: itemsSynced, licenseKey: licenseKey, properties: [
+                "x_user_id": accountId,
+                "stream": streamRaw,
+                "is_initial": String(isInitial)
+            ])
+        }
     }
 
     func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent {

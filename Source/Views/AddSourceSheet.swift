@@ -141,7 +141,7 @@ struct AddSourceSheet: View {
 
     @ViewBuilder private func xDetails(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Sync your X content into any destination. Choose which content types to pull — each becomes its own sync stream with its own history. Sync Bar requests only the access the types you pick need.")
+            Text("Sync your Twitter content into any destination. Choose which content types to pull — each becomes its own sync stream with its own history. Sync Bar requests only the access the types you pick need.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(XStream.allCases) { stream in
@@ -149,7 +149,7 @@ struct AddSourceSheet: View {
                 }
             }
             if !AuthSecrets.isXConfigured {
-                Text("X isn't configured yet — add its OAuth client id (see the README) and rebuild to connect.")
+                Text("Twitter isn't configured yet — add its OAuth client id (see the README) and rebuild to connect.")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
             }
             if let xError {
@@ -189,7 +189,7 @@ struct AddSourceSheet: View {
         switch selected {
         case .remarkable: return "Pair reMarkable"
         case .safari:     return "Connect Safari"
-        case .x:          return xConnecting ? "Connecting…" : "Connect X"
+        case .x:          return xConnecting ? "Connecting…" : "Connect Twitter"
         case .reminders:  return "Connect Reminders"
         }
     }

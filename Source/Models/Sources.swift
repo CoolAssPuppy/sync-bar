@@ -25,7 +25,7 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "reMarkable"
         case .safari:     return "Safari"
         case .notion:     return "Notion"
-        case .x:          return "X"
+        case .x:          return "Twitter"
         }
     }
 
@@ -56,20 +56,23 @@ enum SourceKind: String, Codable, CaseIterable, Identifiable, Hashable {
         case .remarkable: return "Remarkable"
         case .safari:     return "Safari"
         case .notion:     return "Destinations/Notion"
-        case .x:          return "Sources/X"
+        // No brand asset: Twitter renders the `bird` SF Symbol (systemImage)
+        // rather than the old X logo. An empty name fails the NSImage lookup in
+        // BrandIcon, which then falls back to the symbol.
+        case .x:          return ""
         }
     }
 
     /// Whether the brand mark is a single-color silhouette that must be tinted
     /// to stay visible across themes (see DestinationKind for the same idea).
-    /// The X mark is a solid black glyph and would vanish on dark themes, so it
-    /// renders as a template tinted to the foreground.
+    /// Twitter falls back to the `bird` SF Symbol, which is already tinted to the
+    /// foreground in BrandIcon's symbol path, so it needs no template treatment.
     var brandMarkIsMonochrome: Bool {
         switch self {
         case .remarkable: return false
         case .safari:     return false
         case .notion:     return false
-        case .x:          return true
+        case .x:          return false
         }
     }
 

@@ -52,7 +52,6 @@ struct TwitterPaywallSheet: View {
                     } else {
                         subscribeSection(theme: theme)
                     }
-                    privacyLink(theme: theme)
                 }
                 .padding(20)
             }
@@ -157,6 +156,7 @@ struct TwitterPaywallSheet: View {
                 .foregroundStyle(theme.primary)
             }
             .buttonStyle(.plain)
+            .padding(.top, 8)
 
             if showingLicenseField {
                 VStack(alignment: .leading, spacing: 10) {
@@ -182,18 +182,15 @@ struct TwitterPaywallSheet: View {
         }
     }
 
-    private func privacyLink(theme: ThemePalette) -> some View {
-        Link(destination: AuthSecrets.privacyPolicyURL) {
-            Text("Privacy policy")
-                .font(.system(size: 11)).foregroundStyle(theme.primary)
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: Footer
 
     private func footer(theme: ThemePalette) -> some View {
         HStack {
+            Link(destination: AuthSecrets.privacyPolicyURL) {
+                Text("Privacy policy")
+                    .font(.system(size: 11)).foregroundStyle(theme.primary)
+            }
+            .buttonStyle(.plain)
             Spacer()
             AppSecondaryButton(title: "Cancel") { onClose() }
             AppPrimaryButton(title: "Continue", systemImage: "arrow.right", isDisabled: !canProceed) {

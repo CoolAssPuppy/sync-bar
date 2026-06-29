@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.4.0</title>
+      <pubDate>Mon, 29 Jun 2026 12:13:16 +0000</pubDate>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Sync Twitter Bookmarks, Likes, and Posts to destinations of your choice</li><li>Free for a limited time (Elon started charging for the API, F Elon)</li><li>Twitter will become a paid sync by the end of July</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.4.0.dmg"
+        sparkle:edSignature="kbkvljvE93Jp8eXT9ltnyPZ2Z7P5S8v1ap2AX/Vh16D8P/cGgfHf6pOFnchspTslenL8wzRE6vuNrDdU7yBEDw=="
+        length="8763358"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.3.3</title>
       <pubDate>Sat, 20 Jun 2026 19:10:00 +0000</pubDate>
       <sparkle:version>22</sparkle:version>

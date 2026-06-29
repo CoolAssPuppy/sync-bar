@@ -1,8 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 — 2026-06-29
+
+- Sync Twitter Bookmarks, Likes, and Posts to destinations of your choice.
+- Free for a limited time (Elon started charging for the API, F Elon).
+- Twitter will become a paid sync by the end of July.
 
 ### Added
+- **Twitter as a source** (shown with the Twitter bird; internally the `X` source). Connect once and choose Bookmarks, Likes, or Posts per sync.
+- **Twitter → Notion database column mapping.** The mapping is source-aware: Twitter fields (tweet text, author handle/name, tweet URL, date, id) map to your database's columns, with smart defaults (URL, Author, Site, Source, Tags, Saved, Status). The schema panel surfaces load errors instead of spinning forever.
+- All UI text is now selectable and copyable, including error messages.
 - **X (Twitter) as a source.** Connect an X account with OAuth 2.0 + PKCE and
   sync three independent content streams — Bookmarks, Likes, and your own Posts —
   into any destination. Only the scopes the chosen streams need are requested,

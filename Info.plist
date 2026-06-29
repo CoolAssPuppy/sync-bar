@@ -79,5 +79,13 @@
 	<string>https://us.i.posthog.com</string>
 	<key>TELEMETRY_SOURCE</key>
 	<string>sync_bar_macos</string>
+	<key>PolarOrgID</key>
+	<string>$(POLAR_ORG_ID)</string>
+	<key>PolarCheckoutURL</key>
+	<string>$(POLAR_CHECKOUT_URL)</string>
+	<key>PolarPortalURL</key>
+	<string>$(POLAR_PORTAL_URL)</string>
+	<key>PolarUsageRelayURL</key>
+	<string>$(POLAR_USAGE_RELAY_URL)</string>
 </dict>
 </plist>

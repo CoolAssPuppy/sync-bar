@@ -33,6 +33,39 @@ enum AuthSecrets {
     /// "bring your own Twitter key" works with just the id.
     static var isXConfigured: Bool { !xClientId.isEmpty }
 
+    // MARK: Polar (paid Sync class)
+
+    /// Polar organization id — required to validate/activate license keys. Public
+    /// (it's the org UUID), so it ships in the app like the OAuth client ids.
+    static var polarOrganizationId: String { value(infoKey: "PolarOrgID", env: "POLAR_ORG_ID") }
+
+    /// Hosted checkout for the paid subscription. The paywall's Subscribe button
+    /// opens it; nil until the Polar product exists, which disables the button.
+    static var polarCheckoutURL: URL? { url(infoKey: "PolarCheckoutURL", env: "POLAR_CHECKOUT_URL") }
+
+    /// Polar customer portal — where a subscriber manages or cancels. Linked from
+    /// Settings; nil until configured.
+    static var polarPortalURL: URL? { url(infoKey: "PolarPortalURL", env: "POLAR_PORTAL_URL") }
+
+    /// The server-side relay that holds the Polar access token and ingests usage
+    /// events. The app posts read counts here; nil until deployed, in which case
+    /// `UsageReporter` no-ops (entitlement still works without it).
+    static var polarUsageRelayURL: URL? { url(infoKey: "PolarUsageRelayURL", env: "POLAR_USAGE_RELAY_URL") }
+
+    /// License keys can be validated without a server, so a Polar org id alone is
+    /// enough to gate the paid source and show the paste field.
+    static var isPolarConfigured: Bool { !polarOrganizationId.isEmpty }
+
+    /// Privacy policy linked from the consent sheet and Settings. Placeholder
+    /// until a real policy is hosted (the paid source is the first to collect
+    /// personal data, so this must be live before shipping).
+    static let privacyPolicyURL = URL(staticString: "https://www.strategicnerds.com/privacy")
+
+    private static func url(infoKey: String, env: String) -> URL? {
+        let raw = value(infoKey: infoKey, env: env)
+        return raw.isEmpty ? nil : URL(string: raw)
+    }
+
     private static func value(infoKey: String, env: String) -> String {
         if let fromEnv = ProcessInfo.processInfo.environment[env], !fromEnv.isEmpty {
             return fromEnv

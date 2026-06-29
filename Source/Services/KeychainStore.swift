@@ -37,6 +37,11 @@ final class KeychainStore: @unchecked Sendable {
         case xAccessToken(accountId: String)
         case xRefreshToken(accountId: String)
         case xTokenExpiry(accountId: String)
+        // Paid Sync class license (provider-neutral so the subscription provider
+        // stays swappable). `licenseActivationId` is the per-device activation
+        // returned at activate time, replayed on validate/deactivate.
+        case licenseKey
+        case licenseActivationId
 
         fileprivate var account: String {
             switch self {
@@ -52,6 +57,8 @@ final class KeychainStore: @unchecked Sendable {
             case .xAccessToken(let id):          return "x.\(id).access_token"
             case .xRefreshToken(let id):         return "x.\(id).refresh_token"
             case .xTokenExpiry(let id):          return "x.\(id).token_expiry"
+            case .licenseKey:                    return "license.key"
+            case .licenseActivationId:           return "license.activation_id"
             }
         }
     }

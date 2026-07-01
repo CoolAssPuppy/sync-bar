@@ -154,4 +154,39 @@ final class MarkdownDestinationClientTests: XCTestCase {
         // ":" and "?" replaced with "-", slash kept as the folder boundary.
         XCTAssertEqual(written.lastPathComponent, "Q3- plan-.md")
     }
+
+    /// A "/" inside a *token value* (a note titled "Jess/Prashant …") must not
+    /// spawn a subfolder. Only a literal "/" in the template makes folders; the
+    /// slash in the substituted title is sanitized into the file name.
+    func test_slash_in_title_value_does_not_create_subfolder() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("syncbar-md-title-slash-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let client = MarkdownDestinationClient()
+        let configuration = DestinationConfiguration.markdownFolder(
+            MarkdownFolderDestinationConfig(
+                folderPath: tempDir.path,
+                fileNameTemplate: "{date}-{title}",
+                includeFrontmatter: false
+            )
+        )
+        let payload = DestinationPayload(
+            title: "Jess/Prashant Bi-Weekly 1-1",
+            body: "x",
+            sourceDate: Date(timeIntervalSince1970: 1_700_000_000),
+            pdfData: nil,
+            ocrProvider: nil,
+            ruleNotebookName: "Supabase",
+            pageNumber: 1
+        )
+
+        let result = try await client.write(payload: payload, configuration: configuration, existingExternalId: nil)
+        let written = try XCTUnwrap(result.externalURL)
+
+        // The file lands directly in the base folder, not inside a "…-Jess" dir.
+        XCTAssertEqual(written.deletingLastPathComponent().path, tempDir.path)
+        XCTAssertTrue(written.lastPathComponent.hasSuffix("-Jess-Prashant Bi-Weekly 1-1.md"))
+    }
 }

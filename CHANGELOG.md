@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.1 — 2026-07-01
+
+### Fixed
+- Notion → Markdown: a note whose title contains a `/` no longer spawns a stray
+  subfolder on sync. The template is now split into path components *before*
+  tokens are substituted, so a `/` arriving through a value (e.g. a note titled
+  `Jess/Prashant 1-1`) is sanitized into the file name instead of creating a
+  directory.
+
 ## 1.4.0 — 2026-06-29
 
 - Sync Twitter Bookmarks, Likes, and Posts to destinations of your choice.

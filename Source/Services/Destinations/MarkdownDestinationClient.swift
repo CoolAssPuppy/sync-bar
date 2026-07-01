@@ -74,6 +74,11 @@ struct MarkdownDestinationClient: DestinationClient {
     /// subfolder, so a database fans out across folders the way the Python backup
     /// does. A "/" in the template makes further subfolders; each component is
     /// independently sanitized.
+    ///
+    /// The template is split on "/" *before* tokens are substituted, so only a
+    /// literal separator in the template creates a subfolder. A "/" that arrives
+    /// through a token value (e.g. a note titled "Jess/Prashant") is sanitized
+    /// into the file name instead of silently spawning a directory.
     static func resolveRelativePath(template: String, payload: DestinationPayload) -> String {
         let context = TitleTemplateContext(
             notebook: payload.ruleNotebookName,
@@ -82,9 +87,10 @@ struct MarkdownDestinationClient: DestinationClient {
             title: payload.title,
             folderName: payload.folderName
         )
-        let resolved = context.apply(to: template.isEmpty ? "{notebook}" : template)
         let categoryComponents = payload.folderPath.map { sanitizeComponent($0) }
-        let templateComponents = resolved.components(separatedBy: "/").map { sanitizeComponent($0) }
+        let templateComponents = (template.isEmpty ? "{notebook}" : template)
+            .components(separatedBy: "/")
+            .map { sanitizeComponent(context.apply(to: $0)) }
         let components = (categoryComponents + templateComponents)
             .filter { !$0.isEmpty && $0 != "." && $0 != ".." }
         let relative = components.isEmpty ? "note" : components.joined(separator: "/")

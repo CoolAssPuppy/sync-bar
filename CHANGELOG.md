@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- X threads: bookmarked or liked tweets now sync with the author's own
+  thread (self-replies only, never other people's replies), separated by a
+  `~~~` rule between tweets. Mid-thread bookmarks fetch the conversation
+  root too. Threads older than 7 days sync root-only (X's recent-search
+  window); threads cap at 100 self-replies; the thread is captured at sync
+  time and already-synced tweets are not re-expanded. Thread reads bill
+  against the same 650/month budget as the crawl. Own posts are excluded —
+  each thread tweet already syncs as its own item.
+- Notion mapping: a new "Full text (tweet + thread)" field (`{text}` token)
+  carries the complete synced text into any rich_text column, e.g. a Notes
+  column the user adds themselves.
+- X content quality: t.co shorteners are resolved to their real URLs in the
+  synced text, and attached photos (or video preview frames) are embedded —
+  natively in Notion, as links in Apple Notes and Google Docs.
+
+### Fixed
+- Notion: rich_text property values past Notion's 2000-character
+  per-object cap are now chunked instead of failing the row write.
+
 ## 1.5.1 — 2026-07-01
 
 ### Fixed

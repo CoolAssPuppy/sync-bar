@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Twitter sync no longer spends the monthly read budget on idle checks.
+  Bookmark checks probe with a single post (1 read instead of ~100 when
+  nothing is new), and scheduled Twitter crawls run a few times a day
+  (every 8 hours) instead of every sync tick. A manual Sync now always
+  checks immediately.
+
 ## 1.6.0 — 2026-07-10
 
 ### Added

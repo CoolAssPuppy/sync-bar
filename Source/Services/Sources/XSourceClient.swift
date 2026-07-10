@@ -260,6 +260,30 @@ struct XSourceClient: SourceClient {
         return out.filter { !$0.value.isEmpty }
     }
 
+    /// Assembles the author thread around an anchor tweet: the conversation
+    /// root (when fetched), the anchor, and the author's self-replies — deduped
+    /// by id and ordered oldest-first so the thread reads top to bottom. Equal
+    /// timestamps tie-break numerically on id, which grows over time.
+    static func threadTweets(anchor: XContent, root: XContent?, replies: [XContent]) -> [XContent] {
+        var seen = Set<String>()
+        var thread: [XContent] = []
+        for tweet in [root].compactMap({ $0 }) + [anchor] + replies
+        where seen.insert(tweet.id).inserted {
+            thread.append(tweet)
+        }
+        return thread.sorted {
+            if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+            return $0.id.compare($1.id, options: .numeric) == .orderedAscending
+        }
+    }
+
+    /// The combined thread text: tweet bodies separated by a `~~~` rule, which
+    /// `blocks(from:)` keeps as its own paragraph between tweets. A single
+    /// tweet passes through unchanged.
+    static func threadText(_ tweets: [XContent]) -> String {
+        tweets.map(\.text).joined(separator: "\n~~~\n")
+    }
+
     /// Splits tweet text into paragraph blocks (one per non-empty line), the
     /// neutral shape every destination renders its own way.
     static func blocks(from text: String) -> [NoteBlock] {

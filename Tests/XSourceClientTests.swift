@@ -16,10 +16,12 @@ final class XSourceClientTests: XCTestCase {
 
     // MARK: Pure normalization
 
-    private func sampleTweet(id: String = "111", text: String = "Hello world\nmore detail") -> XContent {
+    private func sampleTweet(id: String = "111",
+                             text: String = "Hello world\nmore detail",
+                             createdAt: TimeInterval = 1_700_000_000) -> XContent {
         XContent(
             id: id, stream: .bookmarks, text: text,
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            createdAt: Date(timeIntervalSince1970: createdAt),
             author: XAuthor(id: "u1", username: "jack", displayName: "Jack D"),
             canonicalURL: URL(string: "https://x.com/jack/status/\(id)"),
             outboundLinks: [URL(string: "https://example.com")!],
@@ -54,6 +56,50 @@ final class XSourceClientTests: XCTestCase {
     func test_blocks_splits_into_paragraphs() {
         XCTAssertEqual(XSourceClient.blocks(from: "a\n\nb"), [.paragraph("a"), .paragraph("b")])
         XCTAssertEqual(XSourceClient.blocks(from: ""), [])
+    }
+
+    // MARK: Thread assembly
+
+    func test_threadTweets_orders_root_then_replies_chronologically() {
+        let root = sampleTweet(id: "100", text: "root", createdAt: 1_000)
+        let anchor = sampleTweet(id: "300", text: "anchor", createdAt: 3_000)
+        let early = sampleTweet(id: "200", text: "early reply", createdAt: 2_000)
+        let late = sampleTweet(id: "400", text: "late reply", createdAt: 4_000)
+        let thread = XSourceClient.threadTweets(anchor: anchor, root: root, replies: [late, early])
+        XCTAssertEqual(thread.map(\.id), ["100", "200", "300", "400"])
+    }
+
+    func test_threadTweets_ties_break_numerically_by_id() {
+        // Same timestamp: ids grow over time, so numeric order wins ("9" < "10").
+        let anchor = sampleTweet(id: "9", createdAt: 1_000)
+        let reply = sampleTweet(id: "10", createdAt: 1_000)
+        let thread = XSourceClient.threadTweets(anchor: anchor, root: nil, replies: [reply])
+        XCTAssertEqual(thread.map(\.id), ["9", "10"])
+    }
+
+    func test_threadTweets_dedupes_anchor_and_root() {
+        let anchor = sampleTweet(id: "100", text: "root is anchor", createdAt: 1_000)
+        let reply = sampleTweet(id: "200", createdAt: 2_000)
+        // The anchor IS the root, and the search echoed the anchor back too.
+        let thread = XSourceClient.threadTweets(anchor: anchor, root: anchor, replies: [reply, anchor])
+        XCTAssertEqual(thread.map(\.id), ["100", "200"])
+    }
+
+    func test_threadTweets_anchor_only_passthrough() {
+        let anchor = sampleTweet()
+        XCTAssertEqual(XSourceClient.threadTweets(anchor: anchor, root: nil, replies: []), [anchor])
+    }
+
+    func test_threadText_separates_tweets_with_a_rule() {
+        let first = sampleTweet(id: "1", text: "one", createdAt: 1_000)
+        let second = sampleTweet(id: "2", text: "two\nmore", createdAt: 2_000)
+        XCTAssertEqual(XSourceClient.threadText([first, second]), "one\n~~~\ntwo\nmore")
+        // A single tweet gets no separator, matching today's body exactly.
+        XCTAssertEqual(XSourceClient.threadText([first]), "one")
+        // The separator becomes its own paragraph between the tweets' lines.
+        XCTAssertEqual(
+            XSourceClient.blocks(from: XSourceClient.threadText([first, second])),
+            [.paragraph("one"), .paragraph("~~~"), .paragraph("two"), .paragraph("more")])
     }
 
     // MARK: Crawl (end-to-end via stub)

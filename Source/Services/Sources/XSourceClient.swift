@@ -100,6 +100,10 @@ struct XSourceClient: SourceClient {
         defer { readBudget.record(reads: reads, now: now) }
 
         crawl: while pagesFetched < maxPagesPerCrawl, reads < budgetLeft {
+            // Bookmarks can't narrow with since_id, so an idle incremental check
+            // would bill a full page for nothing. Probe with a single post first;
+            // only when it turns out to be new do follow-up pages go full-size.
+            let isProbe = !isInitial && !cfg.stream.supportsSinceId && pagesFetched == 0
             let page = try await api.page(
                 stream: cfg.stream,
                 userId: cfg.accountId,
@@ -107,7 +111,8 @@ struct XSourceClient: SourceClient {
                 paginationToken: pageToken,
                 // since_id narrows incremental fetches on endpoints that support
                 // it; the stop-at-processed check below is the universal guard.
-                sinceId: isInitial ? nil : state.newestSyncedId)
+                sinceId: isInitial ? nil : state.newestSyncedId,
+                maxResults: isProbe ? 1 : 100)
 
             pagesFetched += 1
             reads += page.items.count

@@ -210,6 +210,103 @@ final class XSourceClientTests: XCTestCase {
         XCTAssertEqual(store.state(accountId: "u1", stream: .posts).newestSyncedId, "4")
     }
 
+    // MARK: Incremental probe (bookmarks lack since_id, so idle checks must be cheap)
+
+    private func maxResults(_ request: URLRequest) -> String? {
+        URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "max_results" }?.value
+    }
+
+    /// Lock-guarded accumulator so stub handlers can record page sizes.
+    private final class SizeLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String] = []
+        func append(_ value: String?) {
+            lock.lock(); defer { lock.unlock() }
+            values.append(value ?? "?")
+        }
+        var all: [String] { lock.lock(); defer { lock.unlock() }; return values }
+        var first: String? { all.first }
+    }
+
+    func test_incremental_bookmarks_check_probes_with_a_single_post() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let store = makeStateStore()
+        store.recordSuccess(accountId: "u1", stream: .bookmarks, newestId: "5", processedIds: ["5"])
+
+        let sizes = SizeLog()
+        StubURLProtocol.handler = { request, _ in
+            sizes.append(self.maxResults(request))
+            // Nothing new: the newest bookmark is the one already synced.
+            return (200, self.timelineJSON(ids: ["5"], nextToken: "MORE"))
+        }
+        let budget = makeBudget()
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store,
+                                   maxPagesPerCrawl: 10, readBudget: budget)
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .bookmarks))
+
+        let items = try await client.listItems(config: config)
+        XCTAssertTrue(items.isEmpty)
+        XCTAssertEqual(sizes.first, "1", "an idle bookmarks check must bill a single read, not a full page")
+        XCTAssertEqual(budget.reads(now: Date()), 1)
+    }
+
+    func test_incremental_bookmarks_probe_expands_to_full_pages_when_new() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let store = makeStateStore()
+        store.recordSuccess(accountId: "u1", stream: .bookmarks, newestId: "5", processedIds: ["5"])
+
+        let sizes = SizeLog()
+        StubURLProtocol.handler = { request, _ in
+            sizes.append(self.maxResults(request))
+            if self.paginationToken(request) == "P2" {
+                // Full follow-up page: the rest of the new items, then the cursor.
+                return (200, self.timelineJSON(ids: ["7", "6", "5"], nextToken: nil))
+            }
+            // The probe finds a new bookmark, so the crawl must continue.
+            return (200, self.timelineJSON(ids: ["8"], nextToken: "P2"))
+        }
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store,
+                                   maxPagesPerCrawl: 10, readBudget: makeBudget())
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .bookmarks))
+
+        let items = try await client.listItems(config: config)
+        XCTAssertEqual(items.map(\.id), ["8", "7", "6"], "everything newer than the cursor syncs")
+        XCTAssertEqual(sizes.all, ["1", "100"], "probe first, full pages once something is new")
+    }
+
+    func test_initial_bookmarks_crawl_uses_full_pages() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let sizes = SizeLog()
+        StubURLProtocol.handler = { request, _ in
+            sizes.append(self.maxResults(request))
+            return (200, self.timelineJSON(ids: ["2", "1"], nextToken: nil))
+        }
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: makeBudget())
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .bookmarks))
+        _ = try await client.listItems(config: config)
+        XCTAssertEqual(sizes.first, "100", "the initial backfill crawl stays efficient")
+    }
+
+    func test_incremental_posts_check_keeps_full_pages() async throws {
+        // since_id already narrows likes/posts server-side, so the response only
+        // contains new tweets and a full page size costs nothing extra.
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let store = makeStateStore()
+        store.recordSuccess(accountId: "u1", stream: .posts, newestId: "5", processedIds: ["5"])
+        let sizes = SizeLog()
+        StubURLProtocol.handler = { request, _ in
+            sizes.append(self.maxResults(request))
+            return (200, self.timelineJSON(ids: [], nextToken: nil))
+        }
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: store,
+                                   maxPagesPerCrawl: 10, readBudget: makeBudget())
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
+        _ = try await client.listItems(config: config)
+        XCTAssertEqual(sizes.first, "100")
+    }
+
     // MARK: Read-budget accounting (the flat-rate cost ceiling)
 
     func test_crawl_records_every_billed_read_to_the_budget() async throws {

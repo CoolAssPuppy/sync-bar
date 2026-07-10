@@ -178,7 +178,90 @@ struct XSourceClient: SourceClient {
             // text the item carried rather than a second network call.
             return NoteContent(blocks: Self.blocks(from: item.metadata["body"] ?? ""), provider: "x")
         }
-        return NoteContent(blocks: Self.blocks(from: tweet.text), provider: "x")
+        let thread = await expandedThread(for: tweet, config: config)
+        return NoteContent(blocks: Self.blocks(from: Self.threadText(thread)), provider: "x")
+    }
+
+    // MARK: Thread expansion
+
+    /// Fetches the author's own thread around an anchor tweet (bookmarks and
+    /// likes only — a posts crawl already delivers every thread tweet as its
+    /// own item). Runs lazily here because the coordinator only renders content
+    /// for items it will actually write, which bounds the extra API spend.
+    /// Never throws: any failure degrades to the anchor alone, and a 403 (a
+    /// tier without search access) stops further attempts this cycle.
+    private func expandedThread(for tweet: XContent, config: SourceConfiguration) async -> [XContent] {
+        guard let cfg = try? xConfig(config), cfg.stream != .posts,
+              let conversationId = tweet.conversationId, !tweet.author.id.isEmpty,
+              !cache.isSearchUnavailable else {
+            return [tweet]
+        }
+        if let cached = cache.expansion(conversationId: conversationId) {
+            return Self.threadTweets(anchor: tweet, root: nil, replies: cached)
+        }
+        // Expansion bills reads like the crawl does; a spent month means no thread.
+        let now = Date()
+        guard readBudget.remaining(now: now) > 0 else { return [tweet] }
+
+        var fetched: [XContent] = []
+        var reads = 0
+        defer {
+            if reads > 0 { readBudget.record(reads: reads, now: now) }
+        }
+        do {
+            let token = try await XTokens.validAccessToken(accountId: cfg.accountId,
+                                                           keychain: keychain, session: session)
+            let api = XAPIClient(session: session)
+            fetched = try await api.selfReplies(conversationId: conversationId,
+                                                authorId: tweet.author.id,
+                                                token: token, stream: cfg.stream)
+            reads += fetched.count
+            // A mid-thread anchor needs the conversation root too — one more
+            // read, kept only when the root is the same author's tweet. A root
+            // failure (deleted tweet, out of the search window) costs nothing.
+            if conversationId != tweet.id, !fetched.contains(where: { $0.id == conversationId }) {
+                let roots = (try? await api.tweets(ids: [conversationId], token: token, stream: cfg.stream)) ?? []
+                reads += roots.count
+                fetched.append(contentsOf: roots.filter { $0.author.id == tweet.author.id })
+            }
+            // Memoize even an empty result so a thread-less conversation (or one
+            // past the 7-day search window) isn't re-queried this cycle.
+            cache.storeExpansion(fetched, conversationId: conversationId)
+            if reads > 0 {
+                await emitExpansionUsage(cfg: cfg, reads: reads, conversationId: conversationId)
+            }
+        } catch XAPIError.requestFailed(let status, _) where status == 403 {
+            // This tier has no search access; don't burn a request per item.
+            cache.markSearchUnavailable()
+            return [tweet]
+        } catch {
+            return [tweet]
+        }
+        return Self.threadTweets(anchor: tweet, root: nil, replies: fetched)
+    }
+
+    /// Mirrors `emitUsage` for expansion reads so the meter and the billing
+    /// relay stay accurate about what a thread fetch cost.
+    private func emitExpansionUsage(cfg: XSourceConfig, reads: Int, conversationId: String) async {
+        let customerId = await EntitlementManager.shared.customerId(for: .twitter)
+        Telemetry.capture("x.thread.usage", properties: [
+            "x_user_id": cfg.accountId,
+            "stream": cfg.stream.rawValue,
+            "conversation_id": conversationId,
+            "reads": reads,
+            "license_customer_id": customerId ?? ""
+        ], bypassOptOut: true)
+
+        let licenseKey = keychain.value(for: .licenseKey)
+        let accountId = cfg.accountId
+        let streamRaw = cfg.stream.rawValue
+        Task.detached {
+            await UsageReporter().report(reads: reads, licenseKey: licenseKey, properties: [
+                "x_user_id": accountId,
+                "stream": streamRaw,
+                "thread_expansion": "true"
+            ])
+        }
     }
 
     func resolveTitle(for item: SourceItem,
@@ -306,6 +389,12 @@ struct XSourceClient: SourceClient {
 private final class TweetBodyCache: @unchecked Sendable {
     private let lock = NSLock()
     private var byId: [String: XContent] = [:]
+    /// Memoized thread expansions per conversation id — including empty ones,
+    /// so a fruitless search isn't repeated within the cycle.
+    private var expansions: [String: [XContent]] = [:]
+    /// Latched when search answers 403 (a tier without search access), so one
+    /// rejection stops the per-item attempts for the rest of the cycle.
+    private var searchUnavailable = false
 
     func store(_ tweets: [XContent]) {
         lock.lock(); defer { lock.unlock() }
@@ -315,5 +404,25 @@ private final class TweetBodyCache: @unchecked Sendable {
     func tweet(id: String) -> XContent? {
         lock.lock(); defer { lock.unlock() }
         return byId[id]
+    }
+
+    func expansion(conversationId: String) -> [XContent]? {
+        lock.lock(); defer { lock.unlock() }
+        return expansions[conversationId]
+    }
+
+    func storeExpansion(_ tweets: [XContent], conversationId: String) {
+        lock.lock(); defer { lock.unlock() }
+        expansions[conversationId] = tweets
+    }
+
+    var isSearchUnavailable: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return searchUnavailable
+    }
+
+    func markSearchUnavailable() {
+        lock.lock(); defer { lock.unlock() }
+        searchUnavailable = true
     }
 }

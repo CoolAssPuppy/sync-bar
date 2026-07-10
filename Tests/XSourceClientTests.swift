@@ -243,6 +243,245 @@ final class XSourceClientTests: XCTestCase {
         XCTAssertEqual(budget.reads(now: Date()), 2, "page 1's billed reads are charged even though page 2 failed")
     }
 
+    // MARK: Thread expansion (end-to-end via stub)
+
+    /// Thread-safe tally of the stubbed requests, since expansion must issue
+    /// (or provably not issue) extra search/lookup calls.
+    private final class RequestLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var searches = 0
+        private var lookups = 0
+        private var lastQuery: String?
+        func record(_ request: URLRequest) {
+            lock.lock(); defer { lock.unlock() }
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/search/recent") {
+                searches += 1
+                lastQuery = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first { $0.name == "query" }?.value
+            } else if path.hasSuffix("/2/tweets") {
+                lookups += 1
+            }
+        }
+        var searchCount: Int { lock.lock(); defer { lock.unlock() }; return searches }
+        var lookupCount: Int { lock.lock(); defer { lock.unlock() }; return lookups }
+        var lastSearchQuery: String? { lock.lock(); defer { lock.unlock() }; return lastQuery }
+    }
+
+    private func tweetJSON(id: String, conversationId: String? = nil,
+                           authorId: String = "u1", minute: Int = 0) -> String {
+        let conversation = conversationId.map { #","conversation_id":"\#($0)""# } ?? ""
+        let stamp = String(format: "2026-06-20T12:%02d:00.000Z", minute)
+        return #"{"id":"\#(id)","text":"tweet \#(id)","created_at":"\#(stamp)","author_id":"\#(authorId)"\#(conversation)}"#
+    }
+
+    private func envelope(_ tweets: [String]) -> Data {
+        Data(#"{"data":[\#(tweets.joined(separator: ","))],"includes":{"users":[{"id":"u1","username":"jack","name":"Jack"}]}}"#.utf8)
+    }
+
+    private func makeExpansionClient(budget: ReadBudget? = nil) -> (XSourceClient, SourceConfiguration) {
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: budget ?? makeBudget())
+        return (client, .x(XSourceConfig(accountId: "u1", username: "@jack", stream: .bookmarks)))
+    }
+
+    func test_content_expands_thread_with_self_replies() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let log = RequestLog()
+        StubURLProtocol.handler = { request, _ in
+            log.record(request)
+            if request.url!.path.hasSuffix("/search/recent") {
+                return (200, self.envelope([
+                    self.tweetJSON(id: "300", conversationId: "100", minute: 10),
+                    self.tweetJSON(id: "200", conversationId: "100", minute: 5)
+                ]))
+            }
+            return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks, [
+            .paragraph("tweet 100"), .paragraph("~~~"),
+            .paragraph("tweet 200"), .paragraph("~~~"),
+            .paragraph("tweet 300")
+        ])
+        XCTAssertEqual(log.lastSearchQuery, "conversation_id:100 from:u1 to:u1")
+        XCTAssertEqual(log.lookupCount, 0, "anchor is the root; no root lookup needed")
+    }
+
+    func test_content_fetches_root_for_mid_thread_bookmark() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        StubURLProtocol.handler = { request, _ in
+            let path = request.url!.path
+            if path.hasSuffix("/search/recent") {
+                return (200, self.envelope([self.tweetJSON(id: "200", conversationId: "100", minute: 5)]))
+            }
+            if path.hasSuffix("/2/tweets") {
+                return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+            }
+            // The bookmarked anchor sits mid-thread (conversation root is 100).
+            return (200, self.envelope([self.tweetJSON(id: "300", conversationId: "100", minute: 10)]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks.first, .paragraph("tweet 100"), "thread starts at the fetched root")
+        XCTAssertEqual(content.blocks, [
+            .paragraph("tweet 100"), .paragraph("~~~"),
+            .paragraph("tweet 200"), .paragraph("~~~"),
+            .paragraph("tweet 300")
+        ])
+    }
+
+    func test_root_by_another_author_is_dropped() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        StubURLProtocol.handler = { request, _ in
+            let path = request.url!.path
+            if path.hasSuffix("/search/recent") {
+                return (200, self.envelope([self.tweetJSON(id: "200", conversationId: "100", minute: 5)]))
+            }
+            if path.hasSuffix("/2/tweets") {
+                // The conversation root belongs to someone else — not the thread.
+                return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", authorId: "u9", minute: 0)]))
+            }
+            return (200, self.envelope([self.tweetJSON(id: "300", conversationId: "100", minute: 10)]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks, [
+            .paragraph("tweet 200"), .paragraph("~~~"),
+            .paragraph("tweet 300")
+        ])
+    }
+
+    func test_expansion_reads_are_charged_to_the_budget() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        StubURLProtocol.handler = { request, _ in
+            let path = request.url!.path
+            if path.hasSuffix("/search/recent") {
+                return (200, self.envelope([self.tweetJSON(id: "200", conversationId: "100", minute: 5)]))
+            }
+            if path.hasSuffix("/2/tweets") {
+                return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+            }
+            return (200, self.envelope([self.tweetJSON(id: "300", conversationId: "100", minute: 10)]))
+        }
+        let budget = makeBudget()
+        let (client, config) = makeExpansionClient(budget: budget)
+
+        let items = try await client.listItems(config: config)
+        _ = try await client.content(for: items[0], config: config)
+
+        // 1 crawl read + 1 self-reply + 1 root lookup.
+        XCTAssertEqual(budget.reads(now: Date()), 3)
+    }
+
+    func test_expansion_skipped_when_budget_exhausted() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let log = RequestLog()
+        StubURLProtocol.handler = { request, _ in
+            log.record(request)
+            return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+        }
+        let budget = makeBudget()
+        let (client, config) = makeExpansionClient(budget: budget)
+
+        let items = try await client.listItems(config: config)
+        budget.record(reads: ReadBudget.monthlyCap, now: Date())   // spend the month
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks, [.paragraph("tweet 100")], "root-only when there is no budget")
+        XCTAssertEqual(log.searchCount, 0, "no search request is even attempted")
+    }
+
+    func test_search_403_disables_expansion_for_the_cycle() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let log = RequestLog()
+        StubURLProtocol.handler = { request, _ in
+            log.record(request)
+            if request.url!.path.hasSuffix("/search/recent") { return (403, Data("{}".utf8)) }
+            return (200, self.envelope([
+                self.tweetJSON(id: "300", conversationId: "300", minute: 10),
+                self.tweetJSON(id: "100", conversationId: "100", minute: 0)
+            ]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        let first = try await client.content(for: items[0], config: config)
+        let second = try await client.content(for: items[1], config: config)
+
+        XCTAssertEqual(first.blocks, [.paragraph("tweet 300")], "403 degrades to the anchor alone")
+        XCTAssertEqual(second.blocks, [.paragraph("tweet 100")])
+        XCTAssertEqual(log.searchCount, 1, "one 403 disables search for the rest of the cycle")
+    }
+
+    func test_expansion_failure_never_fails_the_item() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        StubURLProtocol.handler = { request, _ in
+            if request.url!.path.hasSuffix("/search/recent") { return (429, Data("{}".utf8)) }
+            return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks, [.paragraph("tweet 100")], "a rate-limited search still yields the anchor")
+    }
+
+    func test_conversation_expansion_is_memoized_per_cycle() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let log = RequestLog()
+        StubURLProtocol.handler = { request, _ in
+            log.record(request)
+            if request.url!.path.hasSuffix("/search/recent") {
+                return (200, self.envelope([
+                    self.tweetJSON(id: "300", conversationId: "100", minute: 10),
+                    self.tweetJSON(id: "200", conversationId: "100", minute: 5)
+                ]))
+            }
+            // Two bookmarks from the same thread arrive in one crawl.
+            return (200, self.envelope([
+                self.tweetJSON(id: "300", conversationId: "100", minute: 10),
+                self.tweetJSON(id: "100", conversationId: "100", minute: 0)
+            ]))
+        }
+        let (client, config) = makeExpansionClient()
+
+        let items = try await client.listItems(config: config)
+        _ = try await client.content(for: items[0], config: config)
+        _ = try await client.content(for: items[1], config: config)
+
+        XCTAssertEqual(log.searchCount, 1, "the second item in the conversation reuses the cached expansion")
+    }
+
+    func test_posts_stream_never_expands() async throws {
+        let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
+        let log = RequestLog()
+        StubURLProtocol.handler = { request, _ in
+            log.record(request)
+            return (200, self.envelope([self.tweetJSON(id: "100", conversationId: "100", minute: 0)]))
+        }
+        let client = XSourceClient(keychain: .shared, session: makeSession(), stateStore: makeStateStore(),
+                                   maxPagesPerCrawl: 10, readBudget: makeBudget())
+        let config = SourceConfiguration.x(XSourceConfig(accountId: "u1", username: "@jack", stream: .posts))
+
+        let items = try await client.listItems(config: config)
+        let content = try await client.content(for: items[0], config: config)
+
+        XCTAssertEqual(content.blocks, [.paragraph("tweet 100")])
+        XCTAssertEqual(log.searchCount, 0, "own posts already sync every thread tweet as its own item")
+    }
+
     func test_crawl_is_skipped_when_the_monthly_budget_is_spent() async throws {
         let cleanup = seedToken(accountId: "u1"); defer { cleanup() }
         let budget = makeBudget()

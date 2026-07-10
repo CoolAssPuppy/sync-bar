@@ -84,6 +84,27 @@ fi
 mkdir -p "$DIST"
 
 #----------------------------------------------------------------------
+# 0. Bake the release secrets, not whatever is on disk
+#----------------------------------------------------------------------
+# Secrets.xcconfig is normally pulled from dev for local work. Archiving with
+# it shipped 1.5.1 pointed at Polar's sandbox, which invalidated live license
+# keys. Pull the release config now; restore the local file on exit.
+SECRETS_FILE="$REPO_ROOT/Secrets.xcconfig"
+SECRETS_BACKUP=""
+if [ -f "$SECRETS_FILE" ]; then
+  SECRETS_BACKUP="$(mktemp)"
+  cp "$SECRETS_FILE" "$SECRETS_BACKUP"
+fi
+restore_secrets() {
+  if [ -n "$SECRETS_BACKUP" ] && [ -f "$SECRETS_BACKUP" ]; then
+    mv "$SECRETS_BACKUP" "$SECRETS_FILE"
+  fi
+}
+trap restore_secrets EXIT
+echo "==> Pulling secrets for the release build (Doppler $DOPPLER_PROJECT/$DOPPLER_CONFIG)"
+"$SCRIPTS/pull-secrets.sh" "$DOPPLER_CONFIG"
+
+#----------------------------------------------------------------------
 # 1. Bump version in project.yml
 #----------------------------------------------------------------------
 echo "==> Bumping version to $VERSION"
@@ -134,6 +155,20 @@ APP_PATH="$EXPORT_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "Error: export did not produce $APP_PATH"
   exit 1
+fi
+
+# A prd build pointing at Polar's sandbox invalidates every live license key,
+# so verify what actually got baked into the exported app before notarizing.
+if [ "$DOPPLER_CONFIG" = "prd" ]; then
+  BAKED_POLAR_BASE="$(/usr/libexec/PlistBuddy -c 'Print :PolarAPIBase' \
+    "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)"
+  case "$BAKED_POLAR_BASE" in
+    *sandbox*)
+      echo "Error: exported app points at Polar sandbox ($BAKED_POLAR_BASE)."
+      echo "Secrets.xcconfig was not baked from Doppler $DOPPLER_PROJECT/$DOPPLER_CONFIG."
+      exit 1
+      ;;
+  esac
 fi
 
 #----------------------------------------------------------------------

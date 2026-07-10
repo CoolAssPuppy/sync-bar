@@ -112,6 +112,31 @@ struct XAPIClient: Sendable {
         let url = try Self.pageURL(stream: stream, userId: userId,
                                    paginationToken: paginationToken,
                                    sinceId: sinceId, maxResults: maxResults)
+        return try await fetch(url: url, token: token, stream: stream)
+    }
+
+    /// Fetches the author's own replies within a conversation — the thread
+    /// continuations. `from:` scopes to the author and `to:` keeps only replies
+    /// to their own tweets, so third-party replies (and the root, which is not a
+    /// reply) never come back or bill a read. One page only; a thread longer
+    /// than `maxResults` self-replies truncates silently.
+    func selfReplies(conversationId: String,
+                     authorId: String,
+                     token: String,
+                     stream: XStream) async throws -> [XContent] {
+        let url = try Self.threadSearchURL(conversationId: conversationId, authorId: authorId)
+        return try await fetch(url: url, token: token, stream: stream).items
+    }
+
+    /// Looks up tweets by id (used for a thread's conversation root). The plural
+    /// `/2/tweets` endpoint answers with the same envelope as the timelines.
+    func tweets(ids: [String], token: String, stream: XStream) async throws -> [XContent] {
+        let url = try Self.tweetLookupURL(ids: ids)
+        return try await fetch(url: url, token: token, stream: stream).items
+    }
+
+    /// The one networked path: authorized GET, status mapping, parse.
+    private func fetch(url: URL, token: String, stream: XStream) async throws -> XTimelinePage {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await session.data(for: request)
@@ -136,19 +161,42 @@ struct XAPIClient: Sendable {
                         paginationToken: String?,
                         sinceId: String?,
                         maxResults: Int) throws -> URL {
-        let base = apiBase.appendingPathComponent("users/\(userId)/\(stream.apiPathComponent)")
-        var components = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents()
-        var items = [
-            URLQueryItem(name: "max_results", value: String(maxResults)),
-            URLQueryItem(name: "tweet.fields", value: tweetFields),
-            URLQueryItem(name: "expansions", value: "author_id"),
-            URLQueryItem(name: "user.fields", value: userFields)
-        ]
+        var items = [URLQueryItem(name: "max_results", value: String(maxResults))]
         if let paginationToken { items.append(URLQueryItem(name: "pagination_token", value: paginationToken)) }
         // since_id only narrows endpoints that honor it; passing it elsewhere is
         // ignored by X but we keep the request clean by gating on the stream.
         if let sinceId, stream.supportsSinceId { items.append(URLQueryItem(name: "since_id", value: sinceId)) }
-        components.queryItems = items
+        return try requestURL(path: "users/\(userId)/\(stream.apiPathComponent)", queryItems: items)
+    }
+
+    /// Builds the recent-search URL that returns an author's own replies inside
+    /// one conversation — the thread continuations, nobody else's replies.
+    static func threadSearchURL(conversationId: String,
+                                authorId: String,
+                                maxResults: Int = 100) throws -> URL {
+        try requestURL(path: "tweets/search/recent", queryItems: [
+            URLQueryItem(name: "query", value: "conversation_id:\(conversationId) from:\(authorId) to:\(authorId)"),
+            URLQueryItem(name: "max_results", value: String(maxResults))
+        ])
+    }
+
+    /// Builds the plural tweet-lookup URL (`/2/tweets?ids=…`).
+    static func tweetLookupURL(ids: [String]) throws -> URL {
+        try requestURL(path: "tweets", queryItems: [
+            URLQueryItem(name: "ids", value: ids.joined(separator: ","))
+        ])
+    }
+
+    /// Every read endpoint shares the same fields/expansions so the normalized
+    /// object is fully populated regardless of where a tweet came from.
+    private static func requestURL(path: String, queryItems: [URLQueryItem]) throws -> URL {
+        let base = apiBase.appendingPathComponent(path)
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents()
+        components.queryItems = queryItems + [
+            URLQueryItem(name: "tweet.fields", value: tweetFields),
+            URLQueryItem(name: "expansions", value: "author_id"),
+            URLQueryItem(name: "user.fields", value: userFields)
+        ]
         guard let url = components.url else {
             throw XAPIError.invalidResponse("Could not build the X request URL.")
         }

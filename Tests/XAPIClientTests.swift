@@ -57,6 +57,51 @@ final class XAPIClientTests: XCTestCase {
         XCTAssertNil(queryItems(bookmarks)["since_id"])
     }
 
+    // MARK: Thread expansion URLs
+
+    func test_threadSearchURL_targets_recent_search_with_self_reply_query() throws {
+        let url = try XAPIClient.threadSearchURL(conversationId: "123", authorId: "u1")
+        XCTAssertEqual(url.path, "/2/tweets/search/recent")
+        let q = queryItems(url)
+        // from: scopes to the author, to: keeps only replies to their own
+        // tweets — so third-party replies and the root never come back.
+        XCTAssertEqual(q["query"], "conversation_id:123 from:u1 to:u1")
+        XCTAssertEqual(q["max_results"], "100")
+        XCTAssertEqual(q["tweet.fields"], XAPIClient.tweetFields)
+        XCTAssertEqual(q["expansions"], "author_id")
+        XCTAssertEqual(q["user.fields"], XAPIClient.userFields)
+    }
+
+    func test_tweetLookupURL_uses_plural_ids_endpoint() throws {
+        let url = try XAPIClient.tweetLookupURL(ids: ["123", "456"])
+        XCTAssertEqual(url.path, "/2/tweets")
+        let q = queryItems(url)
+        XCTAssertEqual(q["ids"], "123,456")
+        XCTAssertEqual(q["tweet.fields"], XAPIClient.tweetFields)
+        XCTAssertEqual(q["expansions"], "author_id")
+        XCTAssertEqual(q["user.fields"], XAPIClient.userFields)
+    }
+
+    func test_parseTimeline_parses_search_envelope() throws {
+        // /2/tweets/search/recent answers with the same envelope as the
+        // timeline endpoints, so the one parser covers both.
+        let json = #"""
+        {
+          "data": [
+            {"id": "112", "text": "part two", "created_at": "2026-06-20T12:05:00.000Z",
+             "author_id": "u1", "conversation_id": "111",
+             "referenced_tweets": [{"type": "replied_to", "id": "111"}]}
+          ],
+          "includes": {"users": [{"id": "u1", "username": "jack", "name": "Jack D"}]},
+          "meta": {"result_count": 1}
+        }
+        """#
+        let page = try XAPIClient.parseTimeline(Data(json.utf8), stream: .bookmarks)
+        XCTAssertEqual(page.items.map(\.id), ["112"])
+        XCTAssertEqual(page.items[0].conversationId, "111")
+        XCTAssertEqual(page.items[0].author.username, "jack")
+    }
+
     // MARK: Parsing
 
     private let sampleTimeline = #"""

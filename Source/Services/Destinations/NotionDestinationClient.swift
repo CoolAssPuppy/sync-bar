@@ -231,9 +231,9 @@ struct NotionDestinationClient: DestinationClient {
     /// (`columnType` from the live schema). The mapping supplies the value; the
     /// column type decides the wrapper. Returns nil to leave the column blank
     /// (e.g. `.leaveBlank`, an unsupported column type, or an empty value).
-    private static func propertyValue(for mapping: NotionPropertyMapping,
-                                      columnType: String,
-                                      payload: DestinationPayload) -> [String: Any]? {
+    static func propertyValue(for mapping: NotionPropertyMapping,
+                              columnType: String,
+                              payload: DestinationPayload) -> [String: Any]? {
         if case .leaveBlank = mapping { return nil }
 
         // A single text value derived from whatever the mapping carries.
@@ -290,8 +290,12 @@ struct NotionDestinationClient: DestinationClient {
         case "title":
             return nil  // written by the caller under the real title property
         case "rich_text":
+            // Chunked through richText so a value past Notion's 2000-char
+            // per-object cap (a full tweet thread) splits instead of 400ing.
+            // Notion also caps a property at ~25 objects; beyond that it
+            // truncates server-side, which is acceptable.
             let value = resolvedString()
-            return value.isEmpty ? nil : ["rich_text": [["type": "text", "text": ["content": value]]]]
+            return value.isEmpty ? nil : ["rich_text": richText(value)]
         case "select":
             guard let name = optionNames().first else { return nil }
             return ["select": ["name": name]]

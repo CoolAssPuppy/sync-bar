@@ -58,4 +58,34 @@ final class NotionPropertyMappingTests: XCTestCase {
         XCTAssertEqual(parsed.propertyMappings["Tags"], .multiSelectOptions(["A", "B"]))
         XCTAssertEqual(parsed.propertyMappings["Due"], .dateSource(.pageCreated))
     }
+
+    // MARK: rich_text property shape
+
+    private func makePayload(body: String = "") -> DestinationPayload {
+        DestinationPayload(title: "T", body: body, sourceDate: .distantPast,
+                           ruleNotebookName: "Note", pageNumber: 1)
+    }
+
+    private func richTextContents(_ value: [String: Any]?) -> [String] {
+        let objects = value?["rich_text"] as? [[String: Any]] ?? []
+        return objects.compactMap { ($0["text"] as? [String: Any])?["content"] as? String }
+    }
+
+    func test_rich_text_property_short_value_is_single_object() {
+        let value = NotionDestinationClient.propertyValue(
+            for: .literal("hello"), columnType: "rich_text", payload: makePayload())
+        XCTAssertEqual(richTextContents(value), ["hello"])
+    }
+
+    func test_rich_text_property_chunks_long_values_at_2000_chars() {
+        // A full thread easily exceeds Notion's 2000-char per-text-object cap;
+        // the property must split like body blocks already do, losslessly.
+        let long = String(repeating: "x", count: 4500)
+        let value = NotionDestinationClient.propertyValue(
+            for: .literal(long), columnType: "rich_text", payload: makePayload())
+        let contents = richTextContents(value)
+        XCTAssertEqual(contents.count, 3)
+        XCTAssertTrue(contents.allSatisfy { $0.count <= 2000 })
+        XCTAssertEqual(contents.joined(), long)
+    }
 }

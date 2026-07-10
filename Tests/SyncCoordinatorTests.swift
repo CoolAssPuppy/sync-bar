@@ -313,6 +313,100 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    // MARK: X bookmarks → Notion (production-shaped rule through the real X client)
+
+    /// Reproduces the production X rule verbatim (same JSON shape the app
+    /// persists) and drives the REAL XSourceClient through a stubbed timeline,
+    /// asserting bookmarks flow all the way to a destination write. Pins the
+    /// full coordinator path a spy source can't (real listItems, real caches).
+    func test_production_x_rule_fixture_writes_bookmarks_to_notion() async throws {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+
+        let fixture = #"""
+        {
+         "updatedAt": 804507213.962821,
+         "source": {"x": {"_0": {"accountId": "2881611", "username": "@CoolAssPuppy", "stream": "bookmarks"}}},
+         "enabled": true,
+         "createdAt": 804427149.77417,
+         "destinations": [
+          {
+           "lastRunAt": 804507114.610848,
+           "createdAt": 804427149.774131,
+           "enabled": true,
+           "lastRunStatus": "success",
+           "id": "B98D8B1E-1467-45C2-AADA-E932AE2BE703",
+           "configuration": {
+            "notion": {
+             "_0": {
+              "destinationType": "database",
+              "destinationTitle": "Read it Later",
+              "propertyMappings": {
+               "Tags": {"multiSelectOptions": {"_0": ["Twitter Bookmark"]}},
+               "Site": {"text": {"template": "twitter.com"}},
+               "Status": {"multiSelectOptions": {"_0": ["Inbox"]}},
+               "Saved": {"text": {"template": "{date}"}},
+               "Notes": {"text": {"template": "{text}"}},
+               "Source": {"multiSelectOptions": {"_0": ["Twitter"]}},
+               "Author": {"text": {"template": "{author}"}},
+               "URL": {"text": {"template": "{tweet_url}"}}
+              },
+              "destinationId": "38da555c-5905-81bb-814c-c7e2aa8361af",
+              "workspaceId": "9c5a555c-5905-8164-829b-00039c35148c"
+             }
+            }
+           },
+           "lastRunPagesSynced": 1
+          }
+         ],
+         "id": "849850DC-3709-422C-A3AF-5863E678080D"
+        }
+        """#
+        let rule = try JSONDecoder().decode(SyncRule.self, from: Data(fixture.utf8))
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+
+        // Seed a long-lived token so validAccessToken succeeds without refresh.
+        let kc = KeychainStore.shared
+        kc.set(value: "test-access", for: .xAccessToken(accountId: "2881611"))
+        kc.set(value: String(Date().timeIntervalSince1970 + 3600), for: .xTokenExpiry(accountId: "2881611"))
+        defer {
+            kc.delete(key: .xAccessToken(accountId: "2881611"))
+            kc.delete(key: .xTokenExpiry(accountId: "2881611"))
+        }
+
+        // Timeline: two fresh bookmarks; thread search 403s (degrades to root-only).
+        StubURLProtocol.handler = { request, _ in
+            if request.url!.path.hasSuffix("/search/recent") { return (403, Data("{}".utf8)) }
+            let json = #"{"data":[{"id":"9002","text":"tweet two","created_at":"2026-07-09T12:00:00.000Z","author_id":"2881611","conversation_id":"9002"},{"id":"9001","text":"tweet one","created_at":"2026-07-08T12:00:00.000Z","author_id":"2881611","conversation_id":"9001"}],"includes":{"users":[{"id":"2881611","username":"CoolAssPuppy","name":"Prashant"}]}}"#
+            return (200, Data(json.utf8))
+        }
+        defer { StubURLProtocol.handler = nil }
+        let stubConfig = URLSessionConfiguration.ephemeral
+        stubConfig.protocolClasses = [StubURLProtocol.self]
+        let stubSession = URLSession(configuration: stubConfig)
+
+        let stateName = "x.coord.tests.\(UUID().uuidString)"
+        let stateDefaults = UserDefaults(suiteName: stateName)!
+        stateDefaults.removePersistentDomain(forName: stateName)
+        let xClient = XSourceClient(keychain: kc, session: stubSession,
+                                    stateStore: XSyncStateStore(store: stateDefaults),
+                                    maxPagesPerCrawl: 10,
+                                    readBudget: ReadBudget(defaults: stateDefaults, timeZone: .pacific))
+
+        let coordinator = SyncCoordinator(sourceClient: { _ in xClient },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { false })
+        let binding = await runAndWait(coordinator, ruleId: rule.id,
+                                       bindingId: "B98D8B1E-1467-45C2-AADA-E932AE2BE703")
+
+        let recentEvents = Ledger.shared.events.prefix(6)
+            .map { "\($0.eventType) \($0.errorMessage ?? $0.rmNotebookName)" }
+        XCTAssertEqual(binding?.lastRunPagesSynced, 2,
+                       "both bookmarks must reach the Notion write; recent events: \(recentEvents)")
+        XCTAssertEqual(binding?.lastRunStatus, .success)
+    }
+
     // MARK: Safari → Chrome (a non-reMarkable source through the same pipeline)
 
     /// A bookmark's URL flows from the source item through to the destination's

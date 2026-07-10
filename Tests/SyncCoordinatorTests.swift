@@ -313,6 +313,90 @@ final class SyncCoordinatorTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    // MARK: Paid-source crawl spacing (a few checks a day, not every tick)
+
+    private func isXAccount(_ id: String) -> (SourceConfiguration) -> Bool {
+        { config in
+            if case .x(let cfg) = config { return cfg.accountId == id }
+            return false
+        }
+    }
+
+    func test_scheduled_cycles_space_out_paid_source_crawls() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let account = "throttle-\(UUID().uuidString)"
+        var rule = SyncRule(source: .x(XSourceConfig(accountId: account, username: "@u", stream: .bookmarks)))
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+
+        let spy = SpySourceClient(items: [
+            SourceItem(id: "t1", name: "Tweet", versionHash: "h1", createdAt: Date(), tags: [])
+        ])
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { false })
+
+        await coordinator.scheduledTick()
+        await coordinator.scheduledTick()
+        XCTAssertEqual(spy.crawls(where: isXAccount(account)), 1,
+                       "a second scheduled tick inside the spacing window must not crawl again")
+    }
+
+    func test_manual_sync_bypasses_the_paid_source_spacing() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+        let folder = makeTempFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let account = "bypass-\(UUID().uuidString)"
+        var rule = SyncRule(source: .x(XSourceConfig(accountId: account, username: "@u", stream: .bookmarks)))
+        rule.destinations = [markdownBinding(folderPath: folder.path)]
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+
+        let spy = SpySourceClient(items: [
+            SourceItem(id: "t1", name: "Tweet", versionHash: "h1", createdAt: Date(), tags: [])
+        ])
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { false })
+
+        await coordinator.scheduledTick()
+        _ = await runAndWait(coordinator, ruleId: rule.id, bindingId: rule.destinations[0].id)
+        XCTAssertEqual(spy.crawls(where: isXAccount(account)), 2, "Sync now must always crawl, spacing or not")
+    }
+
+    func test_scheduled_cycles_do_not_space_out_free_sources() async {
+        let ledger = Ledger.shared
+        await prepare(ledger: ledger)
+
+        let folderId = "free-\(UUID().uuidString)"
+        var rule = SyncRule(source: .safari(SafariSourceConfig(folderId: folderId, folderName: "All bookmarks")))
+        rule.destinations = [DestinationBinding(configuration:
+            .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["Bookmarks Bar"])))]
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+
+        let spy = SpySourceClient(items: [])
+        let coordinator = SyncCoordinator(sourceClient: { _ in spy },
+                                          destinationClient: { _ in SpyDestinationClient() },
+                                          entitlementForSource: { _ in true },
+                                          readBudgetExhausted: { false })
+
+        await coordinator.scheduledTick()
+        await coordinator.scheduledTick()
+        let mine = spy.crawls { config in
+            if case .safari(let cfg) = config { return cfg.folderId == folderId }
+            return false
+        }
+        XCTAssertEqual(mine, 2, "free sources still crawl every tick")
+    }
+
     // MARK: X bookmarks → Notion (production-shaped rule through the real X client)
 
     /// Reproduces the production X rule verbatim (same JSON shape the app
@@ -761,11 +845,21 @@ private final class SpySourceClient: SourceClient, @unchecked Sendable {
     let kind: SourceKind = .remarkable
     let items: [SourceItem]
     private(set) var contentCalled = false
+    private(set) var listedConfigs: [SourceConfiguration] = []
 
     init(items: [SourceItem]) { self.items = items }
 
+    /// Crawls matching a predicate — the shared test ledger can carry rules
+    /// leaked by other tests (and prior runs), so callers count only their own.
+    func crawls(where matches: (SourceConfiguration) -> Bool) -> Int {
+        listedConfigs.filter(matches).count
+    }
+
     func listScopes() async throws -> [SourceScope] { [] }
-    func listItems(config: SourceConfiguration) async throws -> [SourceItem] { items }
+    func listItems(config: SourceConfiguration) async throws -> [SourceItem] {
+        listedConfigs.append(config)
+        return items
+    }
     func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent {
         contentCalled = true
         return NoteContent(blocks: [.paragraph("from spy")], provider: "spy", model: nil)

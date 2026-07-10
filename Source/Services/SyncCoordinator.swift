@@ -41,6 +41,13 @@ final class SyncCoordinator: ObservableObject {
     private let isReadBudgetExhausted: @MainActor () -> Bool
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
+    /// When each paid-source rule last crawled, so scheduled ticks space checks
+    /// out to a few per day (an idle check still costs real reads). In-memory:
+    /// a relaunch grants one fresh crawl, which is fine for a long-lived
+    /// menu bar app.
+    private var lastPaidCrawlAt: [String: Date] = [:]
+    /// Minimum spacing between scheduled paid-source crawls (8h ≈ 3 checks/day).
+    static let paidSourceCrawlSpacing: TimeInterval = 8 * 60 * 60
 
     init(ledger: Ledger? = nil,
          settings: AppSettings? = nil,
@@ -247,12 +254,22 @@ final class SyncCoordinator: ObservableObject {
             return
         }
 
+        // Paid sources check a few times a day, not every tick — an idle crawl
+        // still bills reads. `explainSkips` is true exactly for a manual
+        // "Sync now", which always goes through.
+        if rule.sourceKind.paidFeature != nil, !explainSkips,
+           let lastCrawl = lastPaidCrawlAt[rule.id],
+           Date().timeIntervalSince(lastCrawl) < Self.paidSourceCrawlSpacing {
+            return
+        }
+
         let source = sourceClientFor(rule.sourceKind)
 
         var items: [SourceItem] = []
         do {
             items = try await source.listItems(config: rule.source)
             reportSourceHealth(rule.sourceKind, error: nil)
+            if rule.sourceKind.paidFeature != nil { lastPaidCrawlAt[rule.id] = Date() }
         } catch {
             reportSourceHealth(rule.sourceKind, error: error)
             recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))

@@ -668,6 +668,22 @@ final class Ledger: ObservableObject {
         if changed { persistSyncedHashes() }
     }
 
+    /// Adopts an existing destination note for a page WITHOUT marking it
+    /// synced: the external id is recorded (so the next write updates that
+    /// note in place) while any recorded hash is dropped (so the next cycle
+    /// re-renders the item). The Twitter backfill uses this to refill existing
+    /// Notion rows without duplicating them.
+    func adoptExternalId(bindingId: String, pageId: String, externalId: String) {
+        let key = Self.syncedHashKey(bindingId: bindingId, pageId: pageId)
+        if syncedPageHashes.removeValue(forKey: key) != nil {
+            persistSyncedHashes()
+        }
+        if !externalId.isEmpty, syncedExternalIds[key] != externalId {
+            syncedExternalIds[key] = externalId
+            persistSyncedExternalIds()
+        }
+    }
+
     /// Whether a binding has any recorded sync state (a hash or an external id).
     /// False means it has never synced and never been adopted — the cue to run
     /// first-run adoption before the first write so existing notes aren't dupes.

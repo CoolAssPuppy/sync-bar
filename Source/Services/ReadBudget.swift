@@ -64,6 +64,14 @@ struct ReadBudget {
         defaults.set(current + delta, forKey: Self.countDefaultsKey)
     }
 
+    /// Zeroes the current month's tally. Maker tool only (the Twitter
+    /// backfill): the cap protects the maker's own API bill, so a deliberate
+    /// full resync may spend it afresh.
+    func resetMonth(now: Date) {
+        defaults.set(Self.monthKey(for: now, in: timeZone), forKey: Self.monthDefaultsKey)
+        defaults.set(0, forKey: Self.countDefaultsKey)
+    }
+
     /// The "YYYY-M" bucket a date falls in, in the given time zone.
     static func monthKey(for date: Date, in timeZone: TimeZone) -> String {
         var calendar = Calendar(identifier: .gregorian)

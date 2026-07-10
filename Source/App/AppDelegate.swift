@@ -285,6 +285,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.publisher(for: .openMainWindow)
             .sink { [weak self] _ in self?.showMainWindow() }
             .store(in: &subscriptions)
+        // Hidden maker tool: Settings posts this from the "Twitter" label's
+        // context menu; the coordinator lives here, so the run is driven here.
+        NotificationCenter.default.publisher(for: .twitterBackfillRequested)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in
+                    do {
+                        let adopted = try await TwitterBackfill.run(coordinator: self.coordinator)
+                        Log.sync.info("Twitter backfill kicked off after adopting \(adopted, privacy: .public) rows")
+                    } catch {
+                        Log.sync.error("Twitter backfill failed: \(Formatters.userMessage(for: error), privacy: .public)")
+                    }
+                }
+            }
+            .store(in: &subscriptions)
     }
 
     // MARK: Status sync animation

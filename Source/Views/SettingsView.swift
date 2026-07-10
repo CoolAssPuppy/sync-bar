@@ -201,6 +201,15 @@ struct SettingsView: View {
                 HStack {
                     Text("Twitter")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.foreground)
+                        // Hidden one-shot maker tool: refills existing rows
+                        // (full thread text into mapped columns) in place.
+                        .contextMenu {
+                            if !TwitterBackfill.hasRun {
+                                Button("Resync all bookmarks (one-time backfill)") {
+                                    NotificationCenter.default.post(name: .twitterBackfillRequested, object: nil)
+                                }
+                            }
+                        }
                     Spacer()
                     subscriptionBadge
                 }

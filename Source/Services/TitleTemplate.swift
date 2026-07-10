@@ -24,6 +24,10 @@ enum TitleToken: String, CaseIterable {
     case tweetUrl    = "tweet_url"
     case tweetId     = "tweet_id"
     case stream
+    // Must stay the LAST case: `apply(to:)` substitutes in `allCases` order,
+    // and the body goes in after every other pass so tokens appearing
+    // literally inside synced text are never re-substituted.
+    case text
 
     var placeholder: String { "{\(rawValue)}" }
 
@@ -31,7 +35,7 @@ enum TitleToken: String, CaseIterable {
     /// they don't clutter reMarkable/Markdown fields where they never apply.
     var isSourceSpecific: Bool {
         switch self {
-        case .author, .authorName, .tweetUrl, .tweetId, .stream: return true
+        case .author, .authorName, .tweetUrl, .tweetId, .stream, .text: return true
         default: return false
         }
     }
@@ -49,6 +53,7 @@ enum TitleToken: String, CaseIterable {
         case .tweetUrl:   return "Canonical tweet URL"
         case .tweetId:    return "Tweet id"
         case .stream:     return "Stream (bookmarks / likes / posts)"
+        case .text:       return "Full synced text (tweet + thread)"
         }
     }
 }
@@ -67,6 +72,9 @@ struct TitleTemplateContext {
     /// Source-specific fields (e.g. Twitter author / canonical URL / stream),
     /// keyed as the source emits them in `SourceItem.metadata`.
     var metadata: [String: String] = [:]
+    /// The full synced body for `{text}`. Only column-value templates populate
+    /// it — file-name templates leave it empty so `{text}` can't explode a name.
+    var body: String = ""
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -87,6 +95,7 @@ struct TitleTemplateContext {
         case .tweetUrl:   return metadata["canonical_url"] ?? ""
         case .tweetId:    return metadata["id"] ?? ""
         case .stream:     return metadata["stream"] ?? ""
+        case .text:       return body
         }
     }
 

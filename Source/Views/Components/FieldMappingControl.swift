@@ -128,6 +128,7 @@ struct MappingFieldOption: Identifiable, Hashable {
     /// Twitter tweet fields.
     static let twitter: [MappingFieldOption] = [
         .init(label: "Tweet text", token: "{title}"),
+        .init(label: "Full text (tweet + thread)", token: "{text}"),
         .init(label: "Author handle", token: "{author}"),
         .init(label: "Author name", token: "{author_name}"),
         .init(label: "Tweet URL", token: "{tweet_url}"),

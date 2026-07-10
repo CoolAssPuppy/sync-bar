@@ -45,6 +45,27 @@ final class TitleTemplateTests: XCTestCase {
         XCTAssertEqual(context.apply(to: "x{author}{tweet_url}y"), "xy")
     }
 
+    func test_text_token_resolves_from_body() {
+        let context = TitleTemplateContext(
+            notebook: "n", pageNumber: 1, date: Date(), title: "t",
+            body: "tweet one\n~~~\ntweet two")
+        XCTAssertEqual(context.apply(to: "{text}"), "tweet one\n~~~\ntweet two")
+    }
+
+    func test_text_token_is_empty_without_body() {
+        let context = TitleTemplateContext(notebook: "n", pageNumber: 1, date: Date(), title: "t")
+        XCTAssertEqual(context.apply(to: "x{text}y"), "xy")
+    }
+
+    func test_text_token_body_is_not_resubstituted() {
+        // A tweet that literally contains "{title}" must survive verbatim: the
+        // body substitutes last, after every other token's pass has run.
+        let context = TitleTemplateContext(
+            notebook: "n", pageNumber: 1, date: Date(), title: "SECRET",
+            body: "mentions {title} literally")
+        XCTAssertEqual(context.apply(to: "{text}"), "mentions {title} literally")
+    }
+
     func test_inline_hint_lists_every_general_token() {
         let hint = TitleTemplateHelp.inlineHint
         for token in TitleToken.allCases where !token.isSourceSpecific {

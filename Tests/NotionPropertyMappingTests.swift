@@ -88,4 +88,15 @@ final class NotionPropertyMappingTests: XCTestCase {
         XCTAssertTrue(contents.allSatisfy { $0.count <= 2000 })
         XCTAssertEqual(contents.joined(), long)
     }
+
+    func test_text_template_on_rich_text_column_carries_the_payload_body() {
+        // The {text} token routes the full synced body (tweet + thread) into a
+        // user-mapped column, chunking past the per-object cap.
+        let body = String(repeating: "y", count: 2500)
+        let value = NotionDestinationClient.propertyValue(
+            for: .text(template: "{text}"), columnType: "rich_text", payload: makePayload(body: body))
+        let contents = richTextContents(value)
+        XCTAssertEqual(contents.count, 2)
+        XCTAssertEqual(contents.joined(), body)
+    }
 }

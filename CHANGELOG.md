@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.2 — 2026-07-10
+
+### Fixed
+- Internal test hygiene: destination clients refuse real network writes
+  under the test runner, so test fixtures can never create pages in a
+  live Notion workspace again.
+
 ## 1.6.1 — 2026-07-10
 
 ### Fixed

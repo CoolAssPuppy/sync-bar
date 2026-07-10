@@ -462,7 +462,15 @@ final class SyncCoordinatorTests: XCTestCase {
         // Timeline: two fresh bookmarks; thread search 403s (degrades to root-only).
         StubURLProtocol.handler = { request, _ in
             if request.url!.path.hasSuffix("/search/recent") { return (403, Data("{}".utf8)) }
-            let json = #"{"data":[{"id":"9002","text":"tweet two","created_at":"2026-07-09T12:00:00.000Z","author_id":"2881611","conversation_id":"9002"},{"id":"9001","text":"tweet one","created_at":"2026-07-08T12:00:00.000Z","author_id":"2881611","conversation_id":"9001"}],"includes":{"users":[{"id":"2881611","username":"CoolAssPuppy","name":"Prashant"}]}}"#
+            let json = #"""
+            {"data":[
+              {"id":"9002","text":"tweet two","created_at":"2026-07-09T12:00:00.000Z",
+               "author_id":"2881611","conversation_id":"9002"},
+              {"id":"9001","text":"tweet one","created_at":"2026-07-08T12:00:00.000Z",
+               "author_id":"2881611","conversation_id":"9001"}
+            ],
+            "includes":{"users":[{"id":"2881611","username":"CoolAssPuppy","name":"Prashant"}]}}
+            """#
             return (200, Data(json.utf8))
         }
         defer { StubURLProtocol.handler = nil }
@@ -471,7 +479,9 @@ final class SyncCoordinatorTests: XCTestCase {
         let stubSession = URLSession(configuration: stubConfig)
 
         let stateName = "x.coord.tests.\(UUID().uuidString)"
-        let stateDefaults = UserDefaults(suiteName: stateName)!
+        guard let stateDefaults = UserDefaults(suiteName: stateName) else {
+            return XCTFail("could not create an isolated defaults suite")
+        }
         stateDefaults.removePersistentDomain(forName: stateName)
         let xClient = XSourceClient(keychain: kc, session: stubSession,
                                     stateStore: XSyncStateStore(store: stateDefaults),

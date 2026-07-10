@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.5.2</title>
+      <pubDate>Fri, 10 Jul 2026 06:24:16 +0000</pubDate>
+      <sparkle:version>26</sparkle:version>
+      <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Fix license validation for Twitter Sync subscribers.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.5.2.dmg"
+        sparkle:edSignature="Dmv1TRo4grubYdNbqUvgoqQYm4USYnMBzadTbUWg+J1+ecCI/DroFMcbL3ANiHrHOT4w/HP1marmfck2rCT/Cw=="
+        length="8912799"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.5.1</title>
       <pubDate>Wed, 01 Jul 2026 21:32:43 +0000</pubDate>
       <sparkle:version>25</sparkle:version>

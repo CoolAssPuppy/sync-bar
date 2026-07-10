@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.6.1</title>
+      <pubDate>Fri, 10 Jul 2026 10:56:55 +0000</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>1.6.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Twitter sync no longer spends its monthly read budget on idle checks.</li><li>Reliability fixes for Twitter thread syncing.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.6.1.dmg"
+        sparkle:edSignature="Ba8MTytygvIR8grGI9KqMWwCtmeMTmOLMDtK66W+CDNDzlHogq/qNE0F2fcPtjJtQFu4/r7TWwx6Mvq3MnYHAw=="
+        length="8969386"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.6.0</title>
       <pubDate>Fri, 10 Jul 2026 08:44:45 +0000</pubDate>
       <sparkle:version>27</sparkle:version>

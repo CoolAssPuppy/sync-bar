@@ -66,8 +66,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.strategicnerds.SyncBar
         PRODUCT_NAME: "SyncBar"
-        MARKETING_VERSION: "1.6.0"
-        CURRENT_PROJECT_VERSION: "27"
+        MARKETING_VERSION: "1.6.1"
+        CURRENT_PROJECT_VERSION: "28"
         INFOPLIST_FILE: Info.plist
         CODE_SIGN_ENTITLEMENTS: SyncBar.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

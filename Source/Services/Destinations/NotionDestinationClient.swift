@@ -20,12 +20,18 @@ struct NotionDestinationClient: DestinationClient {
         guard case .notion(let config) = configuration else {
             throw DestinationError.wrongConfiguration(expected: .notion)
         }
-        if let token = KeychainStore.shared.value(for: .notionWorkspaceToken(workspaceId: config.workspaceId)),
+        // Never write to a real workspace from a test run: the test host shares
+        // the developer's keychain, so a fixture carrying a real workspace id
+        // would otherwise find a live token and create real pages. (It did.)
+        if !Self.isRunningTests,
+           let token = KeychainStore.shared.value(for: .notionWorkspaceToken(workspaceId: config.workspaceId)),
            !token.isEmpty {
             return try await writeWithRealNotion(token: token, config: config, payload: payload, existingId: existingExternalId)
         }
         return try await writeWithMock(config: config, payload: payload, existingId: existingExternalId)
     }
+
+    private static let isRunningTests = NSClassFromString("XCTestCase") != nil
 
     // MARK: Real Notion (v2022-06-28)
 

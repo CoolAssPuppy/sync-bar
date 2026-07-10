@@ -435,8 +435,8 @@ final class SyncCoordinatorTests: XCTestCase {
                "Author": {"text": {"template": "{author}"}},
                "URL": {"text": {"template": "{tweet_url}"}}
               },
-              "destinationId": "38da555c-5905-81bb-814c-c7e2aa8361af",
-              "workspaceId": "9c5a555c-5905-8164-829b-00039c35148c"
+              "destinationId": "db-fixture-not-a-real-database",
+              "workspaceId": "ws-fixture-not-a-real-workspace"
              }
             }
            },
@@ -488,7 +488,12 @@ final class SyncCoordinatorTests: XCTestCase {
                                     maxPagesPerCrawl: 10,
                                     readBudget: ReadBudget(defaults: stateDefaults, timeZone: .pacific))
 
+        // A spy destination keeps the test hermetic: no Notion client at all,
+        // so a live keychain token can never leak test pages into a real
+        // workspace (the ids above are fakes for the same reason).
+        let destinationSpy = SpyDestinationClient()
         let coordinator = SyncCoordinator(sourceClient: { _ in xClient },
+                                          destinationClient: { _ in destinationSpy },
                                           entitlementForSource: { _ in true },
                                           readBudgetExhausted: { false })
         let binding = await runAndWait(coordinator, ruleId: rule.id,
@@ -497,8 +502,9 @@ final class SyncCoordinatorTests: XCTestCase {
         let recentEvents = Ledger.shared.events.prefix(6)
             .map { "\($0.eventType) \($0.errorMessage ?? $0.rmNotebookName)" }
         XCTAssertEqual(binding?.lastRunPagesSynced, 2,
-                       "both bookmarks must reach the Notion write; recent events: \(recentEvents)")
+                       "both bookmarks must reach the destination write; recent events: \(recentEvents)")
         XCTAssertEqual(binding?.lastRunStatus, .success)
+        XCTAssertEqual(destinationSpy.lastPayload?.metadata["author"], "@CoolAssPuppy")
     }
 
     // MARK: Safari → Chrome (a non-reMarkable source through the same pipeline)

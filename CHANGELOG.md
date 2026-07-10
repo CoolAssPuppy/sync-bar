@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 — 2026-07-10
 
 ### Added
 - X threads: bookmarked or liked tweets now sync with the author's own

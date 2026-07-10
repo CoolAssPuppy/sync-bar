@@ -107,6 +107,9 @@ struct NotionDestinationClient: DestinationClient {
                     "to_do": ["rich_text": richText(text), "checked": checked]]
         case .mermaid(let source):
             return mermaidBlock(source)
+        case .image(let url):
+            return ["object": "block", "type": "image",
+                    "image": ["type": "external", "external": ["url": url.absoluteString]]]
         }
     }
 

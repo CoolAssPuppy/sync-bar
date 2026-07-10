@@ -19,13 +19,16 @@ enum NoteBlock: Equatable, Sendable {
     case bullet(String)
     case checkbox(text: String, checked: Bool)
     case mermaid(String)
+    /// A remotely-hosted image (e.g. a tweet's photo). Destinations embed it
+    /// natively where they can (Notion) and fall back to the URL elsewhere.
+    case image(URL)
 
     /// True for the two list-style cases, used to keep adjacent list items
     /// tightly spaced when flattening to markdown.
     var isListItem: Bool {
         switch self {
         case .bullet, .checkbox: return true
-        case .heading, .paragraph, .mermaid: return false
+        case .heading, .paragraph, .mermaid, .image: return false
         }
     }
 
@@ -43,7 +46,7 @@ enum NoteBlock: Equatable, Sendable {
             return text
         case .checkbox(let text, _):
             return text
-        case .mermaid:
+        case .mermaid, .image:
             return nil
         }
     }
@@ -62,6 +65,8 @@ enum NoteBlock: Equatable, Sendable {
             return "- [\(checked ? "x" : " ")] \(text)"
         case .mermaid(let source):
             return "```mermaid\n\(source)\n```"
+        case .image(let url):
+            return "![](\(url.absoluteString))"
         }
     }
 }

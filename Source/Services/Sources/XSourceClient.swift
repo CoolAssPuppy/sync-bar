@@ -179,7 +179,7 @@ struct XSourceClient: SourceClient {
             return NoteContent(blocks: Self.blocks(from: item.metadata["body"] ?? ""), provider: "x")
         }
         let thread = await expandedThread(for: tweet, config: config)
-        return NoteContent(blocks: Self.blocks(from: Self.threadText(thread)), provider: "x")
+        return NoteContent(blocks: Self.threadBlocks(thread), provider: "x")
     }
 
     // MARK: Thread expansion
@@ -360,11 +360,17 @@ struct XSourceClient: SourceClient {
         }
     }
 
-    /// The combined thread text: tweet bodies separated by a `~~~` rule, which
-    /// `blocks(from:)` keeps as its own paragraph between tweets. A single
-    /// tweet passes through unchanged.
-    static func threadText(_ tweets: [XContent]) -> String {
-        tweets.map(\.text).joined(separator: "\n~~~\n")
+    /// The combined thread as blocks: each tweet's paragraphs followed by its
+    /// images, with a `~~~` rule between tweets. A single tweet renders exactly
+    /// as it did before threads.
+    static func threadBlocks(_ tweets: [XContent]) -> [NoteBlock] {
+        var out: [NoteBlock] = []
+        for (index, tweet) in tweets.enumerated() {
+            if index > 0 { out.append(.paragraph("~~~")) }
+            out += blocks(from: tweet.text)
+            out += tweet.mediaURLs.map(NoteBlock.image)
+        }
+        return out
     }
 
     /// Splits tweet text into paragraph blocks (one per non-empty line), the

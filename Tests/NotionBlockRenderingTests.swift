@@ -54,6 +54,17 @@ final class NotionBlockRenderingTests: XCTestCase {
         XCTAssertEqual((children[5]["code"] as? [String: Any])?["language"] as? String, "mermaid")
     }
 
+    func test_image_block_renders_as_external_image() {
+        let children = NotionDestinationClient.buildChildren(payload: payload(blocks: [
+            .image(URL(string: "https://pbs.twimg.com/media/one.jpg")!)
+        ]))
+        XCTAssertEqual(children.map(type), ["image"])
+        let image = children[0]["image"] as? [String: Any]
+        XCTAssertEqual(image?["type"] as? String, "external")
+        XCTAssertEqual((image?["external"] as? [String: Any])?["url"] as? String,
+                       "https://pbs.twimg.com/media/one.jpg")
+    }
+
     func test_empty_blocks_fall_back_to_body_paragraphs_and_mermaid() {
         let children = NotionDestinationClient.buildChildren(
             payload: payload(blocks: [], body: "para one\n\npara two", mermaid: "graph")

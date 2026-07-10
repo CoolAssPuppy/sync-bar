@@ -18,14 +18,16 @@ final class XSourceClientTests: XCTestCase {
 
     private func sampleTweet(id: String = "111",
                              text: String = "Hello world\nmore detail",
-                             createdAt: TimeInterval = 1_700_000_000) -> XContent {
+                             createdAt: TimeInterval = 1_700_000_000,
+                             mediaURLs: [URL] = []) -> XContent {
         XContent(
             id: id, stream: .bookmarks, text: text,
             createdAt: Date(timeIntervalSince1970: createdAt),
             author: XAuthor(id: "u1", username: "jack", displayName: "Jack D"),
             canonicalURL: URL(string: "https://x.com/jack/status/\(id)"),
             outboundLinks: [URL(string: "https://example.com")!],
-            conversationId: "111", referencedTweetIds: ["100"], metrics: ["like_count": 5])
+            conversationId: "111", referencedTweetIds: ["100"],
+            metrics: ["like_count": 5], mediaURLs: mediaURLs)
     }
 
     func test_makeItem_normalizes_identity_and_metadata() {
@@ -90,16 +92,21 @@ final class XSourceClientTests: XCTestCase {
         XCTAssertEqual(XSourceClient.threadTweets(anchor: anchor, root: nil, replies: []), [anchor])
     }
 
-    func test_threadText_separates_tweets_with_a_rule() {
+    func test_threadBlocks_separates_tweets_with_a_rule() {
         let first = sampleTweet(id: "1", text: "one", createdAt: 1_000)
         let second = sampleTweet(id: "2", text: "two\nmore", createdAt: 2_000)
-        XCTAssertEqual(XSourceClient.threadText([first, second]), "one\n~~~\ntwo\nmore")
         // A single tweet gets no separator, matching today's body exactly.
-        XCTAssertEqual(XSourceClient.threadText([first]), "one")
-        // The separator becomes its own paragraph between the tweets' lines.
-        XCTAssertEqual(
-            XSourceClient.blocks(from: XSourceClient.threadText([first, second])),
-            [.paragraph("one"), .paragraph("~~~"), .paragraph("two"), .paragraph("more")])
+        XCTAssertEqual(XSourceClient.threadBlocks([first]), [.paragraph("one")])
+        XCTAssertEqual(XSourceClient.threadBlocks([first, second]),
+                       [.paragraph("one"), .paragraph("~~~"), .paragraph("two"), .paragraph("more")])
+    }
+
+    func test_threadBlocks_appends_each_tweets_images() {
+        let photo = URL(string: "https://pbs.twimg.com/media/one.jpg")!
+        let first = sampleTweet(id: "1", text: "look", createdAt: 1_000, mediaURLs: [photo])
+        let second = sampleTweet(id: "2", text: "then", createdAt: 2_000)
+        XCTAssertEqual(XSourceClient.threadBlocks([first, second]),
+                       [.paragraph("look"), .image(photo), .paragraph("~~~"), .paragraph("then")])
     }
 
     // MARK: Crawl (end-to-end via stub)

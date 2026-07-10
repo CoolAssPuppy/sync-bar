@@ -43,6 +43,9 @@ struct XContent: Equatable, Sendable, Hashable {
     var conversationId: String?
     var referencedTweetIds: [String]
     var metrics: [String: Int]
+    /// Attached images: photos by their full-size URL, videos/GIFs by their
+    /// preview frame (the playable asset isn't exposed by the v2 read API).
+    var mediaURLs: [URL] = []
 
     /// Canonical permalink for a tweet, given its author handle. Falls back to
     /// the handle-less `/i/web/status/` form X also resolves.
@@ -95,10 +98,12 @@ struct XAPIClient: Sendable {
 
     static let apiBase = URL(staticString: "https://api.twitter.com/2")
 
-    /// The tweet/user fields and expansions every stream requests, so the
+    /// The tweet/user/media fields and expansions every stream requests, so the
     /// normalized object is fully populated regardless of endpoint.
-    static let tweetFields = "created_at,author_id,entities,public_metrics,conversation_id,referenced_tweets,text"
+    static let tweetFields = "created_at,author_id,entities,public_metrics,conversation_id,referenced_tweets,text,attachments"
     static let userFields = "username,name"
+    static let expansions = "author_id,attachments.media_keys"
+    static let mediaFields = "url,preview_image_url,type"
 
     /// Fetches one page of a stream. `paginationToken` continues a previous
     /// fetch; `sinceId` (honored only where the endpoint supports it) limits the
@@ -194,8 +199,9 @@ struct XAPIClient: Sendable {
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.queryItems = queryItems + [
             URLQueryItem(name: "tweet.fields", value: tweetFields),
-            URLQueryItem(name: "expansions", value: "author_id"),
-            URLQueryItem(name: "user.fields", value: userFields)
+            URLQueryItem(name: "expansions", value: expansions),
+            URLQueryItem(name: "user.fields", value: userFields),
+            URLQueryItem(name: "media.fields", value: mediaFields)
         ]
         guard let url = components.url else {
             throw XAPIError.invalidResponse("Could not build the X request URL.")
@@ -214,12 +220,15 @@ struct XAPIClient: Sendable {
             let entities: Entities?
             let public_metrics: [String: Int]?
             let referenced_tweets: [Referenced]?
+            let attachments: Attachments?
         }
         struct Entities: Decodable { let urls: [URLEntity]? }
-        struct URLEntity: Decodable { let expanded_url: String?; let unwound_url: String? }
+        struct URLEntity: Decodable { let url: String?; let expanded_url: String?; let unwound_url: String? }
         struct Referenced: Decodable { let type: String; let id: String }
+        struct Attachments: Decodable { let media_keys: [String]? }
         struct User: Decodable { let id: String; let username: String; let name: String }
-        struct Includes: Decodable { let users: [User]? }
+        struct Media: Decodable { let media_key: String; let type: String?; let url: String?; let preview_image_url: String? }
+        struct Includes: Decodable { let users: [User]?; let media: [Media]? }
         struct Meta: Decodable { let next_token: String?; let result_count: Int? }
         struct APIError: Decodable { let title: String?; let detail: String? }
         let data: [Tweet]?
@@ -248,6 +257,9 @@ struct XAPIClient: Sendable {
         let usersById = Dictionary(
             (envelope.includes?.users ?? []).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first })
+        let mediaByKey = Dictionary(
+            (envelope.includes?.media ?? []).map { ($0.media_key, $0) },
+            uniquingKeysWith: { first, _ in first })
 
         let items: [XContent] = (envelope.data ?? []).map { tweet in
             let user = tweet.author_id.flatMap { usersById[$0] }
@@ -261,19 +273,40 @@ struct XAPIClient: Sendable {
                 let raw = entity.unwound_url ?? entity.expanded_url
                 return raw.flatMap { URL(string: $0) }
             }
+            let mediaURLs: [URL] = (tweet.attachments?.media_keys ?? []).compactMap { key in
+                guard let media = mediaByKey[key] else { return nil }
+                // Photos expose a full-size url; videos/GIFs only a preview frame.
+                return (media.url ?? media.preview_image_url).flatMap { URL(string: $0) }
+            }
             return XContent(
                 id: tweet.id,
                 stream: stream,
-                text: tweet.text,
+                text: expandLinks(in: tweet.text, entities: tweet.entities?.urls ?? []),
                 createdAt: createdAt,
                 author: author,
                 canonicalURL: XContent.canonicalURL(tweetId: tweet.id, username: author.username),
                 outboundLinks: dedupePreservingOrder(links),
                 conversationId: tweet.conversation_id,
                 referencedTweetIds: (tweet.referenced_tweets ?? []).map(\.id),
-                metrics: tweet.public_metrics ?? [:])
+                metrics: tweet.public_metrics ?? [:],
+                mediaURLs: mediaURLs)
         }
         return XTimelinePage(items: items, nextToken: envelope.meta?.next_token)
+    }
+
+    /// Rewrites t.co shorteners in the display text to the resolved link, and
+    /// drops media permalinks (the trailing t.co that points back at the
+    /// tweet's own /photo/N or /video/N page — the actual asset arrives via
+    /// `mediaURLs` instead).
+    private static func expandLinks(in text: String, entities: [Envelope.URLEntity]) -> String {
+        var output = text
+        for entity in entities {
+            guard let short = entity.url, !short.isEmpty,
+                  let resolved = entity.unwound_url ?? entity.expanded_url else { continue }
+            let isMediaPermalink = resolved.contains("/photo/") || resolved.contains("/video/")
+            output = output.replacingOccurrences(of: short, with: isMediaPermalink ? "" : resolved)
+        }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Dedupes URLs while keeping first-seen order (a tweet can list the same

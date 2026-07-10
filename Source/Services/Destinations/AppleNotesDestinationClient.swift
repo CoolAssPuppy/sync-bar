@@ -210,6 +210,12 @@ struct AppleNotesDestinationClient: DestinationClient {
                 html.append("<li>\(mark) \(label)</li>")
             case .mermaid(let source):
                 closeList(); html.append("<pre>\(htmlEscape(source))</pre>")
+            case .image(let url):
+                // Notes' AppleScript body can't embed remote images; a
+                // clickable link is the faithful fallback.
+                closeList()
+                let escaped = htmlEscape(url.absoluteString)
+                html.append("<p><a href=\"\(escaped)\">\(escaped)</a></p>")
             }
         }
         closeList()

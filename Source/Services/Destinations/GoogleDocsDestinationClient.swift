@@ -220,7 +220,7 @@ struct GoogleDocsDestinationClient: DestinationClient {
                         "fields": "strikethrough"
                     ]])
                 }
-            case .paragraph, .mermaid:
+            case .paragraph, .mermaid, .image:
                 break
             }
             text += line + "\n"
@@ -243,6 +243,9 @@ struct GoogleDocsDestinationClient: DestinationClient {
             return text
         case .mermaid(let source):
             return "[Mermaid diagram]\n\(source)"
+        case .image(let url):
+            // Docs' text-insert path has no image support; the URL stands in.
+            return url.absoluteString
         }
     }
 

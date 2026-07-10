@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.1 — 2026-07-10
 
 ### Fixed
 - Twitter sync no longer spends the monthly read budget on idle checks.

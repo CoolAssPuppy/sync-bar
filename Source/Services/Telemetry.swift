@@ -38,7 +38,7 @@ enum Telemetry {
     /// callable from any actor context (sync task group, notifications, UI),
     /// and the concrete backend (PostHogSDK) is thread-safe internally. The
     /// only write happens once at `setup()`; reads after that need no lock.
-    nonisolated(unsafe) private static var backend: TelemetryBackend?
+    nonisolated(unsafe) private static var backends: [TelemetryBackend] = []
 
     // MARK: - Public API
 
@@ -54,10 +54,8 @@ enum Telemetry {
     /// Updates the opt-in preference and propagates to the live backend.
     static func setOptedIn(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: optInKey)
-        if value {
-            backend?.optIn()
-        } else {
-            backend?.optOut()
+        for backend in backends {
+            value ? backend.optIn() : backend.optOut()
         }
     }
 
@@ -79,7 +77,7 @@ enum Telemetry {
             distinctId: distinctId()
         )
         instance.setup()
-        backend = instance
+        backends = [instance]
 
         if isOptedIn {
             instance.optIn()
@@ -96,6 +94,12 @@ enum Telemetry {
     /// billing/abuse metering of a paid Sync class (e.g. `x.sync.usage`), which
     /// the user consents to when adding the paid source. Every other event must
     /// leave it `false` and stays opt-in.
+    static func capture(_ event: TelemetryEvent, properties: [String: Any] = [:], bypassOptOut: Bool = false) {
+        capture(event.rawValue, properties: properties, bypassOptOut: bypassOptOut)
+    }
+
+    /// String overload, for the rare call site that builds a name dynamically
+    /// and for tests. Prefer the `TelemetryEvent` version so names cannot drift.
     static func capture(_ event: String, properties: [String: Any] = [:], bypassOptOut: Bool = false) {
         guard bypassOptOut || isOptedIn else { return }
         var props = properties
@@ -106,7 +110,9 @@ enum Telemetry {
         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
             props["app_version"] = version
         }
-        backend?.capture(event: event, properties: props)
+        for backend in backends {
+            backend.capture(event: event, properties: props)
+        }
         #if DEBUG
         testHook?(event, props)
         #endif

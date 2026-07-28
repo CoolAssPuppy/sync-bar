@@ -226,7 +226,7 @@ final class SyncCoordinator: ObservableObject {
         isSyncing = false
         NotificationCenter.default.post(name: .syncFinished, object: nil)
 
-        Telemetry.capture("sync.run", properties: [
+        Telemetry.capture(.syncCompleted, properties: [
             "trigger": trigger.rawValue,
             "rules": rules.count,
             "duration_ms": Int(Date().timeIntervalSince(cycleStart) * 1_000)
@@ -435,7 +435,7 @@ final class SyncCoordinator: ObservableObject {
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName, type: .ruleRunCompleted,
                                      durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)))
 
-        Telemetry.capture("destination.synced", properties: [
+        Telemetry.capture(.destinationSynced, properties: [
             "provider": binding.kind.rawValue,
             "notes_synced": notesSynced,
             "status": status.rawValue
@@ -557,7 +557,7 @@ final class SyncCoordinator: ObservableObject {
                                       status: status, pagesSynced: changed, runAt: Date(), error: firstError)
         ledger.appendEvent(makeEvent(rule: rule, binding: binding, folderName: folderName,
                                      type: .ruleRunCompleted, durationMs: Int(Date().timeIntervalSince(runStart) * 1_000)))
-        Telemetry.capture("destination.synced", properties: [
+        Telemetry.capture(.destinationSynced, properties: [
             "provider": binding.kind.rawValue, "notes_synced": changed, "status": status.rawValue, "mode": "mirror"
         ])
         if firstError != nil, self.settings.notifyOnFailure {

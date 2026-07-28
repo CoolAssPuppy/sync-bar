@@ -83,12 +83,12 @@ struct RemarkablePairPanel: View {
             // silent ("no notebooks").
             Ledger.shared.reconcileRemarkableRules(withFolders: folders)
             Ledger.shared.updateRemarkableHealth(error: nil)
-            Telemetry.capture("remarkable.paired")
+            Telemetry.capture(.remarkablePaired)
             code = ""
             onPaired?()
             onClose?()
         } catch {
-            Telemetry.capture("remarkable.pair_failed")
+            Telemetry.capture(.remarkablePairFailed)
             errorMessage = Formatters.userMessage(for: error)
         }
     }

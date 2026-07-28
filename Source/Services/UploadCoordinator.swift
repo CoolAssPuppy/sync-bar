@@ -94,7 +94,7 @@ final class UploadCoordinator: ObservableObject {
             } else {
                 showBanner(.error, count: failed)
             }
-            Telemetry.capture("remarkable.upload", properties: ["succeeded": succeeded, "failed": failed])
+            Telemetry.capture(.remarkableUploadCompleted, properties: ["succeeded": succeeded, "failed": failed])
             if succeeded > 0 {
                 NotificationCenter.default.post(name: .remarkableUploadFinished, object: nil)
             }

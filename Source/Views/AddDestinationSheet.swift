@@ -48,7 +48,7 @@ struct AddDestinationSheet: View {
                 preselected: Set(ledger.linearAccounts.map(\.id)),
                 onConfirm: { selectedIds in
                     ledger.applyLinearTeamSelection(available: choices.teams, selectedIds: selectedIds)
-                    Telemetry.capture("destination.connected", properties: ["provider": "linear"])
+                    Telemetry.capture(.destinationConnected, properties: ["provider": "linear"])
                     linearTeamChoices = nil
                     isPresented = false
                 },
@@ -285,7 +285,7 @@ struct AddDestinationSheet: View {
         } catch OAuthError.userCancelled {
             // User backed out of the web flow; leave the sheet open, no error.
         } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": "linear"])
+            Telemetry.capture(.destinationConnectFailed, properties: ["provider": "linear"])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -299,12 +299,12 @@ struct AddDestinationSheet: View {
         defer { isConnecting = false }
         do {
             try await perform()
-            Telemetry.capture("destination.connected", properties: ["provider": kind.rawValue])
+            Telemetry.capture(.destinationConnected, properties: ["provider": kind.rawValue])
             isPresented = false
         } catch OAuthError.userCancelled {
             // User backed out of the web flow; leave the sheet open, no error.
         } catch {
-            Telemetry.capture("destination.connect_failed", properties: ["provider": kind.rawValue])
+            Telemetry.capture(.destinationConnectFailed, properties: ["provider": kind.rawValue])
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -323,7 +323,7 @@ struct AddDestinationSheet: View {
                     folderName: "Sync Bar",
                     connectedAt: Date()
                 ))
-                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+                Telemetry.capture(.destinationConnected, properties: ["provider": selectedKind.rawValue])
             }
             isPresented = false
         case .markdownFolder:
@@ -338,7 +338,7 @@ struct AddDestinationSheet: View {
                     folderPath: "",
                     connectedAt: Date()
                 ))
-                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+                Telemetry.capture(.destinationConnected, properties: ["provider": selectedKind.rawValue])
             }
             isPresented = false
         case .chrome:
@@ -351,7 +351,7 @@ struct AddDestinationSheet: View {
                     profileDirName: "Default",
                     connectedAt: Date()
                 ))
-                Telemetry.capture("destination.connected", properties: ["provider": selectedKind.rawValue])
+                Telemetry.capture(.destinationConnected, properties: ["provider": selectedKind.rawValue])
             }
             isPresented = false
         }

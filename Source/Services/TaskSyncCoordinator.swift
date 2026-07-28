@@ -201,7 +201,7 @@ final class TaskSyncCoordinator: ObservableObject {
             rmNotebookName: sync.remindersListName, rmPageId: nil,
             notionPageUrl: nil, durationMs: nil, ocrProvider: nil, errorMessage: firstError))
 
-        Telemetry.capture("task_sync.run", properties: [
+        Telemetry.capture(.taskSyncCompleted, properties: [
             "status": status.rawValue,
             "changed": changed,
             "links": newLinks.count

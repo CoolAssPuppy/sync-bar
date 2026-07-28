@@ -64,13 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Fires `app.launched` and, when the installed build changed since the
     /// last launch, `update.installed` with the previous/current versions.
     private func captureLaunchEvents() {
-        Telemetry.capture("app.launched")
+        Telemetry.capture(.appLaunched)
 
         let versionKey = "\(Bundle.main.bundleIdentifier ?? "syncbar").telemetry.lastVersion"
         let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let previous = UserDefaults.standard.string(forKey: versionKey)
         if let previous, previous != current {
-            Telemetry.capture("update.installed", properties: ["from": previous, "to": current])
+            Telemetry.capture(.updateInstalled, properties: ["from": previous, "to": current])
         }
         if previous != current {
             UserDefaults.standard.set(current, forKey: versionKey)
@@ -179,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        Telemetry.capture("menu.opened")
+        Telemetry.capture(.menuOpened)
 
         popoverEventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]

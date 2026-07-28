@@ -149,7 +149,7 @@ struct XSourceClient: SourceClient {
     private func emitUsage(cfg: XSourceConfig, itemsSynced: Int, reads: Int, pages: Int, isInitial: Bool) async {
         let handle = cfg.username.hasPrefix("@") ? cfg.username : "@\(cfg.username)"
         let customerId = await EntitlementManager.shared.customerId(for: .twitter)
-        Telemetry.capture("x.sync.usage", properties: [
+        Telemetry.capture(.xSyncUsageReported, properties: [
             "x_user_id": cfg.accountId,
             "handle": handle,
             "stream": cfg.stream.rawValue,
@@ -249,7 +249,7 @@ struct XSourceClient: SourceClient {
     /// relay stay accurate about what a thread fetch cost.
     private func emitExpansionUsage(cfg: XSourceConfig, reads: Int, conversationId: String) async {
         let customerId = await EntitlementManager.shared.customerId(for: .twitter)
-        Telemetry.capture("x.thread.usage", properties: [
+        Telemetry.capture(.xThreadUsageReported, properties: [
             "x_user_id": cfg.accountId,
             "stream": cfg.stream.rawValue,
             "conversation_id": conversationId,

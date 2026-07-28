@@ -23,15 +23,23 @@ if ! command -v doppler >/dev/null 2>&1; then
   exit 1
 fi
 
+# Entries are either NAME (same on both sides) or BUILD_SETTING:DOPPLER_NAME.
 KEYS=(
   NOTION_CLIENT_ID NOTION_CLIENT_SECRET
   LINEAR_CLIENT_ID LINEAR_CLIENT_SECRET
   GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
   X_CLIENT_ID X_CLIENT_SECRET
-  POSTHOG_API_KEY
+  POSTHOG_API_KEY:POSTHOG_PUBLIC_KEY
   POLAR_ORG_ID POLAR_CHECKOUT_URL POLAR_PORTAL_URL POLAR_USAGE_RELAY_URL
   POLAR_RELAY_TOKEN POLAR_API_BASE
 )
+
+# The analytics key is POSTHOG_PUBLIC_KEY in Doppler and POSTHOG_API_KEY in the
+# build settings, which is why the name is mapped above. Fetching the build
+# setting name straight from Doppler returned nothing, so Secrets.xcconfig
+# carried an empty POSTHOG_API_KEY and Telemetry.setup() disabled capture
+# without saying anything.
+REQUIRED=(POSTHOG_API_KEY)
 
 echo "==> Pulling OAuth credentials from Doppler ($PROJECT/$CONFIG)"
 {
@@ -41,11 +49,20 @@ echo "==> Pulling OAuth credentials from Doppler ($PROJECT/$CONFIG)"
   # $(SLASH)$(SLASH), which expands back to // at build time without tripping the
   # comment parser.
   echo "SLASH = /"
-  for key in "${KEYS[@]}"; do
-    value="$(doppler secrets get "$key" --project "$PROJECT" --config "$CONFIG" --plain 2>/dev/null || true)"
+  for entry in "${KEYS[@]}"; do
+    key="${entry%%:*}"
+    remote="${entry##*:}"
+    value="$(doppler secrets get "$remote" --project "$PROJECT" --config "$CONFIG" --plain 2>/dev/null || true)"
     value="$(printf '%s' "$value" | sed 's#//#$(SLASH)$(SLASH)#g')"
     echo "$key = $value"
   done
 } > "$OUT"
+
+for key in "${REQUIRED[@]}"; do
+  if ! grep -qE "^$key = .+" "$OUT"; then
+    echo "Error: $key came back empty from Doppler $PROJECT/$CONFIG." >&2
+    exit 1
+  fi
+done
 
 echo "==> Wrote $OUT"

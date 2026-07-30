@@ -158,14 +158,11 @@ struct SyncEditorView: View {
         }
     }
 
-    /// Sources the user can pick from — only the ones they've added.
+    /// Sources the user can pick from — only the ones they've added. Falls back to
+    /// reMarkable so the "From" step always has something to render; the editor is
+    /// unreachable with no source anyway.
     private var availableSources: [EditorSource] {
-        var out: [EditorSource] = []
-        if ledger.remarkableAccount != nil { out.append(.kind(.remarkable)) }
-        if ledger.safariConnected { out.append(.kind(.safari)) }
-        // A connected Notion workspace can be a backup source (Notion -> notes).
-        if !ledger.notionWorkspaces.isEmpty { out.append(.kind(.notion)) }
-        if !ledger.xAccounts.isEmpty { out.append(.kind(.x)) }
+        var out = ledger.connectedSourceKinds.map(EditorSource.kind)
         if ledger.remindersConnected { out.append(.reminders) }
         return out.isEmpty ? [.kind(.remarkable)] : out
     }

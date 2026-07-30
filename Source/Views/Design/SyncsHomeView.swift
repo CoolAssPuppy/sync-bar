@@ -103,9 +103,7 @@ struct SyncsHomeView: View {
             .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
             .map { (title: $0.key, items: $0.value.sorted { $0.createdAt > $1.createdAt }) }
     }
-    private var hasAnySource: Bool {
-        ledger.remarkableAccount != nil || ledger.safariConnected || ledger.remindersConnected
-    }
+    private var hasAnySource: Bool { ledger.hasAnySource }
     private var hasAnySync: Bool { !flows.isEmpty || !taskSyncs.isEmpty }
 
     var body: some View {

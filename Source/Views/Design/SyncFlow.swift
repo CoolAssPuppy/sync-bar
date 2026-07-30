@@ -99,10 +99,34 @@ extension Ledger {
 
     var hasAnyDestination: Bool { connectedAppCount > 0 }
 
-    /// Count of connected sources (reMarkable, Safari, Reminders) — the account-
-    /// less ones are simple "added it" flags.
+    /// Every source kind the user can build a sync from. Notion counts: one
+    /// connected workspace both reads (database backup) and writes, so the same
+    /// connection serves as a source. Reminders is excluded because it's only ever
+    /// half of a two-way task sync, never a one-way source — see `hasAnySource`.
+    ///
+    /// This is the single source of truth for "which sources exist". Anything
+    /// asking that question reads it rather than keeping its own list, which is
+    /// how the home screen and the editor drifted apart.
+    var connectedSourceKinds: [SourceKind] {
+        var out: [SourceKind] = []
+        if remarkableAccount != nil { out.append(.remarkable) }
+        if safariConnected          { out.append(.safari) }
+        if !notionWorkspaces.isEmpty { out.append(.notion) }
+        if !xAccounts.isEmpty        { out.append(.x) }
+        return out
+    }
+
+    /// Whether the user has anything to sync from at all, counting Reminders,
+    /// which yields a two-way task sync rather than a one-way flow.
+    var hasAnySource: Bool { !connectedSourceKinds.isEmpty || remindersConnected }
+
+    /// Count of the source cards on the Connections screen: reMarkable, Safari and
+    /// Reminders are single "added it" flags, Twitter is one card per account.
+    /// Notion is deliberately absent — it appears once, under Destinations, even
+    /// though `connectedSourceKinds` also offers it as a source.
     var connectedSourceCount: Int {
-        (remarkableAccount != nil ? 1 : 0) + (safariConnected ? 1 : 0) + (remindersConnected ? 1 : 0)
+        (remarkableAccount != nil ? 1 : 0) + (safariConnected ? 1 : 0)
+            + (remindersConnected ? 1 : 0) + xAccounts.count
     }
 
     /// Everything shown on the Connections screen: sources + destinations. This

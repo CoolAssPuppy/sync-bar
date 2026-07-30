@@ -4,10 +4,10 @@
 //
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
-//  A source is a place Sync Bar pulls notes FROM. reMarkable is the only one
-//  today, but the kind is modeled separately from the data layer so adding a
-//  new source is a matter of a new case plus its brand mark - the UI already
-//  renders any SourceKind through SourceIcon / BrandIcon.
+//  A source is a place Sync Bar pulls notes FROM: reMarkable, Safari bookmarks,
+//  a Notion database, a Twitter stream. The kind is modeled separately from the
+//  data layer so adding a new source is a matter of a new case plus its brand
+//  mark - the UI already renders any SourceKind through SourceIcon / BrandIcon.
 //
 
 import Foundation

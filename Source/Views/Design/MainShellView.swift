@@ -82,8 +82,7 @@ struct MainShellView: View {
                 taskCoordinator: taskCoordinator,
                 onNew: { editorTarget = .new },
                 onEdit: { editorTarget = .edit($0) },
-                onEditTask: { editorTarget = .editTask($0) },
-                onRefresh: refreshFolders
+                onEditTask: { editorTarget = .editTask($0) }
             )
         case .connections: ConnectionsView()
         case .activity:    ActivityView()

@@ -5,7 +5,7 @@
 //  Copyright (c) 2026 Strategic Nerds. All rights reserved.
 //
 //  The redesign's atomic object. A "Sync" the user sees = one (rule, binding)
-//  pair: a reMarkable folder flowing to one destination with its options. Rules
+//  pair: one source scope flowing to one destination with its options. Rules
 //  and bindings stay as the storage model; this flattens them into the single
 //  noun the new UI is built around.
 //

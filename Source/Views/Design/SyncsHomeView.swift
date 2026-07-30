@@ -70,7 +70,6 @@ struct SyncsHomeView: View {
     var onNew: () -> Void
     var onEdit: (SyncFlow) -> Void
     var onEditTask: (TaskSync) -> Void
-    var onRefresh: () -> Void
 
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var entitlement = EntitlementManager.shared
@@ -264,16 +263,9 @@ struct SyncsHomeView: View {
             }
             .frame(width: 92, height: 92)
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-            VStack(spacing: 6) {
-                Text("No syncs yet")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text("A sync sends one reMarkable folder to one app. Make your first one to start turning notes into text.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.muted)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 420)
-            }
+            Text("No syncs yet")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(theme.foreground)
             PillButton(title: "Create your first sync", systemImage: "plus") { onNew() }
                 .padding(.top, 2)
             Spacer()
@@ -292,17 +284,11 @@ struct SyncsHomeView: View {
             }
             .frame(width: 92, height: 92)
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-            VStack(spacing: 6) {
-                Text("Sync Bar syncs your information from Sources to Destinations")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 460)
-                Text("Start by adding a source — your reMarkable, or Safari bookmarks.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.muted)
-                    .multilineTextAlignment(.center)
-            }
+            Text("Sync Bar syncs your information from Sources to Destinations")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(theme.foreground)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
             PillButton(title: "Add your first Source", systemImage: "plus") { isAddingSource = true }
                 .padding(.top, 2)
             Spacer()

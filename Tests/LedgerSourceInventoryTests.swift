@@ -75,4 +75,40 @@ final class LedgerSourceInventoryTests: XCTestCase {
         XCTAssertEqual(ledger.connectedSourceCount, 0)
         XCTAssertEqual(ledger.connectedAppCount, 1)
     }
+
+    // MARK: reMarkable repair prompt
+
+    /// The prompt says "re-pair in Connections", which is impossible advice when
+    /// there's no pairing to repair — so a rejected leftover token stays quiet.
+    func test_repair_prompt_stays_down_when_nothing_is_paired() {
+        let ledger = Ledger.shared
+        ledger.setRemarkableAccount(nil)
+
+        ledger.updateRemarkableHealth(error: RemarkableError.tokenRejected)
+
+        XCTAssertFalse(ledger.remarkableNeedsRepair)
+    }
+
+    func test_repair_prompt_raises_for_a_paired_remarkable() {
+        let ledger = Ledger.shared
+        ledger.setRemarkableAccount(RemarkableAccount(pairedAt: Date(), userIdentifier: "u-repair"))
+        defer { ledger.setRemarkableAccount(nil) }
+
+        ledger.updateRemarkableHealth(error: RemarkableError.tokenRejected)
+
+        XCTAssertTrue(ledger.remarkableNeedsRepair)
+    }
+
+    /// Unpairing has to retire the prompt with the account, or the banner outlives
+    /// the tablet it was talking about.
+    func test_unpairing_clears_a_raised_repair_prompt() {
+        let ledger = Ledger.shared
+        ledger.setRemarkableAccount(RemarkableAccount(pairedAt: Date(), userIdentifier: "u-clear"))
+        ledger.updateRemarkableHealth(error: RemarkableError.tokenRejected)
+        XCTAssertTrue(ledger.remarkableNeedsRepair)
+
+        ledger.setRemarkableAccount(nil)
+
+        XCTAssertFalse(ledger.remarkableNeedsRepair)
+    }
 }

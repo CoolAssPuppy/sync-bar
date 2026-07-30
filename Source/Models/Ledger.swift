@@ -198,6 +198,9 @@ final class Ledger: ObservableObject {
     func setRemarkableAccount(_ account: RemarkableAccount?) {
         guard remarkableAccount != account else { return }
         remarkableAccount = account
+        // Unpairing retires the repair prompt with it — there's nothing left to
+        // re-pair, and a stale flag would outlive the account it described.
+        if account == nil { remarkableNeedsRepair = false }
         persistRemarkable()
         NotificationCenter.default.post(name: .remarkableAccountChanged, object: nil)
     }
@@ -214,9 +217,16 @@ final class Ledger: ObservableObject {
         }
     }
 
+    /// Only a paired reMarkable can need repairing. A user who sold their tablet
+    /// can still have a live device token in the keychain, and the cloud rejecting
+    /// it would otherwise latch this flag and tell them to "re-pair in
+    /// Connections" — a screen with no reMarkable card on it, since the account is
+    /// gone. Clamping here keeps every reader honest without each one repeating
+    /// the check.
     func setRemarkableNeedsRepair(_ value: Bool) {
-        guard remarkableNeedsRepair != value else { return }
-        remarkableNeedsRepair = value
+        let needsRepair = value && remarkableAccount != nil
+        guard remarkableNeedsRepair != needsRepair else { return }
+        remarkableNeedsRepair = needsRepair
     }
 
     /// Fully disconnects the reMarkable source — the mirror of pairing. Deletes

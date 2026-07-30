@@ -97,6 +97,10 @@ final class SyncCoordinator: ObservableObject {
         // Demo mode shows ephemeral sample folders/rules; refreshing from the
         // real device would prune them, so skip while it's on.
         guard !ledger.isDemoMode else { return }
+        // No account means no reMarkable to walk. The keychain can still hold a
+        // token from a tablet the user no longer has; calling the cloud with it
+        // buys a rejection and nothing else.
+        guard ledger.remarkableAccount != nil else { return }
         guard keychain.value(for: .remarkableDeviceToken)?.isEmpty == false else { return }
         do {
             let folders = try await remarkable.listFolders()

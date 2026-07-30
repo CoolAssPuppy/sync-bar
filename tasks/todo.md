@@ -1,89 +1,85 @@
-# Paid Twitter source — implementation plan
+# De-reMarkable the Syncs screen
 
-## Decisions (supersede the original spec)
+## The bug, as observed
 
-- **Provider: Polar.sh** (not Lemon Squeezy). License-key *validate* needs no auth and
-  is safe in the client (`POST /v1/customer-portal/license-keys/validate`, body `key`
-  + `organization_id`). Event ingestion (metered) needs an Organization Access Token,
-  so it runs through a small server-side relay.
-- **Billing (final): $6.99/month flat, Option A.** A Polar subscription with a
-  License Keys benefit is the entitlement gate. No per-tweet charge; instead a
-  client-side monthly read cap (`ReadBudget`, 650 reads) bounds the maker's X cost
-  to ~$3.25/subscriber, under the price. The metered relay is built but DORMANT
-  (deploy it later to switch on per-read billing). Activation limit: 2 devices.
-- **X cost reality:** pay-per-use, $0.005 per post read, 2M reads/mo cap, 24h dedup.
-  650 reads/mo caps cost at ~$3.25; worst case 2 devices ~$6.50, still under $6.99.
+State: `ledger.remarkableAccount` is nil, no Safari, no Reminders. Connected sources
+are one Notion workspace (as a backup source) and one Twitter account. Four rules in
+`ledger.rules.v2`, three of them with destinations, so `ledger.syncFlows.count == 3`.
 
-## Architecture for optionality (per user directive)
+Two independent defects, both from the era when reMarkable was the only source:
 
-Twitter is the FIRST instance of a general "paid Sync class". Gate via a `PaidFeature`
-abstraction, not hardcoded `.x` checks:
+1. `SyncsHomeView.hasAnySource` (SyncsHomeView.swift:106) counts only reMarkable,
+   Safari, and Reminders. Notion and Twitter sources don't register, so `content`
+   takes the `!hasAnySource` branch and draws the "Add your first Source" hero
+   *instead of the list*. The rail badge still reads "3", so the window contradicts
+   itself. `SyncEditorView.availableSources` (SyncEditorView.swift:162) already has
+   the correct list; the home screen has its own stale copy.
+2. `disconnectedBanner` (SyncsHomeView.swift:114) shows whenever
+   `ledger.remarkableNeedsRepair` is true, with no check that a reMarkable is even
+   paired. A leftover device token in the keychain gets rejected by the cloud, the
+   flag latches, and a user who sold their tablet gets told to "re-pair in
+   Connections" — where there is no reMarkable card to act on, because
+   `remarkableAccount` is nil. A dead end.
 
-- `PaidFeature` enum (currently `.twitter`); map a `SyncRule`/`SourceKind` -> `PaidFeature?`.
-- `LicenseProvider` protocol; `PolarLicenseClient` is one conformer (swappable).
-- `EntitlementManager` owns the state machine, daily check, grace via `expires_at`.
-- Gates ask "does this sync belong to a paid class, and is that class entitled?"
+Related, found while tracing (same root cause, worth fixing in the same pass):
+
+3. `Ledger.connectedSourceCount` (SyncFlow.swift:104) omits `xAccounts`, so the
+   Connections badge undercounts by one per connected Twitter account.
+4. `MainShellView.refreshFolders()` (MainShellView.swift:156) has no device-token
+   guard, unlike `SyncCoordinator.refreshFolders()` which does. With no token,
+   `RemarkableClientFactory.make()` returns the mock client, and the shell writes
+   its sample folders (Work / Personal / Projects) into the ledger and reconciles
+   real rules against them. Reachable from onboarding finish and
+   `.remarkableUploadFinished`. Verified this ledger is clean — the four cached
+   folders are real — but the path is live.
+5. Copy: the empty state ("A sync sends one reMarkable folder to one app") and the
+   hero subtitle ("your reMarkable, or Safari bookmarks") describe a
+   reMarkable-only app. `Sources.swift`'s header comment says reMarkable is the
+   only source, which is four sources out of date.
 
 ## Commit order (build + `make test` green between each)
 
-- [ ] 1. Docs: this plan + spec decisions header.
-- [ ] 2. Config plumbing: `POLAR_ORG_ID`, `POLAR_CHECKOUT_URL`, `POLAR_PORTAL_URL`,
-      `POLAR_USAGE_RELAY_URL` through xcconfig.example, pull-secrets.sh, project.yml,
-      Info.plist, `AuthSecrets`. Keychain keys `licenseKey`, `licenseActivationId`.
-- [ ] 3. Telemetry `bypassOptOut` param + `TelemetryBypassTests`.
-- [ ] 4. `LicenseProvider` protocol + `PolarLicenseClient` + `PolarLicenseClientTests`.
-- [ ] 5. `PaidFeature` + `EntitlementManager` (state machine + pure midnight helper)
-      + AppSettings persistence + `EntitlementManagerTests`.
-- [ ] 6. Inject `EntitlementManager` in `AppDelegate`; thread to coordinator + views.
-- [ ] 7. `x.sync.usage` emit in `XSourceClient.listItems` (bypassOptOut) + `UsageReporter`
-      (posts reads to the Polar relay; no-ops when the URL is unset).
-- [ ] 8. Run gate in `SyncCoordinator.runRule` (skip `.x` when not entitled, clear skip).
-- [ ] 9. `TwitterPaywallSheet` + add gate in `AddSourceSheet.connectX`.
-- [ ] 10. Inactive-sync row + reactivate dialog in `SyncsHomeView`.
-- [ ] 11. Settings subscription/license section + privacy copy.
-- [ ] 12. Relay scaffold (`polar-relay/`) for the user to deploy.
-
-## Manual setup the user owns
-
-- Polar org + $4.99/mo subscription product with License Keys benefit + a metered price,
-  a Meter on `x.sync.usage` reads, checkout + portal URLs, Org ID -> Doppler `sync-bar`.
-- Deploy the relay (holds the Org Access Token) -> `POLAR_USAGE_RELAY_URL` in Doppler.
-- Host a privacy policy; swap the placeholder URL.
+- [x] 1. `Ledger.hasAnySource` / `connectedSourceKinds` as the single source of
+      truth; `SyncsHomeView.hasAnySource` and `SyncEditorView.availableSources`
+      both derive from it. `connectedSourceCount` counts Twitter accounts.
+      Fixes the hidden syncs and the badge. (`ff6e96e`)
+- [x] 2. `setRemarkableNeedsRepair` can't latch true with nothing paired,
+      unpairing lowers it, and `SyncCoordinator.refreshFolders` requires an
+      account rather than just a token. Fixes the dead-end banner. (`decbb80`)
+- [x] 3. Device-token guard in `MainShellView.refreshFolders`, so the mock
+      client's sample folders can never reach the ledger. (`83c7f65`)
+- [x] 4. Source-agnostic copy in the empty state and hero; drop the unused
+      `onRefresh` parameter; refresh two stale header comments. (`e6cf1f2`)
+- [x] 5. `howSummary` stops reporting title strategy and OCR mode for sources
+      that have neither. Found in the verification screenshot: a Notion backup
+      row read "First line as title · OCR all pages". (`32cc881`)
+- [x] 6. Rename the Notion source's "Folder column" label to "Folder from",
+      which is what the dropdown does. (`62a1dfb`)
 
 ## Review
 
-All 12 commits landed on branch `paid-twitter-source`, building green with `make build`
-and `make test` (388 tests, 0 failures) between each. Not pushed.
+Branch `fix-syncs-screen-remarkable-assumption`, six commits, `make build` and
+`make test` green between each (450 tests, 0 failures). Not pushed.
 
-What shipped:
-- Provider-neutral entitlement layer (`LicenseProvider` + `PolarLicenseClient`), so the
-  subscription provider stays swappable.
-- `PaidFeature` abstraction (Twitter = first instance) — every gate routes through it,
-  never a bare `.x` check, so a future paywall over another sync or a group is a data
-  change in `PaidFeature.sourceKinds`, not a sweep.
-- `EntitlementManager`: state machine with grace via `expiresAt`, daily 00:00 Pacific
-  re-check + launch check, pure unit-tested midnight + reduce/isEntitled helpers.
-- Un-disableable `x.sync.usage` (telemetry `bypassOptOut`) + best-effort `UsageReporter`
-  to the metered-billing relay.
-- Gates: add (paywall before OAuth), run (skip lapsed paid rules), row (inactive +
-  reactivate dialog). Settings subscription section + honest analytics copy.
-- `polar-relay/` scaffold for the metered-billing endpoint (user deploys).
+Verified against the real ledger, not a fixture: the Syncs screen now lists all
+three syncs (two Notion groups and one Twitter) with no banner, and the
+Connections badge reads 3, matching the cards on that screen.
 
-Deviation from the original spec, by user decision: provider is Polar (not Lemon
-Squeezy); pricing is $4.99/mo base + metered usage (not $19.95 flat). Entitlement
-persistence lives in `EntitlementManager` (keyed by feature) rather than three
-Twitter-specific `AppSettings` fields, for optionality.
+Root cause of both defects was the same shape: reMarkable-era checks that were
+never widened when Notion and Twitter became sources. The fix consolidates the
+"which sources exist" question into `Ledger` so the next source added can't
+reintroduce the drift — the home screen and the editor had already drifted.
 
-Manual setup still owned by the user (flagged, stubbed in code):
-- Create the Polar org + $4.99/mo product (License Keys benefit) + Meter + metered price;
-  put `POLAR_ORG_ID`, `POLAR_CHECKOUT_URL`, `POLAR_PORTAL_URL` in Doppler `sync-bar`.
-- Deploy `polar-relay/`, set `POLAR_USAGE_RELAY_URL` in Doppler.
-- Host a privacy policy; replace the placeholder `AuthSecrets.privacyPolicyURL`.
+Not changed, worth knowing:
 
-Not verifiable without that setup: live activation, checkout, portal, and metered
-ingestion (the entitlement state machine, gates, and parsing are unit-tested against
-Polar's documented response shapes).
-
-Pre-existing lint note: `make lint` exits non-zero on a `force_try` in
-`NotionPageReaderTests.swift` (on `main`, untouched here). New code adds only
-force-unwrap warnings in tests, matching the existing test-suite convention.
+- Two `Notes -> Markdown files` rows were indistinguishable in the list, because
+  a row shows source and destination kind but nothing that separates two syncs
+  sharing both. One of them has since been deleted from the ledger (not by this
+  work — nothing here deletes rules).
+- The Markdown destination's file-name-template hint offers `{folder_name}`,
+  which resolves to the *database title* for a Notion source, not the Folder
+  column. `{folder_name}/{date}-{title}` therefore writes
+  `Category/Notes/<date>-<title>.md` — a redundant level, since the Folder
+  column already becomes the leading subfolder on its own.
+- `make lint` still exits non-zero on the pre-existing `force_try` in
+  `NotionPageReaderTests.swift`.

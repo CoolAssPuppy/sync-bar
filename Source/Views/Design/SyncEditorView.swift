@@ -404,7 +404,7 @@ struct SyncEditorView: View {
             )
             if notionSourceDatabaseId != nil {
                 HStack(spacing: 8) {
-                    Text("Folder column").font(.system(size: 12)).foregroundStyle(theme.tertiary)
+                    Text("Folder from").font(.system(size: 12)).foregroundStyle(theme.tertiary)
                     CustomDropdown(
                         options: notionSourceCategoryColumns.map { DropdownOption(id: $0, icon: AnyView(EmptyView()), title: $0) },
                         selectedId: notionSourceCategoryProperty,

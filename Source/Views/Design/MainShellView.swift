@@ -153,8 +153,17 @@ struct MainShellView: View {
         refreshFolders()
     }
 
+    /// Walks the paired reMarkable and caches its folder list. Gated on a real
+    /// device token, because without one `RemarkableClientFactory` hands back the
+    /// mock client, and its three sample folders would be cached as if they were
+    /// real — then rules would be reconciled against them. The client is built per
+    /// call rather than held, so a refresh straight after pairing gets the live one.
     private func refreshFolders() {
         Task {
+            let hasToken = await Task.detached {
+                KeychainStore.shared.value(for: .remarkableDeviceToken)?.isEmpty == false
+            }.value
+            guard hasToken else { return }
             let client = RemarkableClientFactory.make()
             do {
                 let folders = try await client.listFolders()

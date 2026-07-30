@@ -58,6 +58,21 @@ final class SyncFlowTests: XCTestCase {
         XCTAssertTrue(summary.contains("work"))
     }
 
+    /// OCR and title strategy belong to handwriting. A Notion page arrives with a
+    /// title and nothing to recognize, so its row says what it moves instead.
+    func test_how_summary_of_a_notion_sync_names_the_flow_not_ocr() {
+        let source = NotionSourceConfig(
+            workspaceId: "ws-1", workspaceName: "Workspace", databaseId: "db-1",
+            databaseTitle: "Notes", titleProperty: "Title")
+        let rule = SyncRule(source: .notion(source))
+
+        let summary = SyncFlow(rule: rule, binding: markdownBinding()).howSummary
+
+        XCTAssertTrue(summary.contains("Notes"), summary)
+        XCTAssertFalse(summary.contains("OCR"), summary)
+        XCTAssertFalse(summary.contains("as title"), summary)
+    }
+
     func test_disabled_binding_is_not_enabled() {
         let rule = SyncRule.new(notebookId: "f1", notebookName: "Work")
         var binding = markdownBinding()

@@ -47,17 +47,10 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
 
     /// The muted one-line summary under a sync row.
     var howSummary: String {
-        // Twitter has no OCR/title; describe what's flowing where.
-        if let stream = xStreamLabel {
-            return "Syncing \(stream) to \(destinationSummary)"
-        }
-        // Bookmark sources have no OCR/title; describe the mirror instead.
-        if rule.sourceKind == .safari {
-            if case .chrome(let cfg) = binding.configuration {
-                return cfg.mirrorExactly ? "Exactly matches Safari" : "Adds & updates bookmarks"
-            }
-            return "Bookmarks"
-        }
+        // Title strategy and OCR describe handwriting, so they belong to
+        // reMarkable alone. Every other source says what's flowing where; a Notion
+        // page has a title already and nothing to run OCR over.
+        guard rule.sourceKind == .remarkable else { return flowSummary }
         var parts: [String] = [titleShort + " as title"]
         switch ocrMode {
         case .all:             parts.append("OCR all pages")
@@ -70,6 +63,18 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
             parts.append("tag: " + requiredTags.joined(separator: ", "))
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// What a non-reMarkable sync moves, and where to.
+    private var flowSummary: String {
+        if let stream = xStreamLabel { return "Syncing \(stream) to \(destinationSummary)" }
+        if rule.sourceKind == .safari {
+            if case .chrome(let cfg) = binding.configuration {
+                return cfg.mirrorExactly ? "Exactly matches Safari" : "Adds & updates bookmarks"
+            }
+            return "Bookmarks"
+        }
+        return "Syncing \(rule.sourceSummary) to \(destinationSummary)"
     }
 
     private var titleShort: String {

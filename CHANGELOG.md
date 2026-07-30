@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.4 — 2026-07-30
+
+### Fixed
+- The Syncs list no longer hides your syncs when none of your sources is a
+  reMarkable. A setup built on Notion or Twitter sources showed the "Add
+  your first Source" screen instead of the syncs it had.
+- The "reMarkable disconnected" warning no longer appears when no
+  reMarkable is paired. It used to fire on a leftover device token and
+  send you to a screen with nothing to re-pair.
+- A Notion sync's summary line no longer claims to run OCR or pick a title
+  from the first line. Neither applies to a Notion page.
+- The folder list from a paired reMarkable can no longer be replaced by
+  sample folders when the device token is missing.
+- The Connections count now includes Twitter accounts.
+- The Notion source's column picker is labelled "Folder from", which is
+  what it does: the column whose value becomes the destination folder.
+
 ## 1.6.2 — 2026-07-10
 
 ### Fixed

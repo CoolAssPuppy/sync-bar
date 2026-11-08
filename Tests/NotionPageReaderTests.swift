@@ -15,7 +15,7 @@ final class NotionPageReaderTests: XCTestCase {
     private func queryResponse(results: [[String: Any]], hasMore: Bool = false, nextCursor: String? = nil) -> Data {
         var root: [String: Any] = ["results": results, "has_more": hasMore]
         if let nextCursor { root["next_cursor"] = nextCursor }
-        return try! JSONSerialization.data(withJSONObject: root)
+        return (try? JSONSerialization.data(withJSONObject: root)) ?? Data()
     }
 
     private func row(id: String,

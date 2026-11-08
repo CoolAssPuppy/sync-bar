@@ -26,7 +26,7 @@ final class ChromeBookmarksStoreTests: XCTestCase {
                 "synced": ["type": "folder", "name": "Mobile bookmarks", "id": "3", "children": []]
             ]
         ]
-        return try! JSONSerialization.data(withJSONObject: root)
+        return (try? JSONSerialization.data(withJSONObject: root)) ?? Data()
     }
 
     /// Locks the checksum algorithm: it must equal an explicitly-built MD5 over

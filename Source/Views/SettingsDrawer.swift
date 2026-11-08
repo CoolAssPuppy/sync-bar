@@ -35,8 +35,6 @@ struct SettingsDrawer: View {
             Rectangle().fill(theme.divider).frame(height: 1)
             ScrollView { SettingsView() }
                 .frame(maxHeight: contentHeight)
-            Rectangle().fill(theme.divider).frame(height: 1)
-            footer
         }
         .background(theme.surface)
         .overlay(drawerShape.strokeBorder(theme.border, lineWidth: 1))
@@ -54,14 +52,9 @@ struct SettingsDrawer: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Settings")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text("Preferences for Sync Bar · ⌘, to toggle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
-            }
+            Text("Settings")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(theme.foreground)
             Spacer()
             Button(action: close) {
                 Image(systemName: "xmark")
@@ -73,31 +66,10 @@ struct SettingsDrawer: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close Settings")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 4) {
-            Text("Made with")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.tertiary)
-            Image(systemName: "heart.fill")
-                .font(.system(size: 9))
-                .foregroundStyle(theme.destructive)
-            Text("in Lisbon by Strategic Nerds")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.tertiary)
-            Circle().fill(theme.dim).frame(width: 3, height: 3).padding(.horizontal, 4)
-            Text("© 2026")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.tertiary)
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(theme.background)
     }
 
     private func close() {

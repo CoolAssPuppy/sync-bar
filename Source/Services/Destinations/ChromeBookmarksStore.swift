@@ -178,7 +178,7 @@ final class ChromeBookmarksStore {
             if pruneEmptyFolders(node) { removeIndexes.append(index) }
         }
         for index in removeIndexes.reversed() { children.removeObject(at: index) }
-        return children.count == 0
+        return children.firstObject == nil
     }
 
     // MARK: Folder navigation

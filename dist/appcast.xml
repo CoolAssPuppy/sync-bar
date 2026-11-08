@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.7.0</title>
+      <pubDate>Sun, 08 Nov 2026 07:48:08 +0000</pubDate>
+      <sparkle:version>32</sparkle:version>
+      <sparkle:shortVersionString>1.7.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Some UI cleanup.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.7.0.dmg"
+        sparkle:edSignature="JHV7MVNlIWZ8FrvjxgmIJ1LLOb/KsvfywCXTRjpBq91JAO+N+sc5reAUvytYt4FA4+8BzlhArr5Hjey7GBxpCA=="
+        length="8767312"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.6.4</title>
       <pubDate>Thu, 30 Jul 2026 09:58:28 +0000</pubDate>
       <sparkle:version>31</sparkle:version>

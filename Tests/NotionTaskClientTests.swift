@@ -226,7 +226,7 @@ final class NotionTaskClientTests: XCTestCase {
             let page: [String: Any] = cursor == nil
                 ? ["results": [row("a", "First")], "has_more": true, "next_cursor": "cur-2"]
                 : ["results": [row("b", "Second")], "has_more": false]
-            return (200, try! JSONSerialization.data(withJSONObject: page))
+            return (200, (try? JSONSerialization.data(withJSONObject: page)) ?? Data())
         }
 
         let client = RealNotionTaskClient(token: "t", session: makeSession())

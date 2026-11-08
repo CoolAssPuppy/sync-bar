@@ -108,17 +108,17 @@ enum NoteAdoptionMatcher {
 
     // MARK: Title normalization (mirrors the validated Python matcher)
 
-    private static let trailingTimestamp = try! NSRegularExpression(
+    private static let trailingTimestamp = try? NSRegularExpression(
         pattern: "\\s*\\d{4}-\\d{2}-\\d{2}[tT][\\d:.+\\-]*$")
-    private static let nonAlphanumeric = try! NSRegularExpression(pattern: "[^a-z0-9]+")
+    private static let nonAlphanumeric = try? NSRegularExpression(pattern: "[^a-z0-9]+")
 
     /// Lowercases, strips a trailing ISO timestamp Notion appends to some meeting
     /// titles ("PLW Hang2026-05-06T17:32..."), and collapses punctuation/space so
     /// "Ads with Rex / Supabase" and "ads with rex   supabase" compare equal.
     static func normalize(_ title: String) -> String {
         var s = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        s = replace(trailingTimestamp, in: s, with: "")
-        s = replace(nonAlphanumeric, in: s, with: " ")
+        if let trailingTimestamp { s = replace(trailingTimestamp, in: s, with: "") }
+        if let nonAlphanumeric { s = replace(nonAlphanumeric, in: s, with: " ") }
         return s.trimmingCharacters(in: .whitespaces)
     }
 

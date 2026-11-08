@@ -1,3 +1,54 @@
+# Todo
+
+## Release gate and selector containment
+
+### Plan
+- [x] Keep the theme swatch animation within the Appearance card, with less overshoot and a clipped card boundary.
+- [x] Repair seven small existing SwiftLint errors without changing behavior.
+- [x] Move independent editor types and controls to their own files, and split the editor's save helpers into a same-file extension to satisfy length rules.
+- [x] Run full `make test`, `make lint`, and `make build` on the final files, and preserve the installed app.
+- [x] Commit, fast forward main, and push the reviewed release files.
+
+### Review
+- Final release-file gate passed: `make test` ran 450 tests with no failures (`/tmp/sync-bar-release-final-test.log`, `build/Logs/Test/Test-SyncBar-2026.11.08_07-51-19-+0000.xcresult`); `make lint` exited 0 (`/tmp/sync-bar-release-final-lint.log`); `make build` exited 0 (`/tmp/sync-bar-release-final-build.log`); `git diff --check` passed. The installed app was reopened after tests.
+- The live R2 appcast lists version 1.7.0, build 32, and "Some UI cleanup." The DMG returned HTTP 200 with `Content-Length: 8767312`, matching its appcast enclosure. The parent agent verified the public shortlink `https://coolasspuppy.com/syncbar-updates` resolves to the same feed. The old `downloads.strategicnerds.com` hostname did not resolve from this machine; the active shortlink and R2 feed work.
+- The 1.7.0 changelog entry uses the requested note: "Some UI cleanup."
+
+## Compact theme selector
+
+### Plan
+- [x] Replace the Settings menu picker with a compact selector showing the active name and swatch at the right edge.
+- [x] Expand theme swatches to the left on hover or click, select a theme, and collapse with spring motion unless Reduce Motion is enabled.
+- [x] Give each theme a named keyboard and VoiceOver control, with a keyboard path to expand and collapse the selector.
+- [x] Check Swift syntax and the diff locally; coordinate the Xcode build and live UI check with the parent agent.
+
+### Review
+- Reused the existing theme store and swatch colors. The active button opens or closes the choices, each theme is a named button, and Escape closes them.
+- `swiftc -frontend -parse` and `git diff --check` passed. These checks do not prove SwiftUI type checking or visual behavior.
+- No new isolated test was added for this visual interaction. The final build passed, and the user reviewed the picker before release.
+
+### Selection and keyboard follow-up
+- [x] Animate the selected swatch from its choice position to the active position.
+- [x] Put the active button before choices in keyboard order while keeping it at the right edge.
+- [x] Check Swift syntax and accessibility labels before the Xcode build handoff.
+
+`matchedGeometryEffect` connects each choice swatch to its active position. A right-to-left swatch row keeps the trigger visually on the right and first in source order for keyboard focus. Syntax parsing and `git diff --check` passed; live motion and focus behavior still need review.
+
+## UI cleanup (cleanup-ui)
+
+### Plan
+- [x] Simplify the menu bar popover header and footer while preserving sync, pause, upload, Settings, theme, and Quit actions.
+- [x] Move theme choice into Settings and make its sections easier to scan in one column.
+- [x] Remove repeated decoration and copy from the Settings drawer.
+- [x] Check the affected screens in the running app and save screenshots.
+- [x] Run the full local test, lint, and build commands, save logs, and review the final diff.
+
+### Review
+- `make build` passed on 2026-11-08.
+- `make test` passed all 450 tests after temporarily stopping the installed Sync Bar app, which shared the test runner's bundle identifier. The installed app was reopened. See `/tmp/sync-bar-ui-test-retry.log` and `build/Logs/Test/Test-SyncBar-2026.11.08_06-44-32-+0000.xcresult`.
+- An earlier `make lint` run found nine existing errors. They were repaired before the 1.7.0 release, and the final lint run passed.
+- Main window, Settings, and dropdown content screenshots are in `/Users/prashant/.codex/visualizations/2026/11/08/01a1b9c1-dfc3-7aa1-8a2e-b771e8dc5c85/screenshots`. The dropdown uses a temporary preview window; direct menu bar placement still needs checking. Preview code was removed, the normal build passed, and the installed app and saved settings were restored.
+
 # De-reMarkable the Syncs screen
 
 ## The bug, as observed

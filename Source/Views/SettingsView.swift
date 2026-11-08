@@ -22,28 +22,21 @@ struct SettingsView: View {
     @State private var licenseError: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 14) {
-                    generalCard
-                    ocrCard
-                    resyncCard
-                }
-                .frame(maxWidth: .infinity)
-
-                VStack(spacing: 14) {
-                    folderVisibilityCard
-                    subscriptionCard
-                    notificationsCard
-                    updatesCard
-                    contactCard
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
+        VStack(spacing: 14) {
+            generalCard
+            ocrCard
+            folderVisibilityCard
+            notificationsCard
+            appearanceCard
+            subscriptionCard
+            updatesCard
+            resyncCard
+            contactCard
         }
+        .frame(maxWidth: 620)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
         .onAppear {
             // Load the stored keys off the main thread so the Settings drawer
             // opens instantly instead of blocking on keychain reads.
@@ -298,6 +291,15 @@ struct SettingsView: View {
     }
 
     // MARK: Notifications
+
+    private var appearanceCard: some View {
+        AppCard("Appearance") {
+            AppSettingRow("Theme") {
+                ThemeSelector()
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+    }
 
     private var notificationsCard: some View {
         AppCard("Notifications") {

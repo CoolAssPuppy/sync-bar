@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 — 2026-11-08
+
+- Some UI cleanup.
+
 ## 1.6.4 — 2026-07-30
 
 ### Fixed

@@ -13,40 +13,6 @@
 import SwiftUI
 import AppKit
 
-enum SyncEditorTarget: Identifiable {
-    case new
-    case edit(SyncFlow)
-    case editTask(TaskSync)
-    var id: String {
-        switch self {
-        case .new:             return "new"
-        case .edit(let f):     return f.id
-        case .editTask(let s): return "task-" + s.id
-        }
-    }
-}
-
-/// A connected destination account, normalized for the editor's "To" dropdown.
-struct ConnectedApp: Identifiable {
-    let id: String
-    let kind: DestinationKind
-    let name: String
-    let defaultConfig: DestinationConfiguration
-}
-
-extension Ledger {
-    var connectedApps: [ConnectedApp] {
-        var out: [ConnectedApp] = []
-        out += notionWorkspaces.map { ConnectedApp(id: $0.id, kind: .notion, name: $0.workspaceName, defaultConfig: $0.defaultConfiguration) }
-        out += linearAccounts.map { ConnectedApp(id: $0.id, kind: .linear, name: $0.name, defaultConfig: $0.defaultConfiguration) }
-        out += googleAccounts.map { ConnectedApp(id: $0.id, kind: .googleDocs, name: $0.displayName, defaultConfig: $0.defaultConfiguration) }
-        out += markdownTargets.map { ConnectedApp(id: $0.id, kind: .markdownFolder, name: $0.displayName, defaultConfig: .markdownFolder($0.defaultConfiguration)) }
-        out += appleNotesTargets.map { ConnectedApp(id: $0.id, kind: .appleNotes, name: "Apple Notes", defaultConfig: $0.defaultConfiguration) }
-        out += chromeTargets.map { ConnectedApp(id: $0.id, kind: .chrome, name: $0.displayName, defaultConfig: $0.defaultConfiguration) }
-        return out
-    }
-}
-
 /// What the editor's FROM step is pointed at. Reminders isn't a one-way
 /// SourceClind, so it rides alongside the SourceKinds as its own case.
 private enum EditorSource: Equatable {
@@ -1434,7 +1400,10 @@ struct SyncEditorView: View {
         }
     }
 
-    private func saveNotionSource(binding: DestinationBinding) {
+}
+
+private extension SyncEditorView {
+    func saveNotionSource(binding: DestinationBinding) {
         guard let workspaceId = notionSourceWorkspaceId,
               let databaseId = notionSourceDatabaseId else { return }
         let source = SourceConfiguration.notion(NotionSourceConfig(
@@ -1458,7 +1427,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func saveXSource(binding: DestinationBinding) {
+    func saveXSource(binding: DestinationBinding) {
         guard let account = selectedXAccount else { return }
         let source = SourceConfiguration.x(XSourceConfig(
             accountId: account.id, username: account.handle, stream: xSourceStream))
@@ -1475,7 +1444,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func addBinding(to folder: RmFolder, _ binding: DestinationBinding) {
+    func addBinding(to folder: RmFolder, _ binding: DestinationBinding) {
         if let rule = ledger.rule(forNotebookId: folder.id) {
             applyRuleLevel(folderId: folder.id, base: rule)
             ledger.addBinding(ruleId: rule.id, binding: binding)
@@ -1491,7 +1460,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func applyRuleLevel(folderId: String, base: SyncRule? = nil) {
+    func applyRuleLevel(folderId: String, base: SyncRule? = nil) {
         guard var rule = base ?? ledger.rule(forNotebookId: folderId) else { return }
         rule.updateRemarkable {
             $0.selectedFileIds = selectedFileIds
@@ -1502,7 +1471,7 @@ struct SyncEditorView: View {
         ledger.upsertRule(rule)
     }
 
-    private func deleteSync() {
+    func deleteSync() {
         if let taskId = originalTaskSyncId {
             ledger.removeTaskSync(id: taskId)
             onClose()
@@ -1514,32 +1483,5 @@ struct SyncEditorView: View {
             ledger.deleteRule(id: origRuleId)
         }
         onClose()
-    }
-}
-
-// MARK: - Segmented control
-
-struct Segmented<T: Equatable>: View {
-    @Binding var selection: T
-    let options: [(T, String)]
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(options.enumerated()), id: \.offset) { _, opt in
-                let active = selection == opt.0
-                Button(action: { selection = opt.0 }) {
-                    Text(opt.1)
-                        .font(.system(size: 12.5, weight: active ? .semibold : .medium))
-                        .foregroundStyle(active ? theme.primaryForeground : theme.muted)
-                        .padding(.horizontal, 11).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(active ? theme.primary : Color.clear))
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.background))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
     }
 }

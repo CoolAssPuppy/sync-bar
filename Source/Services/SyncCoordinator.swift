@@ -518,7 +518,7 @@ final class SyncCoordinator: ObservableObject {
             ledger.recordSyncedPage(bindingId: binding.id, pageId: link.notionId,
                                     versionHash: versionHash, externalId: link.appleNoteId)
         }
-        Log.sync.info("First-run adoption: kept \(result.links.count, privacy: .public) existing notes as-is, will create \(result.freshNotionIds.count, privacy: .public) new, \(result.orphanAppleNoteIds.count, privacy: .public) orphan Apple notes")
+        Log.sync.info("First-run adoption: \(result.links.count, privacy: .public) kept, \(result.freshNotionIds.count, privacy: .public) new, \(result.orphanAppleNoteIds.count, privacy: .public) orphan Apple notes")
     }
 
     /// Set-level mirror: hand the destination the full desired set and let it

@@ -1,5 +1,9 @@
 # Build lessons and contradictions
 
+## 2026-11-08 keep theme motion within the card
+
+The selected swatch drew past the Appearance card edge during its spring animation. Clip animated controls to their card bounds, use restrained motion, and inspect the selection transition in the running app before shipping.
+
 ## 2026-05-23 verify UI changes by running, not just building
 
 - **Correction from the user:** I shipped visual changes (a reMarkable logo, "broken Notion") to 0.4.0/0.4.1 having only run `make build` + `make test`. The tests don't cover views, so a flattened logo and a token-dependent dropdown slipped through. Lesson: for any UI/visual or integration change, launch the app and look (`make run` then `screencapture`), don't declare it done off a green build alone.

@@ -46,36 +46,17 @@ struct MenuBarPopover: View {
 
     private func header(theme: ThemePalette) -> some View {
         HStack(spacing: 10) {
-            BrandMark()
-
             VStack(alignment: .leading, spacing: 1) {
                 Text("Sync Bar")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(statusDotColor(theme: theme))
-                        .frame(width: 6, height: 6)
-                        .shadow(color: statusDotColor(theme: theme).opacity(0.5), radius: 4)
-                    Text(headerStatusText)
-                        .font(.system(size: 10))
-                        .foregroundStyle(theme.muted)
-                }
+                Text(headerStatusText)
+                    .font(.system(size: 10))
+                    .foregroundStyle(theme.muted)
+                    .monospacedDigit()
             }
 
             Spacer(minLength: 8)
-
-            if coordinator.isSyncing {
-                Text("Syncing…")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(theme.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(theme.primary.opacity(0.12)))
-                    .overlay(Capsule().strokeBorder(theme.primary.opacity(0.3), lineWidth: 1))
-            } else if settings.pauseSyncing {
-                StatusPill(label: "Paused", kind: .warning)
-            }
 
             AppIconButton(systemName: "arrow.up.doc",
                           help: "Upload PDF/EPUB to reMarkable") { actions.uploadFiles() }
@@ -89,18 +70,18 @@ struct MenuBarPopover: View {
 
     private var headerStatusText: String {
         if settings.pauseSyncing { return "Syncing paused" }
+        if coordinator.isSyncing || taskCoordinator.isSyncing { return "Syncing…" }
+        if let lastTick = coordinator.lastTickAt {
+            return "Last run \(Formatters.shortTime.string(from: lastTick))"
+        }
+        if let nextTick = coordinator.nextTickAt {
+            return "Next \(Formatters.shortTime.string(from: nextTick))"
+        }
         switch totalSyncs {
-        case 0:  return "No syncs configured"
+        case 0:  return "No syncs yet"
         case 1:  return "1 sync configured"
         default: return "\(totalSyncs) syncs configured"
         }
-    }
-
-    private func statusDotColor(theme: ThemePalette) -> Color {
-        if settings.pauseSyncing { return theme.warning }
-        if coordinator.isSyncing || taskCoordinator.isSyncing { return theme.primary }
-        if totalSyncs == 0 { return theme.tertiary }
-        return theme.success
     }
 
     // MARK: Content
@@ -117,7 +98,6 @@ struct MenuBarPopover: View {
                 .padding(.vertical, 28)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                listLabel
                 ForEach(flows) { flow in
                     MenuSyncRow(
                         flow: flow,
@@ -141,29 +121,6 @@ struct MenuBarPopover: View {
         }
     }
 
-    private var listLabel: some View {
-        HStack {
-            Text("SYNCS")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            Spacer()
-            if let lastTick = coordinator.lastTickAt {
-                Text("Last run \(Formatters.shortTime.string(from: lastTick))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            } else if let nextTick = coordinator.nextTickAt {
-                Text("Next \(Formatters.shortTime.string(from: nextTick))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 2)
-    }
-
     // MARK: Footer
 
     private func footer(theme: ThemePalette) -> some View {
@@ -183,9 +140,6 @@ struct MenuBarPopover: View {
             AppIconButton(systemName: "gearshape", help: "Settings (⌘,)") { actions.openSettings() }
 
             Spacer(minLength: 0)
-            ThemeStrip()
-            Spacer(minLength: 0)
-
             AppIconButton(systemName: "power", help: "Quit Sync Bar") { actions.quit() }
         }
         .padding(.horizontal, 10)

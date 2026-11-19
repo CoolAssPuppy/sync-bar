@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 — 2026-11-19
+
+### Changed
+- Pause stops the schedule only. Sync now always runs, and Resume syncs right away.
+- Paused, syncing, and failed states show on the menu bar icon, in the menu, and on the Syncs screen.
+- Reminders and Notion two-way syncs run on the schedule.
+- A failed sync shows its error, with a link to its log. The account's card shows the error and a Reconnect button.
+- The sync editor asks before deleting or discarding changes, says what Save is waiting for, and has an on/off switch.
+- Cleaner screens: less helper text, one card per form, readable disabled buttons.
+
+### Fixed
+- Saving an older Markdown sync without changes no longer rewrites every note.
+- Saving an edited two-way sync keeps its history.
+- Upload in the menu bar opens the file picker.
+
 ## 1.7.0 — 2026-11-08
 
 - Some UI cleanup.

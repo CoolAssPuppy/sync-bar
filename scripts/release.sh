@@ -37,6 +37,12 @@ DIST="$REPO_ROOT/dist"
 SCRIPTS="$REPO_ROOT/scripts"
 
 NOTARY_PROFILE="${NOTARY_PROFILE:-agent-server}"
+# Optional: the keychain file that holds the profile, when it isn't in the
+# default search list (e.g. ~/Library/Keychains/agent-server-notary.keychain-db).
+NOTARY_KEYCHAIN="${NOTARY_KEYCHAIN:-}"
+NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+[ -n "$NOTARY_KEYCHAIN" ] && NOTARY_AUTH+=(--keychain "$NOTARY_KEYCHAIN")
+export NOTARY_KEYCHAIN
 SPARKLE_SIGN_UPDATE="${SPARKLE_SIGN_UPDATE:-$HOME/bin/sparkle/sign_update}"
 SIGN_IDENTITY="Developer ID Application: Prashant Sridharan (955GSY56UT)"
 
@@ -75,9 +81,10 @@ if ! "${WRANGLER[@]}" --version >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+if ! xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1; then
   echo "Error: notarytool profile '$NOTARY_PROFILE' not found or invalid."
-  echo "Run: xcrun notarytool store-credentials \"$NOTARY_PROFILE\" --apple-id ... --team-id ... --password ..."
+  echo "If the profile lives in its own keychain, unlock it and set NOTARY_KEYCHAIN to its path."
+  echo "Otherwise run: xcrun notarytool store-credentials \"$NOTARY_PROFILE\" --apple-id ... --team-id ... --password ..."
   exit 1
 fi
 
@@ -177,7 +184,7 @@ fi
 echo "==> Notarizing .app (takes a few minutes)"
 APP_ZIP="$EXPORT_DIR/$APP_NAME.app.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
-xcrun notarytool submit "$APP_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+xcrun notarytool submit "$APP_ZIP" "${NOTARY_AUTH[@]}" --wait
 rm -f "$APP_ZIP"
 
 echo "==> Stapling .app"

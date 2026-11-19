@@ -100,7 +100,9 @@ echo "Codesigning DMG with: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG_OUT"
 
 echo "Notarizing DMG (this can take several minutes)..."
-xcrun notarytool submit "$DMG_OUT" --keychain-profile "$NOTARY_PROFILE" --wait
+NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+[ -n "${NOTARY_KEYCHAIN:-}" ] && NOTARY_AUTH+=(--keychain "$NOTARY_KEYCHAIN")
+xcrun notarytool submit "$DMG_OUT" "${NOTARY_AUTH[@]}" --wait
 
 echo ""
 echo "Stapling notarization ticket..."

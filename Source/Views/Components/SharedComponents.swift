@@ -214,20 +214,16 @@ struct AppIconButton: View {
     let systemName: String
     var help: LocalizedStringKey = ""
     var tint: AppButtonTint = .foreground
-    var spinOnTap: Bool = false
     let action: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
-    @State private var isSpinning = false
 
     var body: some View {
-        Button(action: handleTap) {
+        Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(isHovered ? theme.foreground : restingColor)
-                .rotationEffect(.degrees(isSpinning ? 360 : 0))
-                .animation(isSpinning ? .easeInOut(duration: 0.6) : .default, value: isSpinning)
                 .frame(width: 28, height: 26)
                 .background(
                     RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous)
@@ -246,16 +242,6 @@ struct AppIconButton: View {
         case .destructive: return theme.destructive
         case .warning:     return theme.warning
         }
-    }
-
-    private func handleTap() {
-        if spinOnTap {
-            isSpinning = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                isSpinning = false
-            }
-        }
-        action()
     }
 }
 

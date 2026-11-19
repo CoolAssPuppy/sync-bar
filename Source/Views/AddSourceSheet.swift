@@ -81,10 +81,7 @@ struct AddSourceSheet: View {
 
     private func header(theme: ThemePalette) -> some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Add a Source").font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.foreground)
-                Text("Pick where Sync Bar pulls information from.").font(.system(size: 11)).foregroundStyle(theme.muted)
-            }
+            Text("Add a source").font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.foreground)
             Spacer()
             Button(action: { isPresented = false }) {
                 Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(theme.foreground)
@@ -97,7 +94,7 @@ struct AddSourceSheet: View {
 
     private func kindPicker(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Source Type")
+            Text("Source")
                 .font(.system(size: 10, weight: .semibold)).tracking(0.6)
                 .foregroundStyle(theme.tertiary).textCase(.uppercase)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
@@ -124,31 +121,26 @@ struct AddSourceSheet: View {
     @ViewBuilder private func detailsCard(theme: ThemePalette) -> some View {
         switch selected {
         case .remarkable:
-            Text("Pair your reMarkable with an 8-character one-time code from my.remarkable.com → Connect. Your tablet folders become sources you can sync.")
+            Text("Pairing uses the one-time code from my.remarkable.com → Connect.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
         case .safari:
             VStack(alignment: .leading, spacing: 8) {
-                Text("Read your Safari bookmarks (Favorites and Bookmarks Menu). Sync Bar needs Full Disk Access to read them — you'll grant it in System Settings, then relaunch the app.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
                 if !safariHasAccess {
-                    Text("Full Disk Access isn't granted yet — connecting will open System Settings.")
+                    Text("Needs Full Disk Access")
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
                 }
             }
         case .x:
             xDetails(theme: theme)
         case .reminders:
-            Text("Keep an Apple Reminders list and a Notion database in sync, both ways. Sync Bar will ask for Reminders access; then create a two-way sync from the Syncs screen.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            EmptyView()
         }
     }
 
     @ViewBuilder private func xDetails(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Connect your Twitter account. Sync Bar can pull your bookmarks, likes, and posts — you pick which one each sync uses when you create it.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
             if !AuthSecrets.isXConfigured {
-                Text("Twitter isn't configured yet — add its OAuth client id (see the README) and rebuild to connect.")
+                Text("Twitter isn't configured in this build.")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
             }
             if let xError {

@@ -42,7 +42,7 @@ struct SyncLogView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
             if !ledger.events.isEmpty {
-                AppSecondaryButton(title: "Clear filters") {
+                AppSecondaryButton(title: "Show all") {
                     search = ""
                     selectedEventType = "all"
                 }
@@ -125,6 +125,14 @@ private struct EventRow: View {
             }
 
             Spacer(minLength: 8)
+
+            if !isExpanded, let error = event.errorMessage, !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(badgeColor(for: statusKind))
+                    .lineLimit(1).truncationMode(.tail)
+                    .help(error)
+            }
 
             Circle().fill(badgeColor(for: statusKind)).frame(width: 6, height: 6).help(statusHelp)
 
@@ -244,8 +252,8 @@ private struct EventRow: View {
 
     private var detailFields: [DetailField] {
         var out: [DetailField] = [DetailField(label: "Type", value: event.eventType.label)]
-        if let value = event.ruleName, !value.isEmpty { out.append(DetailField(label: "Rule", value: value)) }
-        if let value = event.rmNotebookName, !value.isEmpty { out.append(DetailField(label: "Notebook", value: value)) }
+        if let value = event.ruleName, !value.isEmpty { out.append(DetailField(label: "Sync", value: value)) }
+        if let value = event.rmNotebookName, !value.isEmpty { out.append(DetailField(label: "Source", value: value)) }
         if let value = event.rmPageId, !value.isEmpty { out.append(DetailField(label: "Page", value: value)) }
         if let value = event.ocrProvider, !value.isEmpty { out.append(DetailField(label: "Provider", value: value)) }
         if let value = event.durationMs { out.append(DetailField(label: "Duration", value: "\(value) ms")) }

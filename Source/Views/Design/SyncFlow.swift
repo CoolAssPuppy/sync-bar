@@ -53,9 +53,9 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
         guard rule.sourceKind == .remarkable else { return flowSummary }
         var parts: [String] = [titleShort + " as title"]
         switch ocrMode {
-        case .all:             parts.append("OCR all pages")
-        case .handwrittenOnly: parts.append("OCR handwriting")
-        case .none:            parts.append("no OCR")
+        case .all:             parts.append("transcribe all pages")
+        case .handwrittenOnly: parts.append("transcribe handwriting")
+        case .none:            parts.append("no transcription")
         }
         if requiredTags.isEmpty {
             // keep it short — no filter is the common case

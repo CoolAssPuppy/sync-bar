@@ -26,7 +26,6 @@ struct MainShellView: View {
 
     @State private var tab: ShellTab = .syncs
     @State private var editorTarget: SyncEditorTarget?
-    @State private var isOnboarding = false
     @State private var isSettingsOpen = false
     @State private var activitySearch = ""
     @State private var activityEventType = "all"
@@ -34,13 +33,7 @@ struct MainShellView: View {
     var body: some View {
         let theme = themeStore.palette
         ZStack(alignment: .top) {
-            if isOnboarding {
-                OnboardingView(onFinish: {
-                    isOnboarding = false; tab = .syncs; refreshFolders()
-                })
-            } else {
-                shell(theme: theme)
-            }
+            shell(theme: theme)
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(ShellChrome(palette: theme))

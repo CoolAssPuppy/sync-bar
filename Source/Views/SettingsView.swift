@@ -14,6 +14,7 @@ struct SettingsView: View {
     @ObservedObject private var entitlement = EntitlementManager.shared
     @Environment(\.theme) private var theme
 
+    @State private var isConfirmingResync = false
     @State private var openaiKey: String = ""
     @State private var anthropicKey: String = ""
     @State private var telemetryOptedIn = Telemetry.isOptedIn
@@ -56,12 +57,12 @@ struct SettingsView: View {
     private var generalCard: some View {
         AppCard("General") {
             VStack(spacing: 0) {
-                AppSettingRow("Launch at startup", description: "Start Sync Bar when you log in.") {
+                AppSettingRow("Launch at login") {
                     Toggle("", isOn: $settings.launchAtStartup)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Sync interval", description: "How often Sync Bar polls reMarkable for new pages.") {
+                AppSettingRow("Sync every") {
                     Picker("", selection: $settings.syncIntervalSeconds) {
                         ForEach(AppSettings.intervalOptions, id: \.seconds) { option in
                             Text(option.label).tag(option.seconds)
@@ -71,7 +72,7 @@ struct SettingsView: View {
                     .fixedSize()
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Open main window on launch", description: "Otherwise Sync Bar lives in the menu bar only.") {
+                AppSettingRow("Open window on launch") {
                     Toggle("", isOn: $settings.openWindowOnLaunch)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
@@ -96,7 +97,7 @@ struct SettingsView: View {
     private var ocrCard: some View {
         AppCard("OCR Provider") {
             VStack(spacing: 0) {
-                AppSettingRow("Default provider", description: "Vision runs on-device. OpenAI and Anthropic use your own API key.") {
+                AppSettingRow("Default provider", description: "Vision runs on this Mac. OpenAI and Anthropic use your API key.") {
                     Picker("", selection: $settings.ocrProvider) {
                         ForEach(OcrProviderChoice.allCases) { option in
                             Text(option.label).tag(option)
@@ -115,7 +116,7 @@ struct SettingsView: View {
                 }
                 if settings.ocrProvider != .vision {
                     AppRowDivider().padding(.vertical, 10)
-                    AppSettingRow("Model", description: "Optional. Leave blank to use the provider default.") {
+                    AppSettingRow("Model", description: "Blank uses the provider default.") {
                         TextField("e.g. gpt-4o-mini", text: $settings.ocrModel)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 200)
@@ -126,7 +127,7 @@ struct SettingsView: View {
     }
 
     private func keyRow(title: LocalizedStringKey, binding: Binding<String>, keychainKey: KeychainStore.Key) -> some View {
-        AppSettingRow(title, description: "Stored securely in your iCloud Keychain.") {
+        AppSettingRow(title) {
             HStack(spacing: 6) {
                 SecureField("sk-…", text: binding)
                     .textFieldStyle(.roundedBorder)
@@ -158,14 +159,14 @@ struct SettingsView: View {
     private var resyncCard: some View {
         AppCard("Resync") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Reset your sync database")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text("Delete the internal database that tracks syncs. Warning: this will resync everything.")
+                Text("Forget what has synced, so the next run writes everything again.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
-                AppSecondaryButton(title: "Resync notes", systemImage: "arrow.triangle.2.circlepath", tint: .warning) {
-                    Ledger.shared.resetSyncDatabase()
+                AppSecondaryButton(title: "Resync everything", systemImage: "arrow.triangle.2.circlepath", tint: .warning) {
+                    isConfirmingResync = true
+                }
+                .confirmationDialog("Resync everything?", isPresented: $isConfirmingResync) {
+                    Button("Resync", role: .destructive) { Ledger.shared.resetSyncDatabase() }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -178,7 +179,7 @@ struct SettingsView: View {
         AppCard("Folder visibility") {
             VStack(spacing: 0) {
                 AppSettingRow("Ignore Unfiled notes",
-                              description: "Notes that are not in a folder show up in Unfiled.") {
+                              description: nil) {
                     Toggle("", isOn: $settings.ignoreUnfiledNotes)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
@@ -305,13 +306,13 @@ struct SettingsView: View {
         AppCard("Notifications") {
             VStack(spacing: 0) {
                 AppSettingRow("Notify on sync failure",
-                              description: "Posts a banner when a rule run errors out.") {
+                              description: nil) {
                     Toggle("", isOn: $settings.notifyOnFailure)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
                 AppRowDivider().padding(.vertical, 10)
                 AppSettingRow("Notify on sync success",
-                              description: "Quiet by default. Turn on to celebrate every successful sync.") {
+                              description: nil) {
                     Toggle("", isOn: $settings.notifyOnSuccess)
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                 }
@@ -324,7 +325,7 @@ struct SettingsView: View {
     private var updatesCard: some View {
         AppCard("Updates") {
             VStack(spacing: 0) {
-                AppSettingRow("Version", description: "Installed build of Sync Bar.") {
+                AppSettingRow("Version") {
                     Text(UpdaterManager.shared.currentVersion)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(theme.muted)

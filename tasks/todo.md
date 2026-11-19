@@ -42,9 +42,18 @@ Phase 3 notes: "Template" now shows only for a sync already using it (no editor 
 Known issue, not fixed in this pass: the Notion mapping loader drops dateSource, checkbox, number and literal mappings, so saving a Notion sync that has them deletes them. The user's data has no Notion destinations today.
 
 ### Phase 4. Cleanup
-- [ ] Delete unreachable views (DestinationDetailScaffold, BindingEditorSheet, FolderPickerSheet, NotionForm, OnboardingView, SyncRuleCard, DestinationIconStack), and check each has no caller first.
-- [ ] Copy pass with the terse rule: cut helper paragraphs, and drop "rule", "ledger", "orphans", "OAuth", and the CASA joke from the UI.
-- [ ] Use one sync icon, one button set, one status pill, and one sync row view for one-way and task syncs.
+- [x] Delete unreachable views (DestinationDetailScaffold, BindingEditorSheet, FolderPickerSheet, NotionForm, OnboardingView, SyncRuleCard, DestinationIconStack), and check each has no caller first.
+- [x] Copy pass with the terse rule: cut helper paragraphs, and drop "rule", "ledger", "orphans", "OAuth", and the CASA joke from the UI.
+- [x] Use one sync icon, one button set, one status pill, and one sync row view for one-way and task syncs.
+Phase 4 notes: deleted DestinationDetailScaffold, BindingEditorSheet, FolderPickerSheet, NotionForm, OnboardingView, SyncRuleCard, DestinationIconStack, SyncStatusDot, and the fake 0.6 s spin on icon buttons (each checked for callers first). The Google CASA line in Add Destination is the owner's own copy and was left as written. A fresh reviewer read the final renders (`build/ux-shots/phase-4/`). Fixed from that review: Activity rows show the error inline, "Show all" and "Delete log" no longer share the word "Clear", the editor's Save hint names the missing folder, sentence case on "Choose a destination", "transcribe" in place of "OCR" on rows, and the switch reads "Sync on".
+
+### Follow-ups from the final review (not done)
+- [ ] A failed row on the Syncs screen or in the popover should offer the fix itself (Reconnect), not only "View log".
+- [ ] One name per destination across screens: the list says "Markdown files", Connections and the editor say the account name ("Obsidian vault").
+- [ ] Connections cards: name the service on every card (Linear and Google cards show only the account).
+- [ ] Activity header count should reflect the filter ("1 of 7 events").
+- [ ] The popover footer is five unlabeled icons.
+- [ ] Editor layout: the destination form card nests inside the Customize card; the bottom row clips under the footer.
 
 ### Not in this pass
 - Splitting the 1,487-line SyncEditorView into a draft model and subviews. It's worth doing, but it's a refactor with its own risk.

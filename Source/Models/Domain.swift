@@ -361,13 +361,13 @@ enum SyncEventType: String, Codable {
 
     var label: String {
         switch self {
-        case .pageSynced:        return "Page synced"
-        case .pageFailed:        return "Page failed"
+        case .pageSynced:        return "Synced"
+        case .pageFailed:        return "Failed"
         case .ruleRunStarted:    return "Run started"
         case .ruleRunCompleted:  return "Run completed"
         case .tokenRefreshed:    return "Token refreshed"
-        case .orphanDetected:    return "Orphan detected"
-        case .cycleSkipped:      return "Nothing to sync"
+        case .orphanDetected:    return "Unmatched item"
+        case .cycleSkipped:      return "Skipped"
         }
     }
 }

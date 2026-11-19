@@ -61,14 +61,9 @@ struct AddDestinationSheet: View {
 
     private func header(theme: ThemePalette) -> some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Add a Destination")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text("Pick where Sync Bar sends information to")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
-            }
+            Text("Add a destination")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(theme.foreground)
             Spacer()
             Button(action: { isPresented = false }) {
                 Image(systemName: "xmark")
@@ -131,9 +126,6 @@ struct AddDestinationSheet: View {
 
     private var notionFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Notion with OAuth. Sync Bar opens Notion in your browser, you pick the pages and databases to share, and the workspace is added here.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             if !AuthSecrets.isNotionConfigured {
                 oauthNotConfiguredHint(provider: "Notion")
             }
@@ -145,9 +137,6 @@ struct AddDestinationSheet: View {
 
     private var linearFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Linear with OAuth. Sync Bar opens Linear in a secure window, then adds every team you can access as a destination.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             if !AuthSecrets.isLinearConfigured {
                 oauthNotConfiguredHint(provider: "Linear")
             }
@@ -158,7 +147,7 @@ struct AddDestinationSheet: View {
     }
 
     private func oauthNotConfiguredHint(provider: String) -> some View {
-        Text("\(provider) OAuth isn't configured in this build. Add its client credentials (see the README) and rebuild.")
+        Text("\(provider) isn't configured in this build.")
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.orange)
     }
@@ -174,9 +163,6 @@ struct AddDestinationSheet: View {
 
     private var googleFields: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect Google with OAuth. Sync Bar opens Google in your browser, you grant access to Docs and Drive, and the account is added here.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             Text("Google Docs integration is subject to Google's absurd CASA certification. This will take time and money.")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.red)
@@ -189,25 +175,9 @@ struct AddDestinationSheet: View {
         }
     }
 
-    private var appleNotesFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Apple Notes uses your local iCloud Notes account. You'll choose which folder to use when you set up a sync for a reMarkable folder.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        }
-    }
+    private var appleNotesFields: some View { EmptyView() }
 
-    private var markdownFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("""
-                Writes one Markdown file per synced page. Works with Obsidian, Bear, iA Writer, \
-                anything. You choose the destination folder and file-name template when you set \
-                up each sync, so one Markdown connection can feed different folders.
-                """)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        }
-    }
+    private var markdownFields: some View { EmptyView() }
 
     // MARK: Footer
 

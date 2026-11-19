@@ -17,9 +17,6 @@ struct GoogleDocsForm: View {
                 Text("Drive folder")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Where new docs are created. Pick a folder, or My Drive for the root.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(theme.muted)
 
                 DriveFolderTree(
                     email: binding.email,

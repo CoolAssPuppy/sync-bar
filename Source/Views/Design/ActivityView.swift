@@ -29,8 +29,8 @@ struct ActivityView: View {
             footer
         }
         .background(theme.background)
-        .confirmationDialog("Clear all activity?", isPresented: $isConfirmingClear) {
-            Button("Clear", role: .destructive) { ledger.clearEvents() }
+        .confirmationDialog("Delete the activity log?", isPresented: $isConfirmingClear) {
+            Button("Delete", role: .destructive) { ledger.clearEvents() }
         }
         .alert("Couldn't export the log", isPresented: Binding(
             get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
@@ -90,7 +90,7 @@ struct ActivityView: View {
         HStack(spacing: 10) {
             Spacer()
             AppSecondaryButton(title: "Export…", systemImage: "square.and.arrow.up") { exportLog() }
-            AppSecondaryButton(title: "Clear", systemImage: "trash", tint: .destructive) { isConfirmingClear = true }
+            AppSecondaryButton(title: "Delete log", systemImage: "trash", tint: .destructive) { isConfirmingClear = true }
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 12)

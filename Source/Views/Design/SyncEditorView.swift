@@ -219,7 +219,15 @@ struct SyncEditorView: View {
     /// Why Save is unavailable, named so a greyed-out button isn't a mystery.
     var saveBlocker: String? {
         guard !canSave else { return nil }
-        if !hasSourceSelected { return "Choose what to sync from" }
+        if !hasSourceSelected {
+            switch source {
+            case .kind(.remarkable): return "Choose a folder"
+            case .kind(.safari):     return "Choose a bookmark folder"
+            case .kind(.notion):     return "Choose a Notion database"
+            case .kind(.x):          return "Choose a Twitter account"
+            case .reminders:         return "Choose what to sync from"
+            }
+        }
         if isReminders {
             if taskDatabaseId == nil { return "Choose a Notion database" }
             return "That database has no title column"
@@ -240,9 +248,6 @@ struct SyncEditorView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(isEditing ? "Edit sync" : "New sync").font(.system(size: 18, weight: .bold)).foregroundStyle(theme.foreground)
-                Text(isReminders ? "A Reminders list and a Notion database, kept in sync both ways."
-                                 : "From a source, to a destination, synced how.")
-                    .font(.system(size: 12.5)).foregroundStyle(theme.muted)
             }
             Spacer()
             Button(action: requestClose) {
@@ -265,7 +270,7 @@ struct SyncEditorView: View {
                 }.buttonStyle(.plain)
             }
             if isEditing {
-                Toggle("On", isOn: $isEnabled)
+                Toggle("Sync on", isOn: $isEnabled)
                     .toggleStyle(.switch).controlSize(.small).tint(theme.primary)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.foregroundSoft)
@@ -337,7 +342,7 @@ struct SyncEditorView: View {
 
     var fromStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("FROM", "which source")
+            stepLabel("FROM")
             if availableSources.count > 1 {
                 CustomDropdown(
                     options: availableSources.map { DropdownOption(id: $0.id, icon: sourceMenuIcon($0), title: sourceLabel($0)) },
@@ -509,11 +514,11 @@ struct SyncEditorView: View {
 
     var toStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("TO", "which destination")
+            stepLabel("TO")
             CustomDropdown(
                 options: ledger.connectedApps.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: $0.kind, size: 24)), title: $0.name) },
                 selectedId: toAccountId,
-                placeholder: ledger.hasAnyDestination ? "Choose a Destination" : "Connect a destination first",
+                placeholder: ledger.hasAnyDestination ? "Choose a destination" : "Connect a destination first",
                 placeholderIcon: AnyView(placeholderDestIcon),
                 onSelect: { id in if let app = ledger.connectedApps.first(where: { $0.id == id }) { selectDestination(app) } }
             )
@@ -558,7 +563,7 @@ struct SyncEditorView: View {
             HStack(spacing: 8) {
                 Text("TO").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
                 Image(systemName: "arrow.left.arrow.right").font(.system(size: 11, weight: .bold)).foregroundStyle(theme.primary)
-                Text("which Notion database (two-way)").font(.system(size: 12)).foregroundStyle(theme.tertiary)
+                Text("Two-way").font(.system(size: 12)).foregroundStyle(theme.tertiary)
             }
             if ledger.notionWorkspaces.count > 1 {
                 CustomDropdown(
@@ -593,7 +598,7 @@ struct SyncEditorView: View {
 
     var mapStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("MAP", "pair Reminders fields with Notion columns")
+            stepLabel("MAP")
             VStack(alignment: .leading, spacing: 0) {
                 mapRow("Title") { lockedFieldLabel(taskTitleProperty ?? "No title column") }
                 rowDivider
@@ -611,7 +616,7 @@ struct SyncEditorView: View {
 
     var filterStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("FILTER", "skip tasks in these statuses")
+            stepLabel("FILTER")
             MultiSelectDropdown(
                 options: filterOptions,
                 selected: filterSelection,
@@ -727,7 +732,7 @@ struct SyncEditorView: View {
 
     var customizeStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("CUSTOMIZE", "configure this destination and map fields")
+            stepLabel("CUSTOMIZE")
             VStack(alignment: .leading, spacing: 14) { destinationForm }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -764,12 +769,8 @@ struct SyncEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             if sourceKind == .safari {
                 HStack(alignment: .center, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Exactly match Safari")
-                            .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
-                        Text("Safari is the source of truth and sync is unidirectional.")
-                            .font(.system(size: 11)).foregroundStyle(theme.tertiary)
-                    }
+                    Text("Exactly match Safari")
+                        .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
                     Spacer(minLength: 12)
                     Toggle("", isOn: $chromeMirrorExactly)
                         .labelsHidden().toggleStyle(.switch).tint(theme.primary)
@@ -777,7 +778,7 @@ struct SyncEditorView: View {
                 Text("Chrome must be quit for changes to apply.")
                     .font(.system(size: 11)).foregroundStyle(theme.tertiary)
             } else {
-                Text("Add bookmarks to this Chrome folder (under the Bookmarks Bar):")
+                Text("Chrome folder")
                     .font(.system(size: 12)).foregroundStyle(theme.muted)
                 TextField("From Safari", text: $chromeTargetFolder)
                     .textFieldStyle(.roundedBorder)
@@ -804,8 +805,6 @@ struct SyncEditorView: View {
                     .font(.system(size: 11)).foregroundStyle(theme.muted)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Fill the database's columns with fields from each \(mappingSourceNoun).")
-                        .font(.system(size: 11)).foregroundStyle(theme.muted)
                     FieldMappingControl(rows: $localNotion.mappingRows,
                                         columns: notionMappingColumns,
                                         fieldOptions: mappingFieldOptions)
@@ -819,10 +818,6 @@ struct SyncEditorView: View {
         sourceKind == .x ? MappingFieldOption.twitter : MappingFieldOption.remarkable
     }
 
-    /// Noun for the mapping helper text ("…from each tweet" / "…from each note").
-    var mappingSourceNoun: String {
-        sourceKind == .x ? "tweet" : "note"
-    }
 
     /// Mappable columns (the title column is set from the title strategy, so it's
     /// excluded); select / multi_select / status columns carry their options.
@@ -850,7 +845,7 @@ struct SyncEditorView: View {
 
     var howStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            stepLabel("HOW", "how the sync should work")
+            stepLabel("HOW")
             VStack(spacing: 0) {
                 optionRow("Title each note") {
                     Segmented(selection: $titleStrategy, options: titleOptions)
@@ -878,7 +873,7 @@ struct SyncEditorView: View {
                 rowDivider
                 optionRow("Only notes tagged", align: .top) { RequiredTagsControl(requiredTags: $requiredTags) }
                 rowDivider
-                optionRow("Attach original PDF", subtitle: "also send the page image alongside the text") {
+                optionRow("Attach original PDF") {
                     Toggle("", isOn: $savePdf).labelsHidden().toggleStyle(.switch).tint(theme.primary)
                 }
             }
@@ -889,21 +884,15 @@ struct SyncEditorView: View {
 
     // MARK: Bits
 
-    func stepLabel(_ tag: String, _ desc: String) -> some View {
-        HStack(spacing: 10) {
-            Text(tag).font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
-            Text(desc).font(.system(size: 12)).foregroundStyle(theme.tertiary)
-        }
+    func stepLabel(_ tag: String) -> some View {
+        Text(tag).font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
     }
 
     var rowDivider: some View { Rectangle().fill(theme.dividerSubtle).frame(height: 1) }
 
-    func optionRow<Trailing: View>(_ title: String, subtitle: String? = nil, align: VerticalAlignment = .center, @ViewBuilder trailing: () -> Trailing) -> some View {
+    func optionRow<Trailing: View>(_ title: String, align: VerticalAlignment = .center, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(alignment: align, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
-                if let subtitle { Text(subtitle).font(.system(size: 11.5)).foregroundStyle(theme.tertiary) }
-            }
+            Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
             Spacer(minLength: 12)
             trailing()
         }

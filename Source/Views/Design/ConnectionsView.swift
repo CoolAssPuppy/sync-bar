@@ -99,9 +99,6 @@ struct ConnectionsView: View {
             Text("Connections")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(theme.foreground)
-            Text("Your data, wherever it is and needs to go")
-                .font(.system(size: 13))
-                .foregroundStyle(theme.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 28)
@@ -138,7 +135,7 @@ struct ConnectionsView: View {
             }
             if ledger.remarkableAccount == nil && !ledger.safariConnected
                 && !ledger.remindersConnected && ledger.xAccounts.isEmpty {
-                Text("No sources yet. Add one with the + above.")
+                Text("No sources yet.")
                     .font(.system(size: 13)).foregroundStyle(theme.muted).padding(.vertical, 4)
             }
             if ledger.remarkableAccount != nil {
@@ -250,7 +247,7 @@ struct ConnectionsView: View {
 
     private var sourceSubtitle: String {
         guard ledger.remarkableAccount != nil else { return "Not paired" }
-        if ledger.remarkableNeedsRepair { return "Token rejected — re-pair to reconnect" }
+        if ledger.remarkableNeedsRepair { return "Needs re-pairing" }
         let folders = ledger.folders.count
         return "Connected · \(folders) folder\(folders == 1 ? "" : "s")"
     }
@@ -268,7 +265,7 @@ struct ConnectionsView: View {
                 Button(action: { isAddingApp = true }) { addGlyph }.buttonStyle(.plain)
             }
             if !ledger.hasAnyDestination {
-                Text("No destinations connected yet.")
+                Text("No destinations yet.")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
                     .padding(.vertical, 4)
@@ -318,7 +315,7 @@ struct ConnectionsView: View {
         }
     }
 
-    private func notionSubtitle(_ ws: NotionWorkspace) -> String { ws.workspaceName }
+    private func notionSubtitle(_ ws: NotionWorkspace) -> String { "Notion" }
 
     // swiftlint:disable:next function_parameter_count
     private func appCard(kind: DestinationKind, name: String, subtitle: String,

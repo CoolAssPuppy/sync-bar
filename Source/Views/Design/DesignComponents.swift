@@ -76,30 +76,6 @@ struct FlowArrow: View {
     }
 }
 
-/// Colored status dot for a sync's run state.
-struct SyncStatusDot: View {
-    let status: RuleRunStatus
-    let isSyncing: Bool
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
-            .shadow(color: color.opacity(0.6), radius: isSyncing ? 4 : 0)
-    }
-
-    private var color: Color {
-        if isSyncing { return theme.primary }
-        switch status {
-        case .success:  return theme.success
-        case .partial:  return theme.warning
-        case .error:    return theme.destructive
-        case .running:  return theme.primary
-        case .neverRun: return theme.tertiary
-        }
-    }
-}
 
 /// One option in a `CustomDropdown`.
 struct DropdownOption: Identifiable {

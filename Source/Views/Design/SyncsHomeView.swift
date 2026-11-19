@@ -79,6 +79,7 @@ struct SyncsHomeView: View {
     @Environment(\.theme) private var theme
     @State private var isAddingSource = false
     @State private var reactivateFeature: PaidFeature?
+    @State private var isRepairing = false
     @AppStorage("syncs.listOrder") private var orderRaw = SyncListOrder.createdDate.rawValue
     private var order: SyncListOrder { SyncListOrder(rawValue: orderRaw) ?? .createdDate }
 
@@ -111,12 +112,16 @@ struct SyncsHomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if ledger.isDemoMode { demoBanner }
             if settings.pauseSyncing { PausedBanner { settings.pauseSyncing = false } }
             if ledger.remarkableNeedsRepair { disconnectedBanner }
             content
         }
         .background(theme.background)
         .sheet(isPresented: $isAddingSource) { AddSourceSheet(isPresented: $isAddingSource) }
+        .sheet(isPresented: $isRepairing) {
+            RemarkablePairPanel(title: "Re-pair your reMarkable", onClose: { isRepairing = false })
+        }
         .sheet(item: $reactivateFeature) { feature in
             // Already consented when the source was added, so reactivation only
             // needs payment — no consent checkbox.
@@ -324,16 +329,33 @@ struct SyncsHomeView: View {
             }
             .frame(width: 92, height: 92)
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-            Text("Sync Bar syncs your information from Sources to Destinations")
+            Text("Add a source to start syncing")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(theme.foreground)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 460)
-            PillButton(title: "Add your first Source", systemImage: "plus") { isAddingSource = true }
+            PillButton(title: "Add a source", systemImage: "plus") { isAddingSource = true }
                 .padding(.top, 2)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var demoBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "theatermasks.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.primary)
+            Text("Demo mode: sample data, syncing is off")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.foregroundSoft)
+            Spacer()
+            PillButton(title: "Exit demo", filled: false) { ledger.setDemoMode(false) }
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 10)
+        .background(theme.primary.opacity(0.08))
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
     }
 
     private var disconnectedBanner: some View {
@@ -341,10 +363,11 @@ struct SyncsHomeView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(theme.destructive)
-            Text("reMarkable disconnected — re-pair in Connections to resume syncing.")
+            Text("reMarkable disconnected")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.foregroundSoft)
             Spacer()
+            PillButton(title: "Re-pair", filled: false) { isRepairing = true }
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 11)

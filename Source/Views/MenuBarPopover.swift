@@ -172,111 +172,6 @@ struct MenuBarPopover: View {
     }
 }
 
-// MARK: - Rule card
-
-private struct SyncRuleCard: View {
-    let rule: SyncRule
-    let isActive: Bool
-    let onSyncRule: () -> Void
-    let onOpenWindow: () -> Void
-
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        HStack(spacing: 10) {
-            // Stacked destination icons that hint at the binding count at a
-            // glance without the noise of full mini-rows.
-            DestinationIconStack(kinds: rule.destinations.map(\.kind))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(rule.sourceSummary)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                    .lineLimit(1)
-                Text(secondaryLine)
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            AppIconButton(systemName: "arrow.triangle.2.circlepath",
-                          help: "Sync this rule now",
-                          spinOnTap: true) { onSyncRule() }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(theme.card)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { onOpenWindow() }
-    }
-
-    private var secondaryLine: String {
-        let count = rule.destinations.count
-        let destinationsLabel = "\(count) destination\(count == 1 ? "" : "s")"
-        if isActive { return "Syncing…" }
-        if !rule.enabled { return "Off · \(destinationsLabel)" }
-        if let lastRun = rule.aggregateLastRunAt {
-            let resultLabel = Formatters.syncResultLabel(pageCount: rule.aggregateLastRunPagesSynced)
-            return "\(resultLabel) · \(Formatters.relativeLabel(for: lastRun))"
-        }
-        return destinationsLabel + " · never synced"
-    }
-}
-
-/// One destination's brand mark with a small count badge when a notebook fans
-/// out to more than one destination — compact, instead of a row of icons.
-private struct DestinationIconStack: View {
-    let kinds: [DestinationKind]
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            primaryIcon
-            if kinds.count > 1 {
-                countBadge(kinds.count)
-                    .offset(x: 4, y: 4)
-            }
-        }
-        .frame(width: 26, height: 24, alignment: .center)
-    }
-
-    @ViewBuilder
-    private var primaryIcon: some View {
-        if let kind = kinds.first {
-            DestinationIcon(kind: kind, size: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-        } else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.gray.opacity(0.15))
-                Image(systemName: "questionmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 22, height: 22)
-        }
-    }
-
-    private func countBadge(_ count: Int) -> some View {
-        Text("\(count)")
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(theme.primaryForeground)
-            .padding(.horizontal, count > 9 ? 3 : 0)
-            .frame(minWidth: 14, minHeight: 14)
-            .background(Capsule().fill(theme.primary))
-            .overlay(Capsule().strokeBorder(theme.background, lineWidth: 1.5))
-    }
-}
-
 // MARK: - Empty state
 
 private struct EmptyRulesState: View {
@@ -302,7 +197,7 @@ private struct EmptyRulesState: View {
                 Text("No syncs yet")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.foreground)
-                Text("Open Sync Bar to connect an app and make your first sync.")
+                Text("Open Sync Bar to add one.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.muted)
                     .multilineTextAlignment(.center)

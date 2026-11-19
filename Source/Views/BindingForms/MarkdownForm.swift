@@ -16,7 +16,7 @@ struct MarkdownForm: View {
     var body: some View {
         AppCard("Markdown Files") {
             VStack(spacing: 0) {
-                AppSettingRow("Destination folder", description: "Where the .md files land for this sync.") {
+                AppSettingRow("Folder") {
                     HStack(spacing: 6) {
                         Text(binding.folderPath.isEmpty ? "Not chosen" : binding.folderPath)
                             .font(.system(size: 11, design: .monospaced))
@@ -30,13 +30,13 @@ struct MarkdownForm: View {
                     }
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("File name template", description: "Use / for subfolders. Tokens: {folder_name}, {notebook}, {page_n}, {date}, {title}") {
+                AppSettingRow("File name", description: "{folder_name} {notebook} {page_n} {date} {title}, / for subfolders") {
                     TextField(MarkdownTarget.defaultFileNameTemplate, text: $binding.fileNameTemplate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("Frontmatter", description: "All columns, the essential fields, or none.") {
+                AppSettingRow("Frontmatter") {
                     Picker("", selection: $binding.frontmatterMode) {
                         ForEach(FrontmatterMode.allCases) { Text($0.label).tag($0) }
                     }

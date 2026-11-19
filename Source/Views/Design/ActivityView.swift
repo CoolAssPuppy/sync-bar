@@ -15,8 +15,10 @@ struct ActivityView: View {
     @ObservedObject private var ledger = Ledger.shared
     @Environment(\.theme) private var theme
 
-    @State private var search = ""
-    @State private var selectedEventType = "all"
+    @Binding var search: String
+    @Binding var selectedEventType: String
+    @State private var isConfirmingClear = false
+    @State private var exportError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +29,15 @@ struct ActivityView: View {
             footer
         }
         .background(theme.background)
+        .confirmationDialog("Clear all activity?", isPresented: $isConfirmingClear) {
+            Button("Clear", role: .destructive) { ledger.clearEvents() }
+        }
+        .alert("Couldn't export the log", isPresented: Binding(
+            get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
     }
 
     private var header: some View {
@@ -35,7 +46,7 @@ struct ActivityView: View {
                 Text("Activity")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(theme.foreground)
-                Text("\(ledger.events.count) event\(ledger.events.count == 1 ? "" : "s") recorded")
+                Text("\(ledger.events.count) event\(ledger.events.count == 1 ? "" : "s")")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
             }
@@ -67,10 +78,10 @@ struct ActivityView: View {
     private var filterPicker: some View {
         Picker("", selection: $selectedEventType) {
             Text("All events").tag("all")
-            Text("Page synced").tag(SyncEventType.pageSynced.rawValue)
-            Text("Page failed").tag(SyncEventType.pageFailed.rawValue)
-            Text("Run completed").tag(SyncEventType.ruleRunCompleted.rawValue)
-            Text("Orphans").tag(SyncEventType.orphanDetected.rawValue)
+            Text("Synced").tag(SyncEventType.pageSynced.rawValue)
+            Text("Failed").tag(SyncEventType.pageFailed.rawValue)
+            Text("Runs").tag(SyncEventType.ruleRunCompleted.rawValue)
+            Text("Skipped").tag(SyncEventType.cycleSkipped.rawValue)
         }
         .labelsHidden().controlSize(.large).fixedSize()
     }
@@ -78,21 +89,28 @@ struct ActivityView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Spacer()
-            AppSecondaryButton(title: "Export ledger…", systemImage: "square.and.arrow.up") { exportLedger() }
-            AppSecondaryButton(title: "Clear log", systemImage: "trash", tint: .destructive) { ledger.clearEvents() }
+            AppSecondaryButton(title: "Export…", systemImage: "square.and.arrow.up") { exportLog() }
+            AppSecondaryButton(title: "Clear", systemImage: "trash", tint: .destructive) { isConfirmingClear = true }
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 12)
     }
 
-    private func exportLedger() {
-        guard let data = ledger.exportSnapshot() else { return }
+    private func exportLog() {
+        guard let data = ledger.exportSnapshot() else {
+            exportError = "Sync Bar couldn't read its log."
+            return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "syncbar-ledger.json"
+        panel.nameFieldStringValue = "syncbar-activity.json"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            try? data.write(to: url)
+            do {
+                try data.write(to: url)
+            } catch {
+                exportError = Formatters.userMessage(for: error)
+            }
         }
     }
 }

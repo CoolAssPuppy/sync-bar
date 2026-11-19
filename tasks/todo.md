@@ -23,13 +23,14 @@ Source: two code audits on 2026-11-19 (menu bar and sync controls; main window),
 Phase 1 notes: isolated tests (SyncStatusTests, failure list O1-O18 and R1-R11) were written first and seen failing. The menu bar icon dims while paused, shows a red dot while a sync has failed, and its tooltip and right-click menu show the overview line. E2E: `scripts/ux-shots.sh build/ux-shots/phase-1` renders the real popover and Syncs screen offscreen (paused, idle with failure, syncing) from the isolated test ledger. A fresh reviewer read the renders. Fixed from that review: partial failures counted in the header, no repeated "Paused", the subtitle colors only the status, and errors wrap to two lines in the popover. Not changed: paused and partial share the warning color (syncing is shown by the spinning button).
 
 ### Phase 2. Errors you can reach
-- [ ] A source failure (for example "Reconnect the Notion workspace") marks its syncs Failed and posts the failure notification.
-- [ ] A Failed row shows the one-line error. Clicking it opens Activity filtered to that sync.
-- [ ] Task sync errors write an Activity event.
-- [ ] Connections: Reconnect errors appear on the card. Notion, Linear, Google, and Twitter get a "Needs reconnect" state.
-- [ ] Editor pickers that fail to load show the error and a Retry button. Today they say "Loading..." forever.
-- [ ] Upload from the menu bar opens a file picker. Today it opens a tab with no upload control.
-- [ ] Activity: add a "Skipped" filter. Skip rows say "Skipped". The empty state tells "no events" apart from "filter hides events".
+- [x] A source failure (for example "Reconnect the Notion workspace") marks its syncs Failed and posts the failure notification.
+- [x] A Failed row shows the one-line error. Clicking it opens Activity filtered to that sync.
+- [x] Task sync errors write an Activity event.
+- [x] Connections: Reconnect errors appear on the card. Notion, Linear, Google, and Twitter get a "Needs reconnect" state.
+- [x] Editor pickers that fail to load show the error and a Retry button. Today they say "Loading..." forever.
+- [x] Upload from the menu bar opens a file picker. Today it opens a tab with no upload control.
+- [x] Activity: add a "Skipped" filter. Skip rows say "Skipped". The empty state tells "no events" apart from "filter hides events".
+Phase 2 notes: two behavior tests written first and seen failing (source listing failure marks every enabled binding failed; a task sync with no provider logs a failed event). An account card turns red with the latest error and a Reconnect button when any of its syncs failed (derived from sync results, since token health isn't stored for most accounts). E2E renders in `build/ux-shots/phase-2/` (Connections with a failure, Activity filtered to one sync, Activity with no match).
 
 ### Phase 3. A safe editor
 - [ ] Confirm Delete. Ask before Close or Cancel discards edits.

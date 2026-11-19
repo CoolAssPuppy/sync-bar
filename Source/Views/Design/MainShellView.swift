@@ -28,6 +28,8 @@ struct MainShellView: View {
     @State private var editorTarget: SyncEditorTarget?
     @State private var isOnboarding = false
     @State private var isSettingsOpen = false
+    @State private var activitySearch = ""
+    @State private var activityEventType = "all"
 
     var body: some View {
         let theme = themeStore.palette
@@ -45,7 +47,6 @@ struct MainShellView: View {
         .environment(\.theme, theme)
         .environment(\.colorScheme, theme.isDark ? .dark : .light)
         .onAppear { firstAppear() }
-        .onReceive(NotificationCenter.default.publisher(for: .selectRemarkableView)) { _ in tab = .syncs }
         .onReceive(NotificationCenter.default.publisher(for: .remarkableUploadFinished)) { _ in refreshFolders() }
         .onReceive(NotificationCenter.default.publisher(for: .openSettingsDrawer)) { _ in isSettingsOpen = true }
         .onReceive(NotificationCenter.default.publisher(for: .openSyncLog)) { _ in tab = .activity }
@@ -82,10 +83,15 @@ struct MainShellView: View {
                 taskCoordinator: taskCoordinator,
                 onNew: { editorTarget = .new },
                 onEdit: { editorTarget = .edit($0) },
-                onEditTask: { editorTarget = .editTask($0) }
+                onEditTask: { editorTarget = .editTask($0) },
+                onShowFailures: { name in
+                    activitySearch = name
+                    activityEventType = SyncEventType.pageFailed.rawValue
+                    tab = .activity
+                }
             )
         case .connections: ConnectionsView()
-        case .activity:    ActivityView()
+        case .activity:    ActivityView(search: $activitySearch, selectedEventType: $activityEventType)
         }
     }
 

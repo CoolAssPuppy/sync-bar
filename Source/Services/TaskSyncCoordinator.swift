@@ -55,6 +55,17 @@ final class TaskSyncCoordinator: ObservableObject {
         isSyncing = false
     }
 
+    /// Marks the run failed and logs the reason to Activity.
+    private func fail(_ sync: TaskSync, _ message: String) {
+        ledger.updateTaskSyncRunResult(id: sync.id, status: .error, runAt: now(), error: message)
+        ledger.appendEvent(SyncEvent(
+            id: UUID().uuidString, occurredAt: now(),
+            ruleId: sync.id, ruleName: "\(sync.remindersListName) ↔ \(sync.provider.displayName)",
+            eventType: .pageFailed,
+            rmNotebookName: sync.remindersListName, rmPageId: nil,
+            notionPageUrl: nil, durationMs: nil, ocrProvider: nil, errorMessage: message))
+    }
+
     /// Records an Activity entry for a Notion row that can't come into Reminders
     /// because its list column is blank or names a list that doesn't exist.
     private func flagUnroutableRow(_ task: CanonicalTask, sync: TaskSync) {
@@ -82,8 +93,7 @@ final class TaskSyncCoordinator: ObservableObject {
     /// Reconciles a single task sync end-to-end.
     private func reconcile(_ sync: TaskSync) async {
         guard let provider = providerFor(sync.provider) else {
-            ledger.updateTaskSyncRunResult(id: sync.id, status: .error, runAt: now(),
-                                           error: "Reconnect \(sync.provider.kind.label) to sync tasks.")
+            fail(sync, "Reconnect \(sync.provider.kind.label) to sync tasks.")
             return
         }
 
@@ -101,8 +111,7 @@ final class TaskSyncCoordinator: ObservableObject {
             reminders = try await r
             notionRows = try await n
         } catch {
-            ledger.updateTaskSyncRunResult(id: sync.id, status: .error, runAt: now(),
-                                           error: Formatters.userMessage(for: error))
+            fail(sync, Formatters.userMessage(for: error))
             Log.sync.error("Task sync fetch failed: \(Formatters.userMessage(for: error), privacy: .public)")
             return
         }

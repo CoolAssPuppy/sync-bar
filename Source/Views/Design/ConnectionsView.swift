@@ -23,6 +23,7 @@ struct ConnectionsView: View {
     @State private var linearTeamChoices: LinearTeamChoices?
     @State private var safariHasAccess = false
     @State private var remindersHasAccess = false
+    @State private var reconnectError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,6 +60,27 @@ struct ConnectionsView: View {
         } message: {
             Text(remarkableDisconnectWarning)
         }
+        .alert("Couldn't reconnect", isPresented: Binding(
+            get: { reconnectError != nil }, set: { if !$0 { reconnectError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(reconnectError ?? "")
+        }
+    }
+
+    /// The most recent error among enabled syncs fed by or writing to this
+    /// account, so a broken token shows on its card and not only in Activity.
+    private func lastFailure(destination matches: (DestinationConfiguration) -> Bool,
+                             source: (SourceConfiguration) -> Bool = { _ in false }) -> String? {
+        var failed: [DestinationBinding] = []
+        for rule in ledger.rules where rule.enabled {
+            let feedsRule = source(rule.source)
+            for binding in rule.destinations where binding.enabled && binding.lastRunStatus == .error {
+                if feedsRule || matches(binding.configuration) { failed.append(binding) }
+            }
+        }
+        let latest = failed.max { ($0.lastRunAt ?? .distantPast) < ($1.lastRunAt ?? .distantPast) }
+        return latest.map { $0.lastRunError ?? "Last sync failed" }
     }
 
     /// Spells out the blast radius before disconnecting reMarkable: it's the
@@ -157,11 +179,14 @@ struct ConnectionsView: View {
                 )
             }
             ForEach(ledger.xAccounts) { account in
+                let failure = lastFailure(destination: { _ in false }, source: {
+                    if case .x(let c) = $0 { return c.accountId == account.id }; return false
+                })
                 ConnectionCard(
                     icon: { AnyView(SourceIcon(kind: .x, size: 38)) },
                     title: account.handle,
-                    subtitle: xSubtitle(account),
-                    status: .connected,
+                    subtitle: failure ?? xSubtitle(account),
+                    status: failure == nil ? .connected : .error,
                     trailing: { AnyView(AppActionMenu(actions: xActions(account))) }
                 )
             }
@@ -251,6 +276,7 @@ struct ConnectionsView: View {
             ForEach(ledger.notionWorkspaces) { ws in
                 appCard(kind: .notion, name: ws.workspaceName, subtitle: notionSubtitle(ws),
                         matches: { if case .notion(let c) = $0 { return c.workspaceId == ws.id }; return false },
+                        feeds: { if case .notion(let c) = $0 { return c.workspaceId == ws.id }; return false },
                         rename: { ledger.renameNotionWorkspace(id: ws.id, newName: $0) },
                         reconnect: { await reconnect { ledger.upsertNotionWorkspace(try await NotionAuthService.shared.connect()) } },
                         disconnect: { ledger.removeNotionWorkspace(id: ws.id) })
@@ -294,25 +320,33 @@ struct ConnectionsView: View {
 
     private func notionSubtitle(_ ws: NotionWorkspace) -> String { ws.workspaceName }
 
+    // swiftlint:disable:next function_parameter_count
     private func appCard(kind: DestinationKind, name: String, subtitle: String,
                          matches: @escaping (DestinationConfiguration) -> Bool,
+                         feeds: @escaping (SourceConfiguration) -> Bool = { _ in false },
                          rename: ((String) -> Void)?,
                          reconnect: (() async -> Void)?,
                          disconnect: @escaping () -> Void) -> some View {
         let count = ledger.bindings(matching: matches).count
         let detail = count == 0 ? subtitle : "\(subtitle) · \(count) sync\(count == 1 ? "" : "s")"
+        let failure = lastFailure(destination: matches, source: feeds)
         return ConnectionCard(
             icon: { AnyView(DestinationIcon(kind: kind, size: 32)) },
             title: name,
-            subtitle: detail,
-            status: count > 0 ? .connected : .idle,
+            subtitle: failure ?? detail,
+            status: failure != nil ? .error : (count > 0 ? .connected : .idle),
             trailing: {
                 var actions: [AppMenuAction] = []
                 if let reconnect {
                     actions.append(AppMenuAction(title: "Reconnect", systemImage: "arrow.clockwise") { Task { await reconnect() } })
                 }
                 actions.append(AppMenuAction(title: "Disconnect", systemImage: "minus.circle", isDestructive: true, action: disconnect))
-                return AnyView(AppActionMenu(actions: actions))
+                return AnyView(HStack(spacing: 8) {
+                    if failure != nil, let reconnect {
+                        PillButton(title: "Reconnect", filled: false) { Task { await reconnect() } }
+                    }
+                    AppActionMenu(actions: actions)
+                })
             }
         )
     }
@@ -323,21 +357,13 @@ struct ConnectionsView: View {
     private func reconnect(_ work: @escaping () async throws -> Void) async {
         do { try await work() }
         catch OAuthError.userCancelled { /* ignore */ }
-        catch { Log.ui.error("Reconnect failed: \(String(describing: error), privacy: .public)") }
-    }
-
-    private func presentUploadPanel() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf, .epub]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.prompt = "Upload"
-        panel.message = "Choose PDF or EPUB files to upload to reMarkable (My Files)."
-        panel.begin { response in
-            guard response == .OK else { return }
-            UploadCoordinator.shared.upload(urls: panel.urls, toFolderId: "")
+        catch {
+            Log.ui.error("Reconnect failed: \(String(describing: error), privacy: .public)")
+            reconnectError = Formatters.userMessage(for: error)
         }
     }
+
+    private func presentUploadPanel() { UploadCoordinator.shared.presentPicker() }
 }
 
 // MARK: - Connection card
@@ -366,8 +392,9 @@ struct ConnectionCard: View {
                     }
                     Text(subtitle)
                         .font(.system(size: 12.5))
-                        .foregroundStyle(theme.muted)
+                        .foregroundStyle(status == .error ? theme.destructive : theme.muted)
                         .lineLimit(1)
+                        .help(subtitle)
                 }
             }
             Spacer(minLength: 12)

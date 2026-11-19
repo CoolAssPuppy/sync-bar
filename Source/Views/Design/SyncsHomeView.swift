@@ -70,6 +70,8 @@ struct SyncsHomeView: View {
     var onNew: () -> Void
     var onEdit: (SyncFlow) -> Void
     var onEditTask: (TaskSync) -> Void
+    /// Opens Activity showing this sync's failures, searched by its source name.
+    var onShowFailures: (String) -> Void = { _ in }
 
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var entitlement = EntitlementManager.shared
@@ -253,7 +255,8 @@ struct SyncsHomeView: View {
                 onTap: {
                     if let inactiveFeature { reactivateFeature = inactiveFeature } else { onEdit(flow) }
                 },
-                onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
+                onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) },
+                onShowFailures: { onShowFailures(flow.folderName) }
             )
         case .task(let sync):
             let running = taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id
@@ -273,7 +276,8 @@ struct SyncsHomeView: View {
                 isBlocked: taskCoordinator.isSyncing,
                 canSync: true,
                 onTap: { onEditTask(sync) },
-                onSyncNow: { Task { await taskCoordinator.run(sync) } }
+                onSyncNow: { Task { await taskCoordinator.run(sync) } },
+                onShowFailures: { onShowFailures(sync.remindersListName) }
             )
         }
     }
@@ -365,6 +369,7 @@ private struct SyncListRow: View {
     let canSync: Bool
     let onTap: () -> Void
     let onSyncNow: () -> Void
+    let onShowFailures: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var isHovered = false
@@ -392,12 +397,21 @@ private struct SyncListRow: View {
                             .foregroundStyle(theme.foreground)
                             .lineLimit(1)
                     }
-                    Text(status.detail ?? summary)
-                        .font(.system(size: 12))
-                        .foregroundStyle(status.detail == nil ? theme.tertiary : theme.color(for: status.tone))
-                        .padding(.leading, 40)
-                        .lineLimit(1)
-                        .help(status.detail ?? "")
+                    HStack(spacing: 8) {
+                        Text(status.detail ?? summary)
+                            .font(.system(size: 12))
+                            .foregroundStyle(status.detail == nil ? theme.tertiary : theme.color(for: status.tone))
+                            .lineLimit(1)
+                            .help(status.detail ?? "")
+                        if status.detail != nil {
+                            Button("View log", action: onShowFailures)
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.foregroundSoft)
+                                .underline()
+                        }
+                    }
+                    .padding(.leading, 40)
                 }
                 .opacity(canSync ? 1 : 0.55)
                 Spacer(minLength: 12)

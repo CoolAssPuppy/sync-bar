@@ -15,7 +15,9 @@
 //  guard provides (so there's never more than one root writer).
 //
 
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import Combine
 
 /// A transient post-upload result, shown by `UploadBannerView` and auto-dismissed.
@@ -47,6 +49,20 @@ final class UploadCoordinator: ObservableObject {
     private static let supportedExtensions: Set<String> = ["pdf", "epub"]
 
     private init() {}
+
+    /// Asks for PDF or EPUB files and uploads them to the reMarkable root.
+    func presentPicker() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf, .epub]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.prompt = "Upload"
+        panel.message = "Upload to reMarkable"
+        panel.begin { [weak self] response in
+            guard response == .OK else { return }
+            self?.upload(urls: panel.urls, toFolderId: "")
+        }
+    }
 
     /// Uploads `urls` into `folderId` (the destination folder UUID, or "" /
     /// `unfiledFolderId` for the root). Unsupported types and directories are

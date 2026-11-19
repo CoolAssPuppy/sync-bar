@@ -62,7 +62,7 @@ struct SyncEditorView: View {
     // To — Notion (one-way page/database). The workspace is the chosen destination
     // account, so it lives in toAccountId; only the page/database is picked here.
     @State private var notionDestinations: [NotionDestination] = []
-    @State private var notionDestLoading = false
+    @StateObject private var pickers = PickerLoadTracker()
     @State private var notionDestSchema: [NotionDatabaseProperty] = []
     @State private var notionDestSchemaLoading = false
     @State private var notionDestSchemaError: String?
@@ -334,18 +334,22 @@ struct SyncEditorView: View {
     }
 
     private var safariScopePicker: some View {
-        CustomDropdown(
-            options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
-            selectedId: safariScopeId,
-            placeholder: safariScopes.isEmpty ? "Loading bookmarks…" : "Choose a bookmark folder",
-            placeholderIcon: AnyView(placeholderSourceIcon),
-            onSelect: { id in
-                if let scope = safariScopes.first(where: { $0.id == id }) {
-                    safariScopeId = scope.id
-                    safariScopeName = scope.name
+        VStack(alignment: .leading, spacing: 8) {
+            CustomDropdown(
+                options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
+                selectedId: safariScopeId,
+                placeholder: pickers.placeholder(.safariFolders, isEmpty: safariScopes.isEmpty,
+                                         ready: "Choose a bookmark folder", empty: "No bookmark folders"),
+                placeholderIcon: AnyView(placeholderSourceIcon),
+                onSelect: { id in
+                    if let scope = safariScopes.first(where: { $0.id == id }) {
+                        safariScopeId = scope.id
+                        safariScopeName = scope.name
+                    }
                 }
-            }
-        )
+            )
+            pickers.errorLine(.safariFolders, retry: loadSafariScopes)
+        }
     }
 
     /// Notion-as-source picker: workspace (when several), database, and the
@@ -364,10 +368,12 @@ struct SyncEditorView: View {
             CustomDropdown(
                 options: notionSourceDatabases.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.title) },
                 selectedId: notionSourceDatabaseId,
-                placeholder: notionSourceDatabases.isEmpty ? "Loading databases…" : "Choose a database",
+                placeholder: pickers.placeholder(.notionSourceDatabases, isEmpty: notionSourceDatabases.isEmpty,
+                                         ready: "Choose a database", empty: "No databases shared with Sync Bar"),
                 placeholderIcon: AnyView(placeholderSourceIcon),
                 onSelect: { id in selectNotionSourceDatabase(id) }
             )
+            pickers.errorLine(.notionSourceDatabases, retry: loadNotionSourceDatabases)
             if notionSourceDatabaseId != nil {
                 HStack(spacing: 8) {
                     Text("Folder from").font(.system(size: 12)).foregroundStyle(theme.tertiary)
@@ -457,11 +463,13 @@ struct SyncEditorView: View {
                                    title: dest.icon.map { "\($0) \(dest.title)" } ?? dest.title)
                 },
                 selectedId: localNotion.destinationId.isEmpty ? nil : localNotion.destinationId,
-                placeholder: notionDestLoading ? "Loading pages & databases…" : "Choose a page or database",
+                placeholder: pickers.placeholder(.notionDestinations, isEmpty: notionDestinations.isEmpty,
+                                         ready: "Choose a page or database", empty: "Choose a page or database"),
                 placeholderIcon: AnyView(placeholderDestIcon),
                 onSelect: { id in selectNotionDestination(id) }
             )
-            if !notionDestLoading && notionDestinations.isEmpty {
+            pickers.errorLine(.notionDestinations, retry: loadNotionDestinations)
+            if pickers.isSettled(.notionDestinations), notionDestinations.isEmpty {
                 HStack(spacing: 8) {
                     Text("Nothing is shared with Sync Bar yet.").font(.system(size: 11)).foregroundStyle(theme.muted)
                     Button("Reload") { loadNotionDestinations() }
@@ -493,10 +501,12 @@ struct SyncEditorView: View {
             CustomDropdown(
                 options: taskDatabases.map { DropdownOption(id: $0.id, icon: AnyView(DestinationIcon(kind: .notion, size: 24)), title: $0.title) },
                 selectedId: taskDatabaseId,
-                placeholder: taskDatabases.isEmpty ? "Loading databases…" : "Choose a database",
+                placeholder: pickers.placeholder(.notionTaskDatabases, isEmpty: taskDatabases.isEmpty,
+                                         ready: "Choose a database", empty: "No databases shared with Sync Bar"),
                 placeholderIcon: AnyView(placeholderDestIcon),
                 onSelect: { id in selectTaskDatabase(id) }
             )
+            pickers.errorLine(.notionTaskDatabases, retry: loadTaskDatabases)
         }
     }
 
@@ -958,10 +968,7 @@ struct SyncEditorView: View {
     }
 
     private func loadSafariScopes() {
-        Task {
-            let scopes = await coordinator.scopes(for: .safari)
-            await MainActor.run { safariScopes = scopes }
-        }
+        pickers.run(.safariFolders) { safariScopes = try await coordinator.scopes(for: .safari) }
     }
 
     // MARK: X source
@@ -1001,10 +1008,10 @@ struct SyncEditorView: View {
 
     private func loadNotionSourceDatabases() {
         guard let workspaceId = notionSourceWorkspaceId else { return }
-        Task {
+        pickers.run(.notionSourceDatabases) {
             let client = NotionClientFactory.make(workspaceId: workspaceId)
-            let all = (try? await client.listDestinations(workspaceId: workspaceId)) ?? []
-            await MainActor.run { notionSourceDatabases = all.filter { $0.type == .database } }
+            let all = try await client.listDestinations(workspaceId: workspaceId)
+            notionSourceDatabases = all.filter { $0.type == .database }
         }
     }
 
@@ -1058,10 +1065,10 @@ struct SyncEditorView: View {
 
     private func loadTaskDatabases() {
         guard let taskWorkspaceId else { return }
-        Task {
+        pickers.run(.notionTaskDatabases) {
             let client = NotionClientFactory.make(workspaceId: taskWorkspaceId)
-            let all = (try? await client.listDestinations(workspaceId: taskWorkspaceId)) ?? []
-            await MainActor.run { taskDatabases = all.filter { $0.type == .database } }
+            let all = try await client.listDestinations(workspaceId: taskWorkspaceId)
+            taskDatabases = all.filter { $0.type == .database }
         }
     }
 
@@ -1083,11 +1090,9 @@ struct SyncEditorView: View {
 
     private func loadNotionDestinations() {
         guard let id = toAccountId else { return }
-        notionDestLoading = true
-        Task {
+        pickers.run(.notionDestinations) {
             let client = NotionClientFactory.make(workspaceId: id)
-            let all = (try? await client.listDestinations(workspaceId: id)) ?? []
-            await MainActor.run { notionDestinations = all; notionDestLoading = false }
+            notionDestinations = try await client.listDestinations(workspaceId: id)
         }
     }
 

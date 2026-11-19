@@ -45,6 +45,20 @@ final class UXStateRenderTests: XCTestCase {
         XCTAssertFalse(failed.isPaused)
         XCTAssertEqual(failed.headline, "1 sync failed", "demo data has one failed sync")
         try render(coordinator, tasks, name: "2-idle-with-failure")
+
+        // The failed Google sync's account card says why and offers Reconnect;
+        // "View log" lands on Activity searched and filtered to its failures.
+        guard let outputDir else { return }
+        let theme = ThemeStore.shared.palette
+        try snapshot(ConnectionsView().environment(\.theme, theme), size: CGSize(width: 860, height: 760),
+                     to: outputDir.appendingPathComponent("4-connections-with-failure.png"))
+        let activity = ActivityView(search: .constant("Customer interviews"),
+                                    selectedEventType: .constant(SyncEventType.pageFailed.rawValue))
+        try snapshot(activity.environment(\.theme, theme), size: CGSize(width: 860, height: 520),
+                     to: outputDir.appendingPathComponent("5-activity-failures-for-one-sync.png"))
+        let noMatch = ActivityView(search: .constant("nothing matches this"), selectedEventType: .constant("all"))
+        try snapshot(noMatch.environment(\.theme, theme), size: CGSize(width: 860, height: 420),
+                     to: outputDir.appendingPathComponent("6-activity-no-match.png"))
     }
 
     func test_syncing_state_renders_while_a_run_is_in_flight() async throws {

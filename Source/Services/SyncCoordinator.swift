@@ -167,8 +167,8 @@ final class SyncCoordinator: ObservableObject {
     /// The targetable scopes for a source kind (reMarkable folders, Safari
     /// bookmark folders), for the editor's source picker. Returns empty on error
     /// (e.g. Safari without Full Disk Access) so the UI shows its own empty state.
-    func scopes(for kind: SourceKind) async -> [SourceScope] {
-        (try? await sourceClientFor(kind).listScopes()) ?? []
+    func scopes(for kind: SourceKind) async throws -> [SourceScope] {
+        try await sourceClientFor(kind).listScopes()
     }
 
     private func restartTimer() {
@@ -290,7 +290,8 @@ final class SyncCoordinator: ObservableObject {
             if rule.sourceKind.paidFeature != nil { lastPaidCrawlAt[rule.id] = Date() }
         } catch {
             reportSourceHealth(rule.sourceKind, error: error)
-            recordFailure(rule: rule, binding: nil, message: Formatters.userMessage(for: error))
+            failSourceListing(rule: rule, restrictedToBindingId: restrictedToBindingId,
+                              message: Formatters.userMessage(for: error))
             return
         }
 
@@ -694,6 +695,22 @@ final class SyncCoordinator: ObservableObject {
             notionPageUrl: nil, durationMs: nil,
             ocrProvider: nil, errorMessage: message
         ))
+    }
+
+    /// The source couldn't be read, so every sync it feeds failed. Mark each
+    /// one so its row says why, and notify once.
+    private func failSourceListing(rule: SyncRule, restrictedToBindingId: String?, message: String) {
+        recordFailure(rule: rule, binding: nil, message: message)
+        let affected = rule.destinations.filter {
+            $0.enabled && (restrictedToBindingId == nil || $0.id == restrictedToBindingId)
+        }
+        for binding in affected {
+            ledger.updateBindingRunResult(ruleId: rule.id, bindingId: binding.id, status: .error,
+                                          pagesSynced: 0, runAt: Date(), error: message)
+        }
+        if !affected.isEmpty, settings.notifyOnFailure {
+            postNotification(title: "Sync failed", body: "\(rule.sourceSummary): \(message)")
+        }
     }
 
     private func ruleHeader(_ rule: SyncRule, binding: DestinationBinding) -> String {

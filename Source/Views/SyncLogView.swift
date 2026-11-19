@@ -38,14 +38,15 @@ struct SyncLogView: View {
             Image(systemName: "tray")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(theme.muted)
-            Text("No Events Yet")
+            Text(ledger.events.isEmpty ? "No activity yet" : "No matching events")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.foreground)
-            Text("Once Sync Bar starts syncing, every rule run, page write, and failure shows up here.")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.muted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
+            if !ledger.events.isEmpty {
+                AppSecondaryButton(title: "Clear filters") {
+                    search = ""
+                    selectedEventType = "all"
+                }
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -283,7 +284,7 @@ private struct EventRow: View {
         case .ruleRunCompleted: return "Sync run completed"
         case .tokenRefreshed:   return "Auth token refreshed"
         case .orphanDetected:   return "Orphaned item detected"
-        case .cycleSkipped:     return "Sync ran but found nothing to do"
+        case .cycleSkipped:     return "Skipped"
         }
     }
 

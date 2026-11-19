@@ -63,8 +63,10 @@ struct MenuBarPopover: View {
 
             Spacer(minLength: 8)
 
-            AppIconButton(systemName: "arrow.up.doc",
-                          help: "Upload PDF/EPUB to reMarkable") { actions.uploadFiles() }
+            if ledger.remarkableAccount != nil {
+                AppIconButton(systemName: "arrow.up.doc",
+                              help: "Upload PDF or EPUB to reMarkable") { actions.uploadFiles() }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

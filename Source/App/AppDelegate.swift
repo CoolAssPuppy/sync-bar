@@ -268,12 +268,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             uploadFiles: { [weak self] in
                 self?.popover?.performClose(nil)
+                // The window shows the upload's progress and result.
                 self?.showMainWindow()
-                // Land on the reMarkable folders view so the user can drag-drop.
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 50_000_000)
-                    NotificationCenter.default.post(name: .selectRemarkableView, object: nil)
-                }
+                UploadCoordinator.shared.presentPicker()
             },
             quit: { NSApp.terminate(nil) }
         )

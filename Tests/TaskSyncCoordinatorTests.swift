@@ -121,6 +121,24 @@ final class TaskSyncCoordinatorTests: XCTestCase {
 
     private func cleanup(_ sync: TaskSync) { Ledger.shared.removeTaskSync(id: sync.id) }
 
+    // MARK: Errors reach the Activity log
+
+    /// A missing token used to set the row to Failed with no Activity entry, so
+    /// the reason was visible nowhere a user could open.
+    func test_missing_provider_logs_a_failed_event_with_the_reason() async {
+        let sync = makeSync()
+        Ledger.shared.upsertTaskSync(sync)
+        defer { cleanup(sync) }
+        let coordinator = TaskSyncCoordinator(ledger: .shared, remindersClient: StubRemindersClient(),
+                                              providerFor: { _ in nil })
+        await coordinator.run(sync)
+
+        let failures = Ledger.shared.events.filter { $0.ruleId == sync.id && $0.eventType == .pageFailed }
+        XCTAssertEqual(failures.count, 1)
+        XCTAssertEqual(failures.first?.errorMessage, Ledger.shared.taskSyncs.first { $0.id == sync.id }?.lastRunError)
+        XCTAssertNotNil(failures.first?.errorMessage)
+    }
+
     // MARK: First run
 
     func test_empty_both_sides_is_a_noop() async {

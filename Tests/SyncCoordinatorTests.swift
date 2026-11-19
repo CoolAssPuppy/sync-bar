@@ -736,6 +736,35 @@ final class SyncCoordinatorTests: XCTestCase {
     /// the cycle has fully settled, then returns the updated binding. Polling
     /// replaces fixed `Task.sleep` waits, which flaked whenever a test's
     /// cold-start Vision OCR warmup outlasted the sleep budget.
+    /// A source that can't be read (expired Notion token, offline) used to log
+    /// one row and leave every sync showing its old "Synced" status.
+    func test_source_listing_failure_marks_each_enabled_binding_failed_with_the_reason() async {
+        let ledger = Ledger.shared
+        var rule = SyncRule(source: .safari(SafariSourceConfig(folderId: "all", folderName: "Failing source")))
+        rule.destinations = [
+            DestinationBinding(configuration:
+                .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["A"]))),
+            DestinationBinding(configuration:
+                .chrome(ChromeDestinationConfig(profileDirName: "Default", targetFolderPath: ["B"])))
+        ]
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+
+        let coordinator = SyncCoordinator(
+            remarkable: ScriptedRemarkableClient(files: 0),
+            sourceClient: { _ in FailingSource() },
+            destinationClient: { _ in SpyDestinationClient() })
+        coordinator.syncNow(ruleId: rule.id)
+        let deadline = Date().addingTimeInterval(10)
+        func bindings() -> [DestinationBinding] { ledger.rules.first { $0.id == rule.id }?.destinations ?? [] }
+        while Date() < deadline, bindings().contains(where: { $0.lastRunStatus != .error }) {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertEqual(bindings().map(\.lastRunStatus), [.error, .error])
+        XCTAssertEqual(bindings().map(\.lastRunError), [FailingSource.message, FailingSource.message])
+    }
+
     private func runAndWait(_ coordinator: SyncCoordinator,
                             ruleId: String,
                             bindingId: String,
@@ -891,6 +920,19 @@ private struct StubBookmarkSource: SourceClient {
     let items: [SourceItem]
     func listScopes() async throws -> [SourceScope] { [] }
     func listItems(config: SourceConfiguration) async throws -> [SourceItem] { items }
+    func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent { NoteContent(blocks: []) }
+    func resolveTitle(for item: SourceItem, content: NoteContent,
+                      config: SourceConfiguration, strategyOverride: TitleStrategy?) -> String { item.name }
+    func shouldSkipAsEmpty(content: NoteContent, config: SourceConfiguration, ocrModeOverride: OcrMode?) -> Bool { false }
+}
+
+/// A source whose listing always fails, like an expired token.
+private struct FailingSource: SourceClient {
+    static let message = "Reconnect the Notion workspace to back it up."
+    struct Failure: LocalizedError { var errorDescription: String? { FailingSource.message } }
+    let kind: SourceKind = .safari
+    func listScopes() async throws -> [SourceScope] { [] }
+    func listItems(config: SourceConfiguration) async throws -> [SourceItem] { throw Failure() }
     func content(for item: SourceItem, config: SourceConfiguration) async throws -> NoteContent { NoteContent(blocks: []) }
     func resolveTitle(for item: SourceItem, content: NoteContent,
                       config: SourceConfiguration, strategyOverride: TitleStrategy?) -> String { item.name }

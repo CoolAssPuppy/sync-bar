@@ -56,6 +56,15 @@ final class UXStateRenderTests: XCTestCase {
                                     selectedEventType: .constant(SyncEventType.pageFailed.rawValue))
         try snapshot(activity.environment(\.theme, theme), size: CGSize(width: 860, height: 520),
                      to: outputDir.appendingPathComponent("5-activity-failures-for-one-sync.png"))
+        // Editor: a new sync names why Save is off; an existing one shows On/off.
+        let newEditor = SyncEditorView(target: .new, coordinator: coordinator, onClose: {})
+        try snapshot(newEditor.environment(\.theme, theme), size: CGSize(width: 680, height: 640),
+                     to: outputDir.appendingPathComponent("7-editor-new.png"))
+        if let flow = ledger.syncFlows.first(where: { $0.kind == .markdownFolder }) {
+            let editEditor = SyncEditorView(target: .edit(flow), coordinator: coordinator, onClose: {})
+            try snapshot(editEditor.environment(\.theme, theme), size: CGSize(width: 680, height: 640),
+                         to: outputDir.appendingPathComponent("8-editor-edit.png"))
+        }
         let noMatch = ActivityView(search: .constant("nothing matches this"), selectedEventType: .constant("all"))
         try snapshot(noMatch.environment(\.theme, theme), size: CGSize(width: 860, height: 420),
                      to: outputDir.appendingPathComponent("6-activity-no-match.png"))

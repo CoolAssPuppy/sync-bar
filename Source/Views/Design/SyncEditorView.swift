@@ -15,7 +15,7 @@ import AppKit
 
 /// What the editor's FROM step is pointed at. Reminders isn't a one-way
 /// SourceClind, so it rides alongside the SourceKinds as its own case.
-private enum EditorSource: Equatable {
+enum EditorSource: Equatable {
     case kind(SourceKind)
     case reminders
     var id: String { if case .kind(let k) = self { return k.rawValue }; return "reminders" }
@@ -26,95 +26,101 @@ struct SyncEditorView: View {
     @ObservedObject var coordinator: SyncCoordinator
     var onClose: () -> Void
 
-    @ObservedObject private var ledger = Ledger.shared
+    @ObservedObject var ledger = Ledger.shared
     @Environment(\.theme) private var theme
 
     // From
-    @State private var source: EditorSource = .kind(.remarkable)
-    @State private var folder: RmFolder?
-    @State private var selectedFileIds: [String]?
+    @State var source: EditorSource = .kind(.remarkable)
+    @State var folder: RmFolder?
+    @State var selectedFileIds: [String]?
     // From — Safari
-    @State private var safariScopes: [SourceScope] = []
-    @State private var safariScopeId: String?
-    @State private var safariScopeName: String = ""
+    @State var safariScopes: [SourceScope] = []
+    @State var safariScopeId: String?
+    @State var safariScopeName: String = ""
     // From — Notion (database backup). Wired into the editor UI in a later step;
     // these hold the chosen workspace/database and the Category column.
-    @State private var notionSourceWorkspaceId: String?
-    @State private var notionSourceDatabaseId: String?
-    @State private var notionSourceDatabaseName: String = ""
-    @State private var notionSourceTitleProperty: String = ""
-    @State private var notionSourceCategoryProperty: String = NotionSourceConfig.defaultCategoryProperty
+    @State var notionSourceWorkspaceId: String?
+    @State var notionSourceDatabaseId: String?
+    @State var notionSourceDatabaseName: String = ""
+    @State var notionSourceTitleProperty: String = ""
+    @State var notionSourceCategoryProperty: String = NotionSourceConfig.defaultCategoryProperty
     /// The Notion date column that supplies each note's date. Empty = created_time.
-    @State private var notionSourceDateProperty: String = ""
-    @State private var notionSourceDatabases: [NotionDestination] = []
-    @State private var notionSourceSchema: [NotionDatabaseProperty] = []
+    @State var notionSourceDateProperty: String = ""
+    @State var notionSourceDatabases: [NotionDestination] = []
+    @State var notionSourceSchema: [NotionDatabaseProperty] = []
     // From — X (one content stream of one connected account)
-    @State private var xSourceAccountId: String?
-    @State private var xSourceStream: XStream = .bookmarks
+    @State var xSourceAccountId: String?
+    @State var xSourceStream: XStream = .bookmarks
     // From — Reminders (two-way)
-    @State private var reminderLists: [ReminderList] = []
-    @State private var remindersLoading = false
-    @State private var reminderListId: String?
-    @State private var reminderListName: String = ""
+    @State var reminderLists: [ReminderList] = []
+    @State var remindersLoading = false
+    @State var reminderListId: String?
+    @State var reminderListName: String = ""
     // To
-    @State private var toKind: DestinationKind?
-    @State private var toAccountId: String?
+    @State var toKind: DestinationKind?
+    @State var toAccountId: String?
     // To — Notion (one-way page/database). The workspace is the chosen destination
     // account, so it lives in toAccountId; only the page/database is picked here.
-    @State private var notionDestinations: [NotionDestination] = []
-    @StateObject private var pickers = PickerLoadTracker()
-    @State private var notionDestSchema: [NotionDatabaseProperty] = []
-    @State private var notionDestSchemaLoading = false
-    @State private var notionDestSchemaError: String?
+    @State var notionDestinations: [NotionDestination] = []
+    @StateObject var pickers = PickerLoadTracker()
+    @State var notionDestSchema: [NotionDatabaseProperty] = []
+    @State var notionDestSchemaLoading = false
+    @State var notionDestSchemaError: String?
     // To — Notion database (two-way)
-    @State private var taskWorkspaceId: String?
-    @State private var taskDatabases: [NotionDestination] = []
-    @State private var taskDatabaseId: String?
-    @State private var taskDatabaseName: String = ""
-    @State private var taskSchema: [NotionDatabaseProperty] = []
-    @State private var mapRows: [TaskMapRow] = []
-    @State private var excludedStatuses: Set<String> = []
-    @State private var excludeCompletedReminders = false
-    @State private var originalTaskSyncId: String?
+    @State var taskWorkspaceId: String?
+    @State var taskDatabases: [NotionDestination] = []
+    @State var taskDatabaseId: String?
+    @State var taskDatabaseName: String = ""
+    @State var taskSchema: [NotionDatabaseProperty] = []
+    @State var mapRows: [TaskMapRow] = []
+    @State var excludedStatuses: Set<String> = []
+    @State var excludeCompletedReminders = false
+    @State var originalTaskSyncId: String?
     // Customize — per-kind destination forms
-    @State private var localNotion = NotionFormState()
-    @State private var localLinear = LinearFormState()
-    @State private var localGoogle = GoogleFormState()
-    @State private var localAppleNotes = AppleNotesFormState()
-    @State private var localMarkdown = MarkdownFormState()
-    @State private var chromeTargetFolder: String = "From Safari"
-    @State private var chromeMirrorExactly = false
+    @State var localNotion = NotionFormState()
+    @State var localLinear = LinearFormState()
+    @State var localGoogle = GoogleFormState()
+    @State var localAppleNotes = AppleNotesFormState()
+    @State var localMarkdown = MarkdownFormState()
+    @State var chromeTargetFolder: String = "From Safari"
+    @State var chromeMirrorExactly = false
     // How
-    @State private var titleStrategy: TitleStrategy = .firstLineOfOcr
-    @State private var ocrMode: OcrMode = .all
-    @State private var pageOrder: PageOrder = .chronological
-    @State private var requiredTags: [String] = []
-    @State private var savePdf = true
+    @State var titleStrategy: TitleStrategy = .firstLineOfOcr
+    @State var ocrMode: OcrMode = .all
+    @State var pageOrder: PageOrder = .chronological
+    @State var requiredTags: [String] = []
+    @State var savePdf = true
     // edit bookkeeping
-    @State private var originalRuleId: String?
-    @State private var originalBindingId: String?
-    @State private var existingBinding: DestinationBinding?
+    @State var originalRuleId: String?
+    @State var originalBindingId: String?
+    @State var existingBinding: DestinationBinding?
     // scope sheet
-    @State private var isChoosingScope = false
-    @State private var scopeFiles: [RmFile] = []
-    @State private var scopeLoading = false
+    @State var isChoosingScope = false
+    @State var scopeFiles: [RmFile] = []
+    @State var scopeLoading = false
     // Notion source dry-run preview
-    @State private var previewRunning = false
-    @State private var previewError: String?
+    @State var previewRunning = false
+    @State var previewError: String?
+    // Safety: on/off, unsaved-changes and delete confirmations
+    @State var isEnabled = true
+    @State var baseline: String?
+    @State var baselineConfig: DestinationConfiguration?
+    @State var isConfirmingDiscard = false
+    @State var isConfirmingDelete = false
 
     private let remindersClient: RemindersClient = EventKitRemindersClient()
 
-    private var isReminders: Bool { source == .reminders }
-    private var sourceKind: SourceKind? { if case .kind(let k) = source { return k }; return nil }
-    private var isEditing: Bool { originalBindingId != nil || originalTaskSyncId != nil }
+    var isReminders: Bool { source == .reminders }
+    var sourceKind: SourceKind? { if case .kind(let k) = source { return k }; return nil }
+    var isEditing: Bool { originalBindingId != nil || originalTaskSyncId != nil }
 
-    private var canSave: Bool {
+    var canSave: Bool {
         guard hasSourceSelected else { return false }
         if isReminders { return taskWorkspaceId != nil && taskDatabaseId != nil && taskTitleProperty != nil }
         return toKind != nil && destinationValid
     }
 
-    private var hasSourceSelected: Bool {
+    var hasSourceSelected: Bool {
         switch source {
         case .kind(.remarkable): return folder != nil
         case .kind(.safari):     return safariScopeId != nil
@@ -127,19 +133,19 @@ struct SyncEditorView: View {
     /// Sources the user can pick from — only the ones they've added. Falls back to
     /// reMarkable so the "From" step always has something to render; the editor is
     /// unreachable with no source anyway.
-    private var availableSources: [EditorSource] {
+    var availableSources: [EditorSource] {
         var out = ledger.connectedSourceKinds.map(EditorSource.kind)
         if ledger.remindersConnected { out.append(.reminders) }
         return out.isEmpty ? [.kind(.remarkable)] : out
     }
 
     /// The X account currently chosen in the FROM step, defaulting to the first.
-    private var selectedXAccount: XAccount? {
+    var selectedXAccount: XAccount? {
         ledger.xAccounts.first { $0.id == xSourceAccountId } ?? ledger.xAccounts.first
     }
 
     /// The streams the chosen X account opted into (and thus has scopes for).
-    private var xSourceStreams: [XStream] {
+    var xSourceStreams: [XStream] {
         selectedXAccount?.selectedStreams ?? XStream.allCases
     }
 
@@ -165,13 +171,72 @@ struct SyncEditorView: View {
         .frame(width: 680, height: 640)
         .background(theme.surface)
         .environment(\.theme, theme)
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            // Snapshot after this pass's state writes so "unsaved" means edits.
+            DispatchQueue.main.async {
+                baseline = draftFingerprint
+                baselineConfig = composedConfiguration()
+            }
+        }
         .sheet(isPresented: $isChoosingScope) { scopeSheet }
+        .interactiveDismissDisabled(isDirty)
+        .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard) {
+            Button("Discard", role: .destructive, action: onClose)
+        }
+        .confirmationDialog("Delete this sync?", isPresented: $isConfirmingDelete) {
+            Button("Delete", role: .destructive, action: deleteSync)
+        } message: {
+            Text("Notes it already synced stay where they are.")
+        }
+    }
+
+    var isDirty: Bool {
+        guard baseline != nil else { return false }
+        return baseline != draftFingerprint || baselineConfig != composedConfiguration()
+    }
+
+    func requestClose() {
+        if isDirty { isConfirmingDiscard = true } else { onClose() }
+    }
+
+    /// Everything a save would store except the destination settings, which
+    /// compare with `==` (their dictionaries print in no fixed order).
+    var draftFingerprint: String {
+        let rows = mapRows.map { "\($0.field)=\($0.column)" }.joined(separator: ",")
+        let parts: [String] = [
+            "\(source)", folder?.id ?? "", "\(selectedFileIds ?? [])", safariScopeId ?? "",
+            notionSourceWorkspaceId ?? "", notionSourceDatabaseId ?? "", notionSourceCategoryProperty,
+            notionSourceDateProperty, xSourceAccountId ?? "", "\(xSourceStream)", "\(toKind as Any)", toAccountId ?? "",
+            "\(titleStrategy)", "\(ocrMode)", "\(pageOrder)",
+            requiredTags.sorted().joined(separator: ","), "\(savePdf)", "\(isEnabled)",
+            taskWorkspaceId ?? "", taskDatabaseId ?? "", rows,
+            excludedStatuses.sorted().joined(separator: ","), "\(excludeCompletedReminders)"
+        ]
+        return parts.joined(separator: "|")
+    }
+
+    /// Why Save is unavailable, named so a greyed-out button isn't a mystery.
+    var saveBlocker: String? {
+        guard !canSave else { return nil }
+        if !hasSourceSelected { return "Choose what to sync from" }
+        if isReminders {
+            if taskDatabaseId == nil { return "Choose a Notion database" }
+            return "That database has no title column"
+        }
+        if toKind == nil { return "Choose a destination" }
+        return "Finish the destination settings"
+    }
+
+    /// Editing where notes go makes the next run rewrite every synced note.
+    var rewritesEverything: Bool {
+        guard let existing = existingBinding, let config = composedConfiguration() else { return false }
+        return !existing.configuration.hasSameSettings(as: config)
     }
 
     // MARK: Header / footer
 
-    private var header: some View {
+    var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(isEditing ? "Edit sync" : "New sync").font(.system(size: 18, weight: .bold)).foregroundStyle(theme.foreground)
@@ -180,7 +245,7 @@ struct SyncEditorView: View {
                     .font(.system(size: 12.5)).foregroundStyle(theme.muted)
             }
             Spacer()
-            Button(action: onClose) {
+            Button(action: requestClose) {
                 Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.muted)
                     .frame(width: 30, height: 30)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
@@ -190,17 +255,24 @@ struct SyncEditorView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(theme.divider).frame(height: 1) }
     }
 
-    private var footer: some View {
+    var footer: some View {
         HStack(spacing: 10) {
             if isEditing {
-                Button(action: deleteSync) {
+                Button(action: { isConfirmingDelete = true }) {
                     Text("Delete sync").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.destructive)
                         .padding(.horizontal, 14).frame(height: 36)
                         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.destructive.opacity(0.4), lineWidth: 1))
                 }.buttonStyle(.plain)
             }
-            if let previewError {
-                Text(previewError).font(.system(size: 11)).foregroundStyle(theme.destructive).lineLimit(1)
+            if isEditing {
+                Toggle("On", isOn: $isEnabled)
+                    .toggleStyle(.switch).controlSize(.small).tint(theme.primary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.foregroundSoft)
+                    .help(isEnabled ? "Turn this sync off" : "Turn this sync on")
+            }
+            if let footerNote {
+                Text(footerNote.text).font(.system(size: 11)).foregroundStyle(footerNote.color).lineLimit(2)
             }
             Spacer()
             // Dry run: read Notion + the chosen destination, show what a first sync
@@ -213,7 +285,7 @@ struct SyncEditorView: View {
                            action: previewNotionSource)
                     .opacity(previewRunning ? 0.5 : 1).disabled(previewRunning)
             }
-            PillButton(title: "Cancel", filled: false, action: onClose)
+            PillButton(title: "Cancel", filled: false, action: requestClose)
             PillButton(title: "Save sync", action: save).opacity(canSave ? 1 : 0.5).disabled(!canSave)
         }
         .padding(20)
@@ -221,10 +293,17 @@ struct SyncEditorView: View {
         .background(theme.background)
     }
 
+    var footerNote: (text: String, color: Color)? {
+        if let previewError { return (previewError, theme.destructive) }
+        if let saveBlocker { return (saveBlocker, theme.muted) }
+        if rewritesEverything { return ("Saving rewrites every synced note on the next run.", theme.warning) }
+        return nil
+    }
+
     /// Generates the read-only dry-run report for the configured Notion source and
     /// opens it. Uses the Apple Notes destination's folder (or "Notes") as the
     /// fallback notebook for uncategorized pages.
-    private func previewNotionSource() {
+    func previewNotionSource() {
         guard let workspaceId = notionSourceWorkspaceId, let databaseId = notionSourceDatabaseId else { return }
         let config = NotionSourceConfig(
             workspaceId: workspaceId,
@@ -242,29 +321,21 @@ struct SyncEditorView: View {
         let fallback = localAppleNotes.folderName.isEmpty ? "Notes" : localAppleNotes.folderName
         previewRunning = true
         previewError = nil
-        Task {
+        Task { @MainActor in
             do {
-                let url: URL
-                switch destination {
-                case .markdownFolder:
-                    url = try await NotionMarkdownPreview.generate(source: config, config: markdownConfig)
-                default:   // .appleNotes
-                    url = try await NotionAppleNotesPreview.generate(source: config, fallbackNotebook: fallback)
-                }
-                await MainActor.run {
-                    previewRunning = false
-                    NSWorkspace.shared.open(url)
-                }
+                let url = try await NotionSourcePreview.generate(destination: destination, source: config,
+                                                                 markdown: markdownConfig, fallbackNotebook: fallback)
+                NSWorkspace.shared.open(url)
             } catch {
-                let message = Formatters.userMessage(for: error)
-                await MainActor.run { previewRunning = false; previewError = message }
+                previewError = Formatters.userMessage(for: error)
             }
+            previewRunning = false
         }
     }
 
     // MARK: From
 
-    private var fromStep: some View {
+    var fromStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("FROM", "which source")
             if availableSources.count > 1 {
@@ -289,7 +360,7 @@ struct SyncEditorView: View {
     /// X-as-source picker: the account (when several) and the content stream
     /// (bookmarks / likes / posts) this sync pulls. Each stream is its own
     /// independent sync with its own history.
-    private var xSourceScopePicker: some View {
+    var xSourceScopePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             if ledger.xAccounts.count > 1 {
                 CustomDropdown(
@@ -310,7 +381,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private var remarkableScopePicker: some View {
+    var remarkableScopePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             CustomDropdown(
                 options: ledger.folders.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(size: 26)), title: $0.name, detail: "(\($0.pageCount) note\($0.pageCount == 1 ? "" : "s"))") },
@@ -333,7 +404,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private var safariScopePicker: some View {
+    var safariScopePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             CustomDropdown(
                 options: safariScopes.map { DropdownOption(id: $0.id, icon: AnyView(SourceIcon(kind: .safari, size: 26)), title: "\($0.name) · \($0.itemCount)") },
@@ -354,7 +425,7 @@ struct SyncEditorView: View {
 
     /// Notion-as-source picker: workspace (when several), database, and the
     /// single-select column whose value becomes the destination folder/notebook.
-    private var notionSourceScopePicker: some View {
+    var notionSourceScopePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             if ledger.notionWorkspaces.count > 1 {
                 CustomDropdown(
@@ -401,16 +472,16 @@ struct SyncEditorView: View {
     }
 
     /// Single-select-style columns that can drive the folder/notebook split.
-    private var notionSourceCategoryColumns: [String] {
+    var notionSourceCategoryColumns: [String] {
         notionSourceSchema.filter { ["select", "status", "multi_select"].contains($0.type) }.map(\.name)
     }
 
     /// Date columns that can supply the note's original date.
-    private var notionSourceDateColumns: [String] {
+    var notionSourceDateColumns: [String] {
         notionSourceSchema.filter { $0.type == "date" }.map(\.name)
     }
 
-    private var remindersListPicker: some View {
+    var remindersListPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             if reminderLists.isEmpty && !remindersLoading {
                 HStack(spacing: 8) {
@@ -429,14 +500,14 @@ struct SyncEditorView: View {
         }
     }
 
-    private var scopeSummary: String {
+    var scopeSummary: String {
         guard let ids = selectedFileIds, !ids.isEmpty else { return "Syncing every notebook in this folder" }
         return "Syncing \(ids.count) selected notebook\(ids.count == 1 ? "" : "s")"
     }
 
     // MARK: To (one-way destination)
 
-    private var toStep: some View {
+    var toStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("TO", "which destination")
             CustomDropdown(
@@ -455,7 +526,7 @@ struct SyncEditorView: View {
 
     /// One-way Notion destination: the page or database to write into. Styled like
     /// the other "To" controls and grouped under the same step.
-    private var notionDestinationPicker: some View {
+    var notionDestinationPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             CustomDropdown(
                 options: notionDestinations.map { dest in
@@ -482,7 +553,7 @@ struct SyncEditorView: View {
 
     // MARK: To (two-way Notion database)
 
-    private var notionDatabaseStep: some View {
+    var notionDatabaseStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("TO").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
@@ -512,15 +583,15 @@ struct SyncEditorView: View {
 
     // MARK: Map (two-way fields)
 
-    private var taskTitleProperty: String? { taskSchema.first { $0.type == "title" }?.name }
+    var taskTitleProperty: String? { taskSchema.first { $0.type == "title" }?.name }
     /// The Notion column the Status field is mapped to (if any), and its options —
     /// used by the FILTER step and the done/not-done inference.
-    private var statusColumn: String { mapRows.first { $0.field == .status }?.column ?? "" }
-    private var statusType: String? { taskSchema.first { $0.name == statusColumn }?.type }
-    private var statusOptions: [String] { taskSchema.first { $0.name == statusColumn }?.options ?? [] }
-    private func columnType(_ name: String) -> String? { taskSchema.first { $0.name == name }?.type }
+    var statusColumn: String { mapRows.first { $0.field == .status }?.column ?? "" }
+    var statusType: String? { taskSchema.first { $0.name == statusColumn }?.type }
+    var statusOptions: [String] { taskSchema.first { $0.name == statusColumn }?.options ?? [] }
+    func columnType(_ name: String) -> String? { taskSchema.first { $0.name == name }?.type }
 
-    private var mapStep: some View {
+    var mapStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("MAP", "pair Reminders fields with Notion columns")
             VStack(alignment: .leading, spacing: 0) {
@@ -538,7 +609,7 @@ struct SyncEditorView: View {
 
     // MARK: Filter (statuses to skip, from both tools)
 
-    private var filterStep: some View {
+    var filterStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("FILTER", "skip tasks in these statuses")
             MultiSelectDropdown(
@@ -552,7 +623,7 @@ struct SyncEditorView: View {
     /// Statuses across both tools (Reminders' "Completed" + the Notion status
     /// column's options), merged by name, alphabetical, each tagged with a glyph
     /// for where it lives.
-    private var filterOptions: [MultiSelectOption] {
+    var filterOptions: [MultiSelectOption] {
         var merged: [String: (display: String, reminders: Bool, notion: Bool)] = [:]
         merged["completed"] = ("Completed", true, false)
         for option in Set(statusOptions).union(excludedStatuses) {
@@ -567,14 +638,14 @@ struct SyncEditorView: View {
         }
     }
 
-    private var filterSelection: Set<String> {
+    var filterSelection: Set<String> {
         var selection = Set<String>()
         if excludeCompletedReminders { selection.insert("completed") }
         for status in excludedStatuses { selection.insert(status.lowercased()) }
         return selection
     }
 
-    private func toggleFilter(_ id: String) {
+    func toggleFilter(_ id: String) {
         let willSelect = !filterSelection.contains(id)
         if id == "completed" { excludeCompletedReminders = willSelect }
         if let notionName = (Set(statusOptions).union(excludedStatuses)).first(where: { $0.lowercased() == id }) {
@@ -582,7 +653,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func sourceGlyphs(reminders: Bool, notion: Bool) -> AnyView {
+    func sourceGlyphs(reminders: Bool, notion: Bool) -> AnyView {
         AnyView(HStack(spacing: 4) {
             if reminders {
                 Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 16, height: 16)
@@ -594,7 +665,7 @@ struct SyncEditorView: View {
     /// Picks the status option that means done / not-done, by matching common
     /// words against the column's options. nil for a checkbox column (no option
     /// needed) or when nothing matches.
-    private func inferredStatusValue(matching keywords: [String]) -> String? {
+    func inferredStatusValue(matching keywords: [String]) -> String? {
         guard statusType == "status" || statusType == "select" else { return nil }
         return statusOptions.first { option in
             let lowered = option.lowercased()
@@ -604,7 +675,7 @@ struct SyncEditorView: View {
 
     /// A read-only field rendered at the same metrics as the editable dropdowns,
     /// so a locked value (the title column) aligns with them instead of floating.
-    private func lockedFieldLabel(_ text: String) -> some View {
+    func lockedFieldLabel(_ text: String) -> some View {
         HStack(spacing: 8) {
             Text(text).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.muted).lineLimit(1)
             Spacer(minLength: 8)
@@ -613,7 +684,7 @@ struct SyncEditorView: View {
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.cardElevated))
     }
 
-    private func mapRow<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+    func mapRow<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 14) {
             Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
             Spacer(minLength: 12)
@@ -624,28 +695,28 @@ struct SyncEditorView: View {
 
     // MARK: Icons
 
-    private var placeholderSourceIcon: some View {
+    var placeholderSourceIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
             Image(systemName: "folder").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
         }.frame(width: 26, height: 26)
     }
 
-    private var placeholderDestIcon: some View {
+    var placeholderDestIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.cardElevated)
             Image(systemName: "square.dashed").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
         }.frame(width: 26, height: 26)
     }
 
-    private var remindersGlyph: some View {
+    var remindersGlyph: some View {
         Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 26, height: 26)
     }
 
-    private func sourceLabel(_ s: EditorSource) -> String {
+    func sourceLabel(_ s: EditorSource) -> String {
         switch s { case .kind(let k): return k.label; case .reminders: return "Reminders" }
     }
-    private func sourceMenuIcon(_ s: EditorSource) -> AnyView {
+    func sourceMenuIcon(_ s: EditorSource) -> AnyView {
         switch s {
         case .kind(let k): return AnyView(SourceIcon(kind: k, size: 26))
         case .reminders:   return AnyView(remindersGlyph)
@@ -654,7 +725,7 @@ struct SyncEditorView: View {
 
     // MARK: Customize (inline destination form)
 
-    private var customizeStep: some View {
+    var customizeStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("CUSTOMIZE", "configure this destination and map fields")
             VStack(alignment: .leading, spacing: 14) { destinationForm }
@@ -668,7 +739,7 @@ struct SyncEditorView: View {
     /// Whether the Customize step has anything to show. Notion's only one-way
     /// customization is database column mapping (the page/database itself is now
     /// chosen up in the To step), so it's hidden for page destinations.
-    private var showCustomize: Bool {
+    var showCustomize: Bool {
         guard let toKind else { return false }
         if toKind == .notion {
             return localNotion.destinationType == .database && !localNotion.destinationId.isEmpty
@@ -677,7 +748,7 @@ struct SyncEditorView: View {
     }
 
     @ViewBuilder
-    private var destinationForm: some View {
+    var destinationForm: some View {
         switch toKind {
         case .notion:         notionMappingForm
         case .linear:         LinearForm(binding: $localLinear, accounts: ledger.linearAccounts)
@@ -689,7 +760,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private var chromeForm: some View {
+    var chromeForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             if sourceKind == .safari {
                 HStack(alignment: .center, spacing: 14) {
@@ -716,7 +787,7 @@ struct SyncEditorView: View {
 
     /// Mapping-only Notion form: the page/database is chosen in the To step, so
     /// Customize just maps note fields onto the database's columns.
-    private var notionMappingForm: some View {
+    var notionMappingForm: some View {
         AppCard("Column Mapping") {
             if notionDestSchemaLoading {
                 HStack(spacing: 6) {
@@ -744,18 +815,18 @@ struct SyncEditorView: View {
     }
 
     /// The "from" fields offered in the column mapping, by source.
-    private var mappingFieldOptions: [MappingFieldOption] {
+    var mappingFieldOptions: [MappingFieldOption] {
         sourceKind == .x ? MappingFieldOption.twitter : MappingFieldOption.remarkable
     }
 
     /// Noun for the mapping helper text ("…from each tweet" / "…from each note").
-    private var mappingSourceNoun: String {
+    var mappingSourceNoun: String {
         sourceKind == .x ? "tweet" : "note"
     }
 
     /// Mappable columns (the title column is set from the title strategy, so it's
     /// excluded); select / multi_select / status columns carry their options.
-    private var notionMappingColumns: [MappingColumn] {
+    var notionMappingColumns: [MappingColumn] {
         let optionTypes: Set<String> = ["select", "multi_select", "status"]
         return notionDestSchema
             .filter { $0.type != "title" }
@@ -770,12 +841,19 @@ struct SyncEditorView: View {
 
     // MARK: How
 
-    private var howStep: some View {
+    /// "Template" has no editor here, so it only shows for a sync already using it.
+    var titleOptions: [(TitleStrategy, String)] {
+        var options: [(TitleStrategy, String)] = [(.fileName, "File name"), (.firstLineOfOcr, "First line")]
+        if titleStrategy == .template { options.append((.template, "Template")) }
+        return options
+    }
+
+    var howStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             stepLabel("HOW", "how the sync should work")
             VStack(spacing: 0) {
                 optionRow("Title each note") {
-                    Segmented(selection: $titleStrategy, options: [(.fileName, "File name"), (.firstLineOfOcr, "First line"), (.template, "Template")])
+                    Segmented(selection: $titleStrategy, options: titleOptions)
                 }
                 rowDivider
                 optionRow("Transcribe") {
@@ -811,16 +889,16 @@ struct SyncEditorView: View {
 
     // MARK: Bits
 
-    private func stepLabel(_ tag: String, _ desc: String) -> some View {
+    func stepLabel(_ tag: String, _ desc: String) -> some View {
         HStack(spacing: 10) {
             Text(tag).font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(theme.primary)
             Text(desc).font(.system(size: 12)).foregroundStyle(theme.tertiary)
         }
     }
 
-    private var rowDivider: some View { Rectangle().fill(theme.dividerSubtle).frame(height: 1) }
+    var rowDivider: some View { Rectangle().fill(theme.dividerSubtle).frame(height: 1) }
 
-    private func optionRow<Trailing: View>(_ title: String, subtitle: String? = nil, align: VerticalAlignment = .center, @ViewBuilder trailing: () -> Trailing) -> some View {
+    func optionRow<Trailing: View>(_ title: String, subtitle: String? = nil, align: VerticalAlignment = .center, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(alignment: align, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
@@ -867,7 +945,7 @@ struct SyncEditorView: View {
 
     // MARK: Logic
 
-    private func load() {
+    func load() {
         switch target {
         case .new:
             source = availableSources.first ?? .kind(.remarkable)
@@ -885,8 +963,9 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadOneWay(_ flow: SyncFlow) {
+    func loadOneWay(_ flow: SyncFlow) {
         existingBinding = flow.binding
+        isEnabled = flow.binding.enabled
         originalRuleId = flow.ruleId
         originalBindingId = flow.binding.id
         toKind = flow.binding.kind
@@ -929,9 +1008,10 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadTask(_ sync: TaskSync) {
+    func loadTask(_ sync: TaskSync) {
         source = .reminders
         originalTaskSyncId = sync.id
+        isEnabled = sync.enabled
         reminderListId = sync.remindersListId
         reminderListName = sync.remindersListName
         let cfg = sync.provider.notionConfig
@@ -946,7 +1026,7 @@ struct SyncEditorView: View {
         loadTaskSchema()
     }
 
-    private func selectSource(forId id: String) {
+    func selectSource(forId id: String) {
         let next: EditorSource = (id == "reminders") ? .reminders : (SourceKind(rawValue: id).map { .kind($0) } ?? .kind(.remarkable))
         guard next != source else { return }
         source = next
@@ -967,7 +1047,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadSafariScopes() {
+    func loadSafariScopes() {
         pickers.run(.safariFolders) { safariScopes = try await coordinator.scopes(for: .safari) }
     }
 
@@ -975,14 +1055,14 @@ struct SyncEditorView: View {
 
     /// Picks the first connected X account and a valid stream for it. Streams are
     /// static (no network), so the picker needs no loader.
-    private func applyXDefaults() {
+    func applyXDefaults() {
         if xSourceAccountId == nil { xSourceAccountId = ledger.xAccounts.first?.id }
         if !xSourceStreams.contains(xSourceStream) {
             xSourceStream = xSourceStreams.first ?? .bookmarks
         }
     }
 
-    private func selectXAccount(_ id: String) {
+    func selectXAccount(_ id: String) {
         guard id != xSourceAccountId else { return }
         xSourceAccountId = id
         // Keep the chosen stream valid for the newly-selected account.
@@ -993,20 +1073,20 @@ struct SyncEditorView: View {
 
     // MARK: Notion source loaders
 
-    private func selectNotionSourceWorkspace(_ id: String) {
+    func selectNotionSourceWorkspace(_ id: String) {
         guard id != notionSourceWorkspaceId else { return }
         notionSourceWorkspaceId = id
         notionSourceDatabaseId = nil; notionSourceDatabaseName = ""; notionSourceSchema = []
         loadNotionSourceDatabases()
     }
 
-    private func selectNotionSourceDatabase(_ id: String) {
+    func selectNotionSourceDatabase(_ id: String) {
         notionSourceDatabaseId = id
         notionSourceDatabaseName = notionSourceDatabases.first { $0.id == id }?.title ?? ""
         loadNotionSourceSchema()
     }
 
-    private func loadNotionSourceDatabases() {
+    func loadNotionSourceDatabases() {
         guard let workspaceId = notionSourceWorkspaceId else { return }
         pickers.run(.notionSourceDatabases) {
             let client = NotionClientFactory.make(workspaceId: workspaceId)
@@ -1015,7 +1095,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadNotionSourceSchema() {
+    func loadNotionSourceSchema() {
         guard let workspaceId = notionSourceWorkspaceId, let databaseId = notionSourceDatabaseId else { return }
         Task {
             let client = NotionClientFactory.make(workspaceId: workspaceId)
@@ -1040,7 +1120,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadReminderLists() {
+    func loadReminderLists() {
         remindersLoading = true
         Task {
             // Each ad-hoc/dev build is a new identity to TCC, so the prior grant
@@ -1054,16 +1134,16 @@ struct SyncEditorView: View {
     }
 
     /// Re-request Reminders access from the inline prompt and reload.
-    private func grantRemindersAccess() { loadReminderLists() }
+    func grantRemindersAccess() { loadReminderLists() }
 
-    private func selectTaskWorkspace(_ id: String) {
+    func selectTaskWorkspace(_ id: String) {
         guard id != taskWorkspaceId else { return }
         taskWorkspaceId = id
         taskDatabaseId = nil; taskDatabaseName = ""; taskSchema = []
         loadTaskDatabases()
     }
 
-    private func loadTaskDatabases() {
+    func loadTaskDatabases() {
         guard let taskWorkspaceId else { return }
         pickers.run(.notionTaskDatabases) {
             let client = NotionClientFactory.make(workspaceId: taskWorkspaceId)
@@ -1072,14 +1152,14 @@ struct SyncEditorView: View {
         }
     }
 
-    private func selectTaskDatabase(_ id: String) {
+    func selectTaskDatabase(_ id: String) {
         taskDatabaseId = id
         taskDatabaseName = taskDatabases.first { $0.id == id }?.title ?? ""
         mapRows = []; excludedStatuses = []
         loadTaskSchema()
     }
 
-    private func loadTaskSchema() {
+    func loadTaskSchema() {
         guard let taskWorkspaceId, let taskDatabaseId else { return }
         Task {
             let client = NotionClientFactory.make(workspaceId: taskWorkspaceId)
@@ -1088,7 +1168,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func loadNotionDestinations() {
+    func loadNotionDestinations() {
         guard let id = toAccountId else { return }
         pickers.run(.notionDestinations) {
             let client = NotionClientFactory.make(workspaceId: id)
@@ -1096,7 +1176,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func selectNotionDestination(_ id: String) {
+    func selectNotionDestination(_ id: String) {
         guard let dest = notionDestinations.first(where: { $0.id == id }) else { return }
         localNotion.destinationId = dest.id
         localNotion.destinationType = dest.type
@@ -1108,7 +1188,7 @@ struct SyncEditorView: View {
         if dest.type == .database { loadNotionDestSchema() }
     }
 
-    private func loadNotionDestSchema() {
+    func loadNotionDestSchema() {
         guard let id = toAccountId, !localNotion.destinationId.isEmpty else { return }
         let destinationId = localNotion.destinationId
         notionDestSchemaLoading = true
@@ -1139,7 +1219,7 @@ struct SyncEditorView: View {
     /// Pre-fills the column mapping with sensible Twitter → Notion defaults the
     /// first time a database's schema arrives for a Twitter source. Only columns
     /// whose names/types we recognize are filled; everything stays editable.
-    private func seedTwitterMappingDefaults() {
+    func seedTwitterMappingDefaults() {
         guard sourceKind == .x, localNotion.mappingRows.isEmpty, !notionDestSchema.isEmpty else { return }
         let streamTag = "Twitter \(xSourceStream.singularNoun)"
         var rows: [FieldMapping] = []
@@ -1170,7 +1250,7 @@ struct SyncEditorView: View {
         localNotion.mappingRows = rows
     }
 
-    private func loadFormState(from configuration: DestinationConfiguration) {
+    func loadFormState(from configuration: DestinationConfiguration) {
         switch configuration {
         case .notion(let cfg):
             toAccountId = cfg.workspaceId
@@ -1200,9 +1280,9 @@ struct SyncEditorView: View {
         }
     }
 
-    private func selectFolder(_ f: RmFolder) { folder = f; selectedFileIds = nil }
+    func selectFolder(_ f: RmFolder) { folder = f; selectedFileIds = nil }
 
-    private func selectDestination(_ app: ConnectedApp) {
+    func selectDestination(_ app: ConnectedApp) {
         toKind = app.kind
         toAccountId = app.id
         switch app.kind {
@@ -1229,7 +1309,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private var destinationValid: Bool {
+    var destinationValid: Bool {
         switch toKind {
         case .notion:         return !localNotion.workspaceId.isEmpty && !localNotion.destinationId.isEmpty
         case .linear:         return !localLinear.workspaceId.isEmpty
@@ -1241,7 +1321,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func composedConfiguration() -> DestinationConfiguration? {
+    func composedConfiguration() -> DestinationConfiguration? {
         switch toKind {
         case .notion:
             return .notion(NotionDestinationConfig(
@@ -1278,7 +1358,7 @@ struct SyncEditorView: View {
         }
     }
 
-    private func openScope() {
+    func openScope() {
         guard let folder else { return }
         isChoosingScope = true
         scopeLoading = true
@@ -1286,207 +1366,5 @@ struct SyncEditorView: View {
             let files = await coordinator.files(inFolder: folder.id)
             await MainActor.run { scopeFiles = files; scopeLoading = false }
         }
-    }
-
-    private func save() {
-        if isReminders { saveTaskSync(); onClose(); return }
-        guard let config = composedConfiguration() else { return }
-        let binding = makeBinding(config: config)
-        switch source {
-        case .kind(.remarkable): saveRemarkable(binding: binding)
-        case .kind(.safari):     saveSafari(binding: binding)
-        case .kind(.notion):     saveNotionSource(binding: binding)
-        case .kind(.x):          saveXSource(binding: binding)
-        case .reminders:         break
-        }
-        onClose()
-    }
-
-    private func saveTaskSync() {
-        guard let taskWorkspaceId, let taskDatabaseId, let taskTitleProperty else { return }
-        let mapping = composedTaskMapping(titleProperty: taskTitleProperty)
-        let rules = TaskSyncRules(excludedNotionStatuses: excludedStatuses.sorted(),
-                                  excludeCompletedReminders: excludeCompletedReminders)
-        let provider = TaskProviderConfig.notion(NotionTaskConfig(
-            workspaceId: taskWorkspaceId, databaseId: taskDatabaseId,
-            databaseName: taskDatabaseName, fieldMapping: mapping))
-        let sync = TaskSync(
-            id: originalTaskSyncId ?? UUID().uuidString,
-            // The editor is all-lists only — always empty, even when editing an
-            // older single-list sync, so the coordinator routes inbound rows by
-            // their mapped list instead of dumping them into one list.
-            remindersListId: "",
-            remindersListName: "All lists",
-            provider: provider, rules: rules)
-        ledger.upsertTaskSync(sync)
-    }
-
-    /// Folds the dynamic mapping rows + the auto title column into a TaskFieldMapping.
-    private func composedTaskMapping(titleProperty: String) -> TaskFieldMapping {
-        func column(_ field: ReminderField) -> String? {
-            guard let c = mapRows.first(where: { $0.field == field })?.column, !c.isEmpty else { return nil }
-            return c
-        }
-        let status = column(.status)
-        let priority = column(.priority)
-        let list = column(.list)
-        return TaskFieldMapping(
-            titleProperty: titleProperty,
-            dueDateProperty: column(.due),
-            statusProperty: status,
-            statusPropertyType: status.flatMap(columnType),
-            statusDoneValue: status == nil ? nil : inferredStatusValue(matching: ["done", "complete", "closed", "finish"]),
-            statusNotDoneValue: status == nil ? nil : inferredStatusValue(matching: ["to do", "to-do", "todo", "not started", "backlog", "open", "new", "inbox"]),
-            notesProperty: column(.notes),
-            priorityProperty: priority,
-            priorityPropertyType: priority.flatMap(columnType),
-            categoryProperty: list,
-            categoryPropertyType: list.flatMap(columnType))
-    }
-
-    /// Expands a stored mapping back into editor rows (title is implicit, so it's
-    /// not a row). Order: List, Due, Status, Notes, Priority.
-    private static func rows(from mapping: TaskFieldMapping) -> [TaskMapRow] {
-        var rows: [TaskMapRow] = []
-        if let c = mapping.categoryProperty { rows.append(TaskMapRow(field: .list, column: c)) }
-        if let c = mapping.dueDateProperty  { rows.append(TaskMapRow(field: .due, column: c)) }
-        if let c = mapping.statusProperty   { rows.append(TaskMapRow(field: .status, column: c)) }
-        if let c = mapping.notesProperty    { rows.append(TaskMapRow(field: .notes, column: c)) }
-        if let c = mapping.priorityProperty { rows.append(TaskMapRow(field: .priority, column: c)) }
-        return rows
-    }
-
-    private func makeBinding(config: DestinationConfiguration) -> DestinationBinding {
-        DestinationBinding(
-            id: existingBinding?.id ?? UUID().uuidString,
-            enabled: existingBinding?.enabled ?? true,
-            configuration: config,
-            createdAt: existingBinding?.createdAt ?? Date(),
-            lastRunAt: existingBinding?.lastRunAt,
-            lastRunStatus: existingBinding?.lastRunStatus ?? .neverRun,
-            lastRunPagesSynced: existingBinding?.lastRunPagesSynced ?? 0,
-            lastRunError: existingBinding?.lastRunError,
-            ocrModeOverride: sourceKind == .remarkable ? ocrMode : nil,
-            titleStrategyOverride: sourceKind == .remarkable ? titleStrategy : nil,
-            requiredTags: requiredTags.isEmpty ? nil : requiredTags.sorted()
-        )
-    }
-
-    private func saveRemarkable(binding: DestinationBinding) {
-        guard let folder else { return }
-        if let origRuleId = originalRuleId, let origBindingId = originalBindingId {
-            let sameFolder = ledger.rule(forNotebookId: folder.id)?.id == origRuleId
-            if sameFolder {
-                applyRuleLevel(folderId: folder.id)
-                ledger.updateBinding(ruleId: origRuleId, binding: binding)
-                return
-            }
-            ledger.removeBinding(ruleId: origRuleId, bindingId: origBindingId)
-            if let old = ledger.rules.first(where: { $0.id == origRuleId }), old.destinations.isEmpty {
-                ledger.deleteRule(id: origRuleId)
-            }
-        }
-        addBinding(to: folder, binding)
-    }
-
-    private func saveSafari(binding: DestinationBinding) {
-        guard let scopeId = safariScopeId else { return }
-        let source = SourceConfiguration.safari(SafariSourceConfig(folderId: scopeId, folderName: safariScopeName))
-        if let origRuleId = originalRuleId {
-            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
-                rule.source = source
-                ledger.upsertRule(rule)
-            }
-            ledger.updateBinding(ruleId: origRuleId, binding: binding)
-        } else {
-            var rule = SyncRule(source: source)
-            rule.destinations = [binding]
-            ledger.upsertRule(rule)
-        }
-    }
-
-}
-
-private extension SyncEditorView {
-    func saveNotionSource(binding: DestinationBinding) {
-        guard let workspaceId = notionSourceWorkspaceId,
-              let databaseId = notionSourceDatabaseId else { return }
-        let source = SourceConfiguration.notion(NotionSourceConfig(
-            workspaceId: workspaceId,
-            workspaceName: ledger.notionWorkspaces.first(where: { $0.id == workspaceId })?.workspaceName ?? "",
-            databaseId: databaseId,
-            databaseTitle: notionSourceDatabaseName,
-            titleProperty: notionSourceTitleProperty,
-            categoryProperty: notionSourceCategoryProperty,
-            dateProperty: notionSourceDateProperty))
-        if let origRuleId = originalRuleId {
-            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
-                rule.source = source
-                ledger.upsertRule(rule)
-            }
-            ledger.updateBinding(ruleId: origRuleId, binding: binding)
-        } else {
-            var rule = SyncRule(source: source)
-            rule.destinations = [binding]
-            ledger.upsertRule(rule)
-        }
-    }
-
-    func saveXSource(binding: DestinationBinding) {
-        guard let account = selectedXAccount else { return }
-        let source = SourceConfiguration.x(XSourceConfig(
-            accountId: account.id, username: account.handle, stream: xSourceStream))
-        if let origRuleId = originalRuleId {
-            if var rule = ledger.rules.first(where: { $0.id == origRuleId }) {
-                rule.source = source
-                ledger.upsertRule(rule)
-            }
-            ledger.updateBinding(ruleId: origRuleId, binding: binding)
-        } else {
-            var rule = SyncRule(source: source)
-            rule.destinations = [binding]
-            ledger.upsertRule(rule)
-        }
-    }
-
-    func addBinding(to folder: RmFolder, _ binding: DestinationBinding) {
-        if let rule = ledger.rule(forNotebookId: folder.id) {
-            applyRuleLevel(folderId: folder.id, base: rule)
-            ledger.addBinding(ruleId: rule.id, binding: binding)
-        } else {
-            var rule = SyncRule.new(notebookId: folder.id, notebookName: folder.name)
-            rule.updateRemarkable {
-                $0.selectedFileIds = selectedFileIds
-                $0.pageOrder = pageOrder
-                $0.savePdfAttachment = savePdf
-            }
-            rule.destinations = [binding]
-            ledger.upsertRule(rule)
-        }
-    }
-
-    func applyRuleLevel(folderId: String, base: SyncRule? = nil) {
-        guard var rule = base ?? ledger.rule(forNotebookId: folderId) else { return }
-        rule.updateRemarkable {
-            $0.selectedFileIds = selectedFileIds
-            $0.pageOrder = pageOrder
-            $0.savePdfAttachment = savePdf
-        }
-        rule.updatedAt = Date()
-        ledger.upsertRule(rule)
-    }
-
-    func deleteSync() {
-        if let taskId = originalTaskSyncId {
-            ledger.removeTaskSync(id: taskId)
-            onClose()
-            return
-        }
-        guard let origRuleId = originalRuleId, let origBindingId = originalBindingId else { return }
-        ledger.removeBinding(ruleId: origRuleId, bindingId: origBindingId)
-        if let old = ledger.rules.first(where: { $0.id == origRuleId }), old.destinations.isEmpty {
-            ledger.deleteRule(id: origRuleId)
-        }
-        onClose()
     }
 }

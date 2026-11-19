@@ -208,6 +208,20 @@ struct MarkdownFolderDestinationConfig: Codable, Equatable, Hashable {
     }
 }
 
+extension DestinationConfiguration {
+    /// The same settings with legacy fields resolved, for asking "did the user
+    /// change anything?" An older Markdown config leaves frontmatterMode unset,
+    /// which means the same as the explicit mode the editor writes back.
+    var normalized: DestinationConfiguration {
+        guard case .markdownFolder(var cfg) = self else { return self }
+        cfg.frontmatterMode = cfg.effectiveFrontmatter
+        cfg.includeFrontmatter = cfg.effectiveFrontmatter != .none
+        return .markdownFolder(cfg)
+    }
+
+    func hasSameSettings(as other: DestinationConfiguration) -> Bool { normalized == other.normalized }
+}
+
 struct ChromeDestinationConfig: Codable, Equatable, Hashable {
     var profileDirName: String      // Chrome profile directory, e.g. "Default"
     var targetFolderPath: [String]  // Chrome folder to write into, e.g. ["Bookmarks Bar", "From Safari"]

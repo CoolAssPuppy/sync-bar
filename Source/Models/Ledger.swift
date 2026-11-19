@@ -771,7 +771,7 @@ final class Ledger: ObservableObject {
         rules[ruleIndex].updatedAt = Date()
         // Re-pointing the binding at a new destination invalidates its synced
         // history; pages must land in the new target on the next cycle.
-        if previousConfiguration != binding.configuration {
+        if !previousConfiguration.hasSameSettings(as: binding.configuration) {
             forgetSyncedHashes(forBindingIds: [binding.id])
         }
         persistRules()

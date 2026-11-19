@@ -33,11 +33,13 @@ Phase 1 notes: isolated tests (SyncStatusTests, failure list O1-O18 and R1-R11) 
 Phase 2 notes: two behavior tests written first and seen failing (source listing failure marks every enabled binding failed; a task sync with no provider logs a failed event). An account card turns red with the latest error and a Reconnect button when any of its syncs failed (derived from sync results, since token health isn't stored for most accounts). E2E renders in `build/ux-shots/phase-2/` (Connections with a failure, Activity filtered to one sync, Activity with no match).
 
 ### Phase 3. A safe editor
-- [ ] Confirm Delete. Ask before Close or Cancel discards edits.
-- [ ] A greyed-out Save names the missing field.
-- [ ] Add an on/off switch for each sync. Today "Off" can show, but nothing turns it off or on.
-- [ ] "Template" title option: add the template field, or remove the option.
-- [ ] Warn when a change will rewrite every note on the next run.
+- [x] Confirm Delete. Ask before Close or Cancel discards edits.
+- [x] A greyed-out Save names the missing field.
+- [x] Add an on/off switch for each sync. Today "Off" can show, but nothing turns it off or on.
+- [x] "Template" title option: add the template field, or remove the option.
+- [x] Warn when a change will rewrite every note on the next run.
+Phase 3 notes: "Template" now shows only for a sync already using it (no editor for the template text exists). The editor was split (save and delete moved to SyncEditorView+Save.swift; picker loading to PickerLoadTracker) to stay under the lint size limits. Found by the edit render: opening and saving an older Markdown sync forced a full rewrite because an unset frontmatter mode compared unequal to the explicit one the editor writes back. Fixed in `DestinationConfiguration.hasSameSettings`, test written first. Also fixed: saving an edited two-way sync wiped its created date and last-run status.
+Known issue, not fixed in this pass: the Notion mapping loader drops dateSource, checkbox, number and literal mappings, so saving a Notion sync that has them deletes them. The user's data has no Notion destinations today.
 
 ### Phase 4. Cleanup
 - [ ] Delete unreachable views (DestinationDetailScaffold, BindingEditorSheet, FolderPickerSheet, NotionForm, OnboardingView, SyncRuleCard, DestinationIconStack), and check each has no caller first.

@@ -126,6 +126,36 @@ final class LedgerCascadeTests: XCTestCase {
         ledger.deleteRule(id: rule.id)
     }
 
+    /// Opening and saving an older Markdown sync (frontmatter mode unset, which
+    /// means "essential") wrote the same setting back explicitly. The ledger saw
+    /// a different config and forgot every synced note, forcing a full rewrite.
+    func test_saving_a_legacy_markdown_config_with_the_same_effective_settings_keeps_synced_history() {
+        let ledger = Ledger.shared
+        let legacy = MarkdownFolderDestinationConfig(folderPath: "/tmp/notes", fileNameTemplate: "{title}",
+                                                     includeFrontmatter: true, frontmatterMode: nil)
+        var rule = SyncRule.new(notebookId: "nb-legacy", notebookName: "Legacy")
+        let binding = DestinationBinding(configuration: .markdownFolder(legacy))
+        rule.destinations = [binding]
+        ledger.upsertRule(rule)
+        defer { ledger.deleteRule(id: rule.id) }
+        ledger.recordSyncedPage(bindingId: binding.id, pageId: "p1", versionHash: "h1", externalId: "/tmp/notes/a.md")
+
+        var resaved = binding
+        var explicit = legacy
+        explicit.frontmatterMode = .essential
+        resaved.configuration = .markdownFolder(explicit)
+        ledger.updateBinding(ruleId: rule.id, binding: resaved)
+
+        XCTAssertEqual(ledger.syncedHash(bindingId: binding.id, pageId: "p1"), "h1")
+
+        // A real change still resets it.
+        var changed = explicit
+        changed.folderPath = "/tmp/elsewhere"
+        resaved.configuration = .markdownFolder(changed)
+        ledger.updateBinding(ruleId: rule.id, binding: resaved)
+        XCTAssertNil(ledger.syncedHash(bindingId: binding.id, pageId: "p1"))
+    }
+
     func test_records_and_resets_external_ids_for_update_in_place() {
         let ledger = Ledger.shared
         ledger.recordSyncedPage(bindingId: "b1", pageId: "f1", versionHash: "h1", externalId: "notion-page-1")

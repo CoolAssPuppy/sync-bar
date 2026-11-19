@@ -47,3 +47,10 @@ Rules going forward:
 - Destination clients now hard-refuse real network writes under XCTest
   (NSClassFromString("XCTestCase") guard in NotionDestinationClient); add the
   same guard to any future destination client that reads shared credentials.
+
+## 2026-11-19 never remove a state indicator in a cleanup
+
+The 1.7.0 "UI cleanup" deleted the yellow Paused pill and warning dot from the popover. Eleven days later the user could not tell syncing was paused, and every "sync now" click was dropped with only a log row. Rules:
+- A cleanup may restyle a state indicator but never remove one without a replacement that shows the same state.
+- Every button that can refuse to act must say why, in place. A log row alone is silent.
+- Toggles that change what runs (pause, resume) must show the new state and start what the user expects (resume runs a sync).

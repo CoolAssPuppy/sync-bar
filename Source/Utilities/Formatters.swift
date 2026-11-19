@@ -47,11 +47,16 @@ enum Formatters {
 
     /// `2 minutes ago` style relative label for menu bar rows.
     static func relativeLabel(for date: Date) -> String {
-        // Under a minute reads as "just now" rather than the awkward "0 sec".
-        if abs(date.timeIntervalSinceNow) < 60 { return "just now" }
+        relativeLabel(for: date, relativeTo: Date())
+    }
+
+    /// Relative time against a fixed "now", so callers and tests agree. Under a
+    /// minute, or in the future (clock skew), reads as "just now".
+    static func relativeLabel(for date: Date, relativeTo now: Date) -> String {
+        if now.timeIntervalSince(date) < 60 { return "just now" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 
     /// Builds a friendly "3 notes synced" / "1 note synced" / "Nothing to sync" string.

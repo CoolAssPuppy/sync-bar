@@ -39,6 +39,9 @@ final class SyncCoordinator: ObservableObject {
     /// Whether the month's paid-read budget is spent. Injectable so tests don't
     /// read the developer's real `.standard` budget store.
     private let isReadBudgetExhausted: @MainActor () -> Bool
+    /// The two-way task syncs. Owned here only so the timer, "Sync all", and
+    /// resume run them alongside the one-way syncs. Nil in most tests.
+    private let taskSyncs: TaskSyncCoordinator?
     private var timerTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
     /// When each paid-source rule last crawled, so scheduled ticks space checks
@@ -57,8 +60,10 @@ final class SyncCoordinator: ObservableObject {
          sourceClient: (@MainActor (SourceKind) -> SourceClient)? = nil,
          destinationClient: (@MainActor (DestinationKind) -> DestinationClient)? = nil,
          entitlementForSource: (@MainActor (SourceKind) -> Bool)? = nil,
-         readBudgetExhausted: (@MainActor () -> Bool)? = nil) {
+         readBudgetExhausted: (@MainActor () -> Bool)? = nil,
+         taskSyncs: TaskSyncCoordinator? = nil) {
         self.ledger = ledger ?? Ledger.shared
+        self.taskSyncs = taskSyncs
         self.isEntitledForSource = entitlementForSource ?? { EntitlementManager.shared.isEntitled(forSource: $0) }
         self.isReadBudgetExhausted = readBudgetExhausted ?? { ReadBudget().isExhausted(now: Date()) }
         self.settings = settings ?? AppSettings.shared
@@ -79,7 +84,12 @@ final class SyncCoordinator: ObservableObject {
             .sink { [weak self] _ in self?.restartTimer() }
             .store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .pauseSyncingChanged)
-            .sink { [weak self] _ in self?.restartTimer() }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.restartTimer()
+                // Resuming means "sync again now", not "in 15 minutes".
+                if !self.settings.pauseSyncing { self.syncAll() }
+            }
             .store(in: &subscriptions)
     }
 
@@ -123,6 +133,13 @@ final class SyncCoordinator: ObservableObject {
         case scheduled
     }
 
+    /// Every sync, one-way and two-way. Pause doesn't block it: pause only
+    /// stops the timer, and a click is an explicit request.
+    func syncAll() {
+        syncNow()
+        taskSyncs?.syncAll()
+    }
+
     func syncNow(ruleId: String? = nil, bindingId: String? = nil) {
         guard !isSyncing else { return }
         Task { await runCycle(ruleId: ruleId, bindingId: bindingId, trigger: .manual) }
@@ -132,6 +149,7 @@ final class SyncCoordinator: ObservableObject {
     /// share the exact scheduled-trigger path (which stays quiet when idle).
     func scheduledTick() async {
         await runCycle(ruleId: nil, bindingId: nil, trigger: .scheduled)
+        if !settings.pauseSyncing { await taskSyncs?.runAll() }
     }
 
     /// The documents in a folder, for the rule sheet's "choose notebooks" picker.
@@ -186,10 +204,8 @@ final class SyncCoordinator: ObservableObject {
         // ticks stay quiet so an idle account doesn't flood the log every interval.
         let explainSkips = (trigger == .manual)
 
-        guard !self.settings.pauseSyncing else {
-            if explainSkips { recordSkip(.syncingPaused) }
-            return
-        }
+        // Pause stops the timer; a manual run still goes through.
+        guard trigger == .manual || !self.settings.pauseSyncing else { return }
 
         let candidateRules = ledger.rules.filter { rule in
             rule.enabled && (ruleId == nil || rule.id == ruleId) && !rule.destinations.isEmpty
@@ -211,7 +227,6 @@ final class SyncCoordinator: ObservableObject {
         }
 
         isSyncing = true
-        NotificationCenter.default.post(name: .syncStarted, object: nil)
         let cycleStart = Date()
 
         // Drop the reMarkable listing cache so this cycle re-reads the cloud once;
@@ -228,7 +243,6 @@ final class SyncCoordinator: ObservableObject {
         activeBindingId = nil
         lastTickAt = Date()
         isSyncing = false
-        NotificationCenter.default.post(name: .syncFinished, object: nil)
 
         Telemetry.capture(.syncCompleted, properties: [
             "trigger": trigger.rawValue,
@@ -595,7 +609,6 @@ final class SyncCoordinator: ObservableObject {
     /// sees in the log, so it names the folder and the fix where it can.
     enum SyncSkipReason {
         case noAccountPaired
-        case syncingPaused
         case noConnectedFolders
         case ruleDisabled(folder: String)
         case folderEmpty(folder: String)
@@ -613,8 +626,6 @@ final class SyncCoordinator: ObservableObject {
                 return "\(feature) sync paused — subscription inactive. Re-subscribe to resume."
             case .noAccountPaired:
                 return "Nothing to sync: no reMarkable account is paired."
-            case .syncingPaused:
-                return "Skipped: syncing is paused."
             case .noConnectedFolders:
                 return "Nothing to sync: no folders are connected to a destination."
             case .ruleDisabled(let folder):
@@ -639,7 +650,7 @@ final class SyncCoordinator: ObservableObject {
                  .noEnabledDestinations(let folder),
                  .allNotesFilteredOut(let folder):
                 return folder
-            case .noAccountPaired, .syncingPaused, .noConnectedFolders,
+            case .noAccountPaired, .noConnectedFolders,
                  .paidSourceInactive, .monthlyReadLimit:
                 return nil
             }

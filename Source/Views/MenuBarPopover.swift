@@ -24,6 +24,7 @@ struct MenuBarPopover: View {
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var themeStore = ThemeStore.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var entitlement = EntitlementManager.shared
 
     let actions: MenuBarPopoverActions
 
@@ -46,13 +47,17 @@ struct MenuBarPopover: View {
 
     private func header(theme: ThemePalette) -> some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Sync Bar")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.foreground)
-                Text(headerStatusText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(theme.muted)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Sync Bar")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(theme.foreground)
+                    // "Paused" is already the headline unless a manual run is going.
+                    if overview.isPaused && overview.tone == .active { PausedPill() }
+                }
+                Text(overview.headline)
+                    .font(.system(size: 10.5, weight: overview.tone == .neutral ? .regular : .semibold))
+                    .foregroundStyle(overview.tone == .neutral ? theme.muted : theme.color(for: overview.tone))
                     .monospacedDigit()
             }
 
@@ -66,22 +71,21 @@ struct MenuBarPopover: View {
         .background(theme.surface)
     }
 
-    private var totalSyncs: Int { ledger.rules.count + ledger.taskSyncs.count }
+    private var overview: SyncOverview {
+        SyncOverview.current(coordinator: coordinator, taskCoordinator: taskCoordinator)
+    }
 
-    private var headerStatusText: String {
-        if settings.pauseSyncing { return "Syncing paused" }
-        if coordinator.isSyncing || taskCoordinator.isSyncing { return "Syncing…" }
-        if let lastTick = coordinator.lastTickAt {
-            return "Last run \(Formatters.shortTime.string(from: lastTick))"
-        }
-        if let nextTick = coordinator.nextTickAt {
-            return "Next \(Formatters.shortTime.string(from: nextTick))"
-        }
-        switch totalSyncs {
-        case 0:  return "No syncs yet"
-        case 1:  return "1 sync configured"
-        default: return "\(totalSyncs) syncs configured"
-        }
+    private var isAnySyncing: Bool { coordinator.isSyncing || taskCoordinator.isSyncing }
+
+    private func isRunning(_ flow: SyncFlow) -> Bool {
+        guard coordinator.isSyncing else { return false }
+        if let bindingId = coordinator.activeBindingId { return bindingId == flow.binding.id }
+        return coordinator.activeRuleId == flow.ruleId
+    }
+
+    private func isPaidInactive(_ flow: SyncFlow) -> Bool {
+        guard let feature = flow.rule.sourceKind.paidFeature else { return false }
+        return !entitlement.isEntitled(to: feature)
     }
 
     // MARK: Content
@@ -99,17 +103,36 @@ struct MenuBarPopover: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(flows) { flow in
+                    let running = isRunning(flow)
+                    let inactive = isPaidInactive(flow)
                     MenuSyncRow(
-                        flow: flow,
-                        isActive: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
+                        sourceName: flow.folderName,
+                        destinationName: flow.kind.label,
+                        isTwoWay: false,
+                        status: SyncRowStatus.make(
+                            isSyncing: running, isEnabled: flow.isEnabled, isPaidInactive: inactive,
+                            lastStatus: flow.binding.lastRunStatus, lastRunAt: flow.lastRunAt,
+                            lastError: flow.binding.lastRunError, now: Date()),
+                        isBusy: running,
+                        isBlocked: coordinator.isSyncing,
+                        canSync: flow.isEnabled && !inactive,
                         onSyncNow: { actions.syncNow(flow.ruleId, flow.binding.id) },
                         onOpenWindow: actions.openMainWindow
                     )
                 }
                 ForEach(taskSyncs) { sync in
-                    MenuTaskRow(
-                        sync: sync,
-                        isActive: taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id,
+                    let running = taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id
+                    MenuSyncRow(
+                        sourceName: sync.remindersListName,
+                        destinationName: sync.provider.displayName,
+                        isTwoWay: true,
+                        status: SyncRowStatus.make(
+                            isSyncing: running, isEnabled: sync.enabled, isPaidInactive: false,
+                            lastStatus: sync.lastRunStatus, lastRunAt: sync.lastRunAt,
+                            lastError: sync.lastRunError, now: Date()),
+                        isBusy: running,
+                        isBlocked: taskCoordinator.isSyncing,
+                        canSync: sync.enabled,
                         onSyncNow: { actions.syncTask(sync) },
                         onOpenWindow: actions.openMainWindow
                     )
@@ -125,15 +148,14 @@ struct MenuBarPopover: View {
 
     private func footer(theme: ThemePalette) -> some View {
         HStack(spacing: 4) {
-            AppIconButton(
-                systemName: "arrow.triangle.2.circlepath",
-                help: "Sync all rules now",
-                spinOnTap: true
-            ) { actions.syncNow(nil, nil) }
+            SyncNowButton(isBusy: isAnySyncing, help: "Sync all now", bordered: false) {
+                actions.syncNow(nil, nil)
+            }
 
             AppIconButton(
                 systemName: settings.pauseSyncing ? "play.fill" : "pause.fill",
-                help: settings.pauseSyncing ? "Resume syncing" : "Pause syncing"
+                help: settings.pauseSyncing ? "Resume syncing" : "Pause syncing",
+                tint: settings.pauseSyncing ? .warning : .foreground
             ) { actions.togglePause() }
 
             AppIconButton(systemName: "macwindow", help: "Open Sync Bar") { actions.openMainWindow() }
@@ -293,9 +315,15 @@ private struct EmptyRulesState: View {
 
 // MARK: - Menu sync row
 
+/// One row in the menu bar list, for a one-way flow or a two-way task sync.
 private struct MenuSyncRow: View {
-    let flow: SyncFlow
-    let isActive: Bool
+    let sourceName: String
+    let destinationName: String
+    let isTwoWay: Bool
+    let status: SyncRowStatus
+    let isBusy: Bool
+    let isBlocked: Bool
+    let canSync: Bool
     let onSyncNow: () -> Void
     let onOpenWindow: () -> Void
 
@@ -303,82 +331,38 @@ private struct MenuSyncRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            SyncStatusDot(status: flow.status, isSyncing: isActive)
+            Circle().fill(theme.color(for: status.tone)).frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    Text(flow.folderName)
+                    Text(sourceName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.foreground).lineLimit(1)
-                    Image(systemName: "arrow.right")
+                    Image(systemName: isTwoWay ? "arrow.left.arrow.right" : "arrow.right")
                         .font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.tertiary)
-                    Text(flow.kind.label)
+                    Text(destinationName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(theme.foreground).lineLimit(1)
                 }
-                Text(secondary).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(1)
+                Text(status.detail ?? status.label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(status.tone == .failure || status.tone == .warning
+                                     ? theme.color(for: status.tone) : theme.muted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(status.detail ?? "")
             }
             Spacer(minLength: 8)
-            AppIconButton(systemName: "arrow.triangle.2.circlepath",
-                          help: "Sync this now", spinOnTap: true) { onSyncNow() }
+            if canSync {
+                SyncNowButton(isBusy: isBusy, isDisabled: isBlocked, help: "Sync this now",
+                              bordered: false, action: onSyncNow)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1))
+            .strokeBorder(isBusy ? theme.borderFocus : theme.border, lineWidth: 1))
         .contentShape(Rectangle())
         .onTapGesture { onOpenWindow() }
-    }
-
-    private var secondary: String {
-        if isActive { return "Syncing now…" }
-        if let last = flow.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
-        return flow.destinationSummary
-    }
-}
-
-// MARK: - Menu two-way task sync row
-
-private struct MenuTaskRow: View {
-    let sync: TaskSync
-    let isActive: Bool
-    let onSyncNow: () -> Void
-    let onOpenWindow: () -> Void
-
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        HStack(spacing: 10) {
-            SyncStatusDot(status: isActive ? .running : sync.lastRunStatus, isSyncing: isActive)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    Text(sync.remindersListName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.foreground).lineLimit(1)
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 8, weight: .semibold)).foregroundStyle(theme.tertiary)
-                    Text(sync.provider.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.foreground).lineLimit(1)
-                }
-                Text(secondary).font(.system(size: 10)).foregroundStyle(theme.muted).lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            AppIconButton(systemName: "arrow.triangle.2.circlepath",
-                          help: "Sync this now", spinOnTap: true) { onSyncNow() }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(isActive ? theme.borderFocus : theme.border, lineWidth: 1))
-        .contentShape(Rectangle())
-        .onTapGesture { onOpenWindow() }
-    }
-
-    private var secondary: String {
-        if isActive { return "Syncing now…" }
-        if let last = sync.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
-        return "Two-way"
     }
 }

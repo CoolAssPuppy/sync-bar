@@ -18,8 +18,6 @@ extension Notification.Name {
     static let taskSyncsChanged         = Notification.Name("syncbar.taskSyncsChanged")
 
     // Sync runtime
-    static let syncStarted              = Notification.Name("syncbar.syncStarted")
-    static let syncFinished             = Notification.Name("syncbar.syncFinished")
     static let syncIntervalChanged      = Notification.Name("syncbar.syncIntervalChanged")
     static let pauseSyncingChanged      = Notification.Name("syncbar.pauseSyncingChanged")
 

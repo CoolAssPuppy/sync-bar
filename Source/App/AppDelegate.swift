@@ -21,8 +21,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cometLayer: CALayer?
     private static let cometAnimationKey = "syncbar.comet"
 
-    let coordinator = SyncCoordinator()
-    let taskCoordinator = TaskSyncCoordinator()
+    let taskCoordinator: TaskSyncCoordinator
+    let coordinator: SyncCoordinator
+
+    override init() {
+        let tasks = TaskSyncCoordinator()
+        taskCoordinator = tasks
+        coordinator = SyncCoordinator(taskSyncs: tasks)
+        super.init()
+    }
     private let entitlement = EntitlementManager.shared
     private let launchAtLogin = LaunchAtLoginManager.shared
     private let updater = UpdaterManager.shared
@@ -110,8 +117,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.toolTip = "Sync Bar"
     }
 
+    /// Mirrors the overview onto the menu bar icon: dimmed while paused, a red
+    /// dot while any sync has failed, and the headline as the tooltip.
+    private func refreshStatusItemState() {
+        guard let button = statusItem?.button else { return }
+        let overview = SyncOverview.current(coordinator: coordinator, taskCoordinator: taskCoordinator)
+        button.appearsDisabled = overview.isPaused && overview.tone != .active
+        button.toolTip = "Sync Bar: \(overview.headline)"
+        setFailureBadge(visible: overview.tone == .failure)
+        rightClickMenu = buildRightClickMenu()
+    }
+
+    private var failureBadge: CALayer?
+
+    private func setFailureBadge(visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        button.wantsLayer = true
+        if visible, failureBadge == nil {
+            let size: CGFloat = 6
+            let badge = CALayer()
+            badge.backgroundColor = NSColor.systemRed.cgColor
+            badge.cornerRadius = size / 2
+            badge.frame = CGRect(x: button.bounds.maxX - size - 1, y: button.bounds.maxY - size - 2,
+                                 width: size, height: size)
+            button.layer?.addSublayer(badge)
+            failureBadge = badge
+        } else if !visible {
+            failureBadge?.removeFromSuperlayer()
+            failureBadge = nil
+        }
+    }
+
     private func buildRightClickMenu() -> NSMenu {
         let menu = NSMenu()
+        let overview = SyncOverview.current(coordinator: coordinator, taskCoordinator: taskCoordinator)
+        let statusLine = NSMenuItem(title: overview.headline, action: nil, keyEquivalent: "")
+        statusLine.isEnabled = false
+        menu.addItem(statusLine)
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Sync now", action: #selector(syncNowMenuAction), keyEquivalent: "")
         menu.addItem(withTitle: "Open Sync Bar", action: #selector(openMainWindowAction), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
@@ -131,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func syncNowMenuAction() { coordinator.syncNow(ruleId: nil); taskCoordinator.syncAll() }
+    @objc private func syncNowMenuAction() { coordinator.syncAll() }
     @objc private func openMainWindowAction() { showMainWindow() }
     @objc private func openSettingsDrawerAction() {
         showMainWindow()
@@ -142,7 +185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func togglePauseAction() {
         AppSettings.shared.pauseSyncing.toggle()
-        rightClickMenu = buildRightClickMenu()
     }
     @objc private func checkForUpdatesAction() { updater.checkForUpdates() }
 
@@ -196,9 +238,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let actions = MenuBarPopoverActions(
             syncNow: { [weak self] ruleId, bindingId in
-                self?.coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
                 // "Sync all" (no specific rule) also reconciles the two-way syncs.
-                if ruleId == nil && bindingId == nil { self?.taskCoordinator.syncAll() }
+                if ruleId == nil && bindingId == nil {
+                    self?.coordinator.syncAll()
+                } else {
+                    self?.coordinator.syncNow(ruleId: ruleId, bindingId: bindingId)
+                }
             },
             syncTask: { [weak self] sync in
                 Task { await self?.taskCoordinator.run(sync) }
@@ -270,17 +315,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Notifications
 
     private func subscribeToNotifications() {
-        NotificationCenter.default.publisher(for: .syncStarted)
-            .sink { [weak self] _ in self?.startStatusItemSync() }
-            .store(in: &subscriptions)
-        NotificationCenter.default.publisher(for: .syncFinished)
-            .sink { [weak self] _ in self?.stopStatusItemSync() }
+        // Either coordinator running spins the icon, so two-way syncs show too.
+        coordinator.$isSyncing.combineLatest(taskCoordinator.$isSyncing)
+            .map { $0 || $1 }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] busy in
+                if busy { self?.startStatusItemSync() } else { self?.stopStatusItemSync() }
+                self?.refreshStatusItemState()
+            }
             .store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .pauseSyncingChanged)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                self.rightClickMenu = self.buildRightClickMenu()
-            }
+            .merge(with: NotificationCenter.default.publisher(for: .rulesChanged))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshStatusItemState() }
+            .store(in: &subscriptions)
+        Ledger.shared.objectWillChange
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshStatusItemState() }
             .store(in: &subscriptions)
         NotificationCenter.default.publisher(for: .openMainWindow)
             .sink { [weak self] _ in self?.showMainWindow() }
@@ -315,7 +367,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the arrows without re-deriving the geometry.
     private func startStatusItemSync() {
         guard let button = statusItem?.button, let image = button.image else { return }
-        button.toolTip = "Sync Bar — syncing…"
         button.wantsLayer = true
         guard let hostLayer = button.layer else { return }
 
@@ -375,7 +426,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopStatusItemSync() {
         cometLayer?.removeFromSuperlayer()
         cometLayer = nil
-        statusItem?.button?.toolTip = "Sync Bar"
     }
 }
 

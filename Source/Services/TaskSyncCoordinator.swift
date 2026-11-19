@@ -43,13 +43,13 @@ final class TaskSyncCoordinator: ObservableObject {
     }
 
     func runAll() async {
-        guard !ledger.isDemoMode else { return }
+        guard !isSyncing, !ledger.isDemoMode else { return }
         let syncs = ledger.taskSyncs.filter(\.enabled)
         guard !syncs.isEmpty else { return }
         isSyncing = true
         for sync in syncs {
             activeSyncId = sync.id
-            await run(sync)
+            await reconcile(sync)
         }
         activeSyncId = nil
         isSyncing = false
@@ -68,8 +68,19 @@ final class TaskSyncCoordinator: ObservableObject {
             errorMessage: "Skipped \"\(task.title)\": no Reminders list named \(named)."))
     }
 
-    /// Reconciles a single task sync end-to-end.
+    /// Runs one task sync from its row's button. Marks it busy so the row,
+    /// header, and menu bar icon show the run.
     func run(_ sync: TaskSync) async {
+        guard !isSyncing, !ledger.isDemoMode else { return }
+        isSyncing = true
+        activeSyncId = sync.id
+        await reconcile(sync)
+        activeSyncId = nil
+        isSyncing = false
+    }
+
+    /// Reconciles a single task sync end-to-end.
+    private func reconcile(_ sync: TaskSync) async {
         guard let provider = providerFor(sync.provider) else {
             ledger.updateTaskSyncRunResult(id: sync.id, status: .error, runAt: now(),
                                            error: "Reconnect \(sync.provider.kind.label) to sync tasks.")

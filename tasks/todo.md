@@ -1,5 +1,56 @@
 # Todo
 
+## UX overhaul: make every control say what it did
+
+Outcome: you can always tell whether SyncBar is paused, syncing, failing, or idle, and every button either does something visible or says why it can't.
+
+Source: two code audits on 2026-11-19 (menu bar and sync controls; main window), with the high-severity claims checked against the code. Today's failure: syncing was paused since Nov 8, "sync now" clicks were dropped silently, and resume started nothing.
+
+### Decisions needed before building
+- [x] D1. "Sync now" while paused runs anyway. Pause stops only the timer. (chosen 2026-11-19)
+- [x] D2. Two-way syncs go on the 15-minute timer and follow Pause. (chosen 2026-11-19)
+- [x] D3. Build all four phases, one commit each. (chosen 2026-11-19)
+
+### Phase 1. One visible sync state (today's bug)
+- [x] One `SyncStatus` value (paused, syncing, failed, idle with last and next run) built from both coordinators. The popover header, main window header, menu bar icon, and tooltip all read it. Isolated table tests first, from a written failure list.
+- [x] Bring back the "Paused" pill and warning dot. Add a paused banner with Resume to the Syncs screen.
+- [x] Resume starts a sync right away.
+- [x] "Sync now" while paused follows D1. Sync buttons disable and spin while a run is active. A click during a run says "Already syncing".
+- [x] Task syncs follow Pause, set their busy state, and animate the menu bar icon.
+- [x] Menu bar icon: paused and failed badges. The tooltip states the status.
+- [x] Popover and main window rows show "Failed", "Off", or "Inactive" in place of "Synced X ago" when that applies.
+
+Phase 1 notes: isolated tests (SyncStatusTests, failure list O1-O18 and R1-R11) were written first and seen failing. The menu bar icon dims while paused, shows a red dot while a sync has failed, and its tooltip and right-click menu show the overview line. E2E: `scripts/ux-shots.sh build/ux-shots/phase-1` renders the real popover and Syncs screen offscreen (paused, idle with failure, syncing) from the isolated test ledger. A fresh reviewer read the renders. Fixed from that review: partial failures counted in the header, no repeated "Paused", the subtitle colors only the status, and errors wrap to two lines in the popover. Not changed: paused and partial share the warning color (syncing is shown by the spinning button).
+
+### Phase 2. Errors you can reach
+- [ ] A source failure (for example "Reconnect the Notion workspace") marks its syncs Failed and posts the failure notification.
+- [ ] A Failed row shows the one-line error. Clicking it opens Activity filtered to that sync.
+- [ ] Task sync errors write an Activity event.
+- [ ] Connections: Reconnect errors appear on the card. Notion, Linear, Google, and Twitter get a "Needs reconnect" state.
+- [ ] Editor pickers that fail to load show the error and a Retry button. Today they say "Loading..." forever.
+- [ ] Upload from the menu bar opens a file picker. Today it opens a tab with no upload control.
+- [ ] Activity: add a "Skipped" filter. Skip rows say "Skipped". The empty state tells "no events" apart from "filter hides events".
+
+### Phase 3. A safe editor
+- [ ] Confirm Delete. Ask before Close or Cancel discards edits.
+- [ ] A greyed-out Save names the missing field.
+- [ ] Add an on/off switch for each sync. Today "Off" can show, but nothing turns it off or on.
+- [ ] "Template" title option: add the template field, or remove the option.
+- [ ] Warn when a change will rewrite every note on the next run.
+
+### Phase 4. Cleanup
+- [ ] Delete unreachable views (DestinationDetailScaffold, BindingEditorSheet, FolderPickerSheet, NotionForm, OnboardingView, SyncRuleCard, DestinationIconStack), and check each has no caller first.
+- [ ] Copy pass with the terse rule: cut helper paragraphs, and drop "rule", "ledger", "orphans", "OAuth", and the CASA joke from the UI.
+- [ ] Use one sync icon, one button set, one status pill, and one sync row view for one-way and task syncs.
+
+### Not in this pass
+- Splitting the 1,487-line SyncEditorView into a draft model and subviews. It's worth doing, but it's a refactor with its own risk.
+- Settings that are stored per folder and shared by sibling syncs (notebook choice, page order, attach PDF).
+
+### Verification
+- `make test`, `make lint`, `make build` after each phase, one commit per phase.
+- There is no UI test target. Each phase ends with `make run` and screenshots of every changed state (paused, syncing, failed, idle) saved to `build/ux-shots/phase-N/`. A fresh subagent that has not seen this plan reviews the screenshots against the outcome line.
+
 ## Release gate and selector containment
 
 ### Plan

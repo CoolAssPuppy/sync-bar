@@ -73,6 +73,7 @@ struct SyncsHomeView: View {
 
     @ObservedObject private var ledger = Ledger.shared
     @ObservedObject private var entitlement = EntitlementManager.shared
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.theme) private var theme
     @State private var isAddingSource = false
     @State private var reactivateFeature: PaidFeature?
@@ -108,6 +109,7 @@ struct SyncsHomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if settings.pauseSyncing { PausedBanner { settings.pauseSyncing = false } }
             if ledger.remarkableNeedsRepair { disconnectedBanner }
             content
         }
@@ -139,13 +141,13 @@ struct SyncsHomeView: View {
                 Text("Syncs")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(theme.foreground)
-                Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.muted)
+                subtitle.font(.system(size: 13))
             }
             Spacer()
-            if hasAnySync { sortMenu }
-            AppIconButton(systemName: "arrow.clockwise", help: "Sync all", spinOnTap: true) { syncAll() }
+            if hasAnySync {
+                sortMenu
+                SyncNowButton(isBusy: isAnySyncing, help: "Sync all") { coordinator.syncAll() }
+            }
             PillButton(title: "New sync", systemImage: "plus") { onNew() }
         }
         .padding(.horizontal, 28)
@@ -175,19 +177,31 @@ struct SyncsHomeView: View {
         .help("Sort or group the syncs")
     }
 
-    private func syncAll() {
-        coordinator.syncNow()
-        taskCoordinator.syncAll()
+    private var isAnySyncing: Bool { coordinator.isSyncing || taskCoordinator.isSyncing }
+
+    /// The paused banner already says "paused", so the subtitle reports the
+    /// rest of the state.
+    private var overview: SyncOverview {
+        SyncOverview.current(coordinator: coordinator, taskCoordinator: taskCoordinator, ignoringPause: true)
     }
 
-    private var subtitle: String {
+    private var subtitle: Text {
         let count = flows.count + taskSyncs.count
-        if count == 0 { return hasAnySource ? "No syncs yet" : "Add a source to begin" }
-        let last = (flows.compactMap(\.lastRunAt) + taskSyncs.compactMap(\.lastRunAt)).max()
-        let active = "\(count) sync\(count == 1 ? "" : "s")"
-        if coordinator.isSyncing || taskCoordinator.isSyncing { return "\(active) · syncing now" }
-        if let last { return "\(active) · last run \(Formatters.relativeLabel(for: last))" }
-        return "\(active) · not run yet"
+        if count == 0 {
+            return Text(hasAnySource ? "No syncs yet" : "Add a source to begin").foregroundColor(theme.muted)
+        }
+        let headlineColor = overview.tone == .neutral || overview.tone == .active ? theme.muted
+            : theme.color(for: overview.tone)
+        return Text("\(count) sync\(count == 1 ? "" : "s") · ").foregroundColor(theme.muted)
+            + Text(overview.headline).foregroundColor(headlineColor)
+    }
+
+    /// Whether this flow is the one running. The rule is marked before its
+    /// destination, so a rule with no destination marked yet counts too.
+    private func isRunning(_ flow: SyncFlow) -> Bool {
+        guard coordinator.isSyncing else { return false }
+        if let bindingId = coordinator.activeBindingId { return bindingId == flow.binding.id }
+        return coordinator.activeRuleId == flow.ruleId
     }
 
     // MARK: Content
@@ -221,21 +235,43 @@ struct SyncsHomeView: View {
         switch item {
         case .flow(let flow):
             let inactiveFeature = paidInactiveFeature(for: flow)
-            SyncRowView(
-                flow: flow,
-                isSyncing: coordinator.isSyncing && coordinator.activeBindingId == flow.binding.id,
-                isPaidInactive: inactiveFeature != nil,
+            let running = isRunning(flow)
+            SyncListRow(
+                source: AnyView(SourceIcon(kind: flow.rule.sourceKind, size: 30)),
+                sourceName: flow.folderName,
+                isTwoWay: false,
+                destination: AnyView(DestinationIcon(kind: flow.kind, size: 26)),
+                destinationName: flow.kind.label,
+                summary: flow.howSummary,
+                status: SyncRowStatus.make(
+                    isSyncing: running, isEnabled: flow.isEnabled, isPaidInactive: inactiveFeature != nil,
+                    lastStatus: flow.binding.lastRunStatus, lastRunAt: flow.lastRunAt,
+                    lastError: flow.binding.lastRunError, now: Date()),
+                isBusy: running,
+                isBlocked: coordinator.isSyncing,
+                canSync: inactiveFeature == nil,
                 onTap: {
                     if let inactiveFeature { reactivateFeature = inactiveFeature } else { onEdit(flow) }
                 },
                 onSyncNow: { coordinator.syncNow(ruleId: flow.ruleId, bindingId: flow.binding.id) }
             )
         case .task(let sync):
-            // Show "Syncing" for the whole run, not just the row the coordinator
-            // is on, so finished rows in a batch don't flash mid-sync.
-            TaskSyncRowView(
-                sync: sync,
-                isSyncing: taskCoordinator.isSyncing && sync.enabled,
+            let running = taskCoordinator.isSyncing && taskCoordinator.activeSyncId == sync.id
+            SyncListRow(
+                source: AnyView(Image("Reminders").resizable().interpolation(.high).scaledToFit()
+                    .frame(width: 30, height: 30)),
+                sourceName: sync.remindersListName,
+                isTwoWay: true,
+                destination: AnyView(DestinationIcon(kind: .notion, size: 26)),
+                destinationName: sync.provider.displayName,
+                summary: "Two-way · most recent edit wins",
+                status: SyncRowStatus.make(
+                    isSyncing: running, isEnabled: sync.enabled, isPaidInactive: false,
+                    lastStatus: sync.lastRunStatus, lastRunAt: sync.lastRunAt,
+                    lastError: sync.lastRunError, now: Date()),
+                isBusy: running,
+                isBlocked: taskCoordinator.isSyncing,
+                canSync: true,
                 onTap: { onEditTask(sync) },
                 onSyncNow: { Task { await taskCoordinator.run(sync) } }
             )
@@ -315,10 +351,18 @@ struct SyncsHomeView: View {
 
 // MARK: - Sync row
 
-private struct SyncRowView: View {
-    let flow: SyncFlow
-    let isSyncing: Bool
-    var isPaidInactive: Bool = false
+/// One row on the Syncs screen, for a one-way flow or a two-way task sync.
+private struct SyncListRow: View {
+    let source: AnyView
+    let sourceName: String
+    let isTwoWay: Bool
+    let destination: AnyView
+    let destinationName: String
+    let summary: String
+    let status: SyncRowStatus
+    let isBusy: Bool
+    let isBlocked: Bool
+    let canSync: Bool
     let onTap: () -> Void
     let onSyncNow: () -> Void
 
@@ -330,30 +374,37 @@ private struct SyncRowView: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 10) {
-                        SourceIcon(kind: flow.rule.sourceKind, size: 30)
-                        Text(flow.folderName)
+                        source
+                        Text(sourceName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground)
                             .lineLimit(1)
-                        FlowArrow()
-                        DestinationIcon(kind: flow.kind, size: 26)
-                        Text(flow.kind.label)
+                        if isTwoWay {
+                            Image(systemName: "arrow.left.arrow.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.tertiary)
+                        } else {
+                            FlowArrow()
+                        }
+                        destination
+                        Text(destinationName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(theme.foreground)
                             .lineLimit(1)
                     }
-                    Text(flow.howSummary)
+                    Text(status.detail ?? summary)
                         .font(.system(size: 12))
-                        .foregroundStyle(theme.tertiary)
+                        .foregroundStyle(status.detail == nil ? theme.tertiary : theme.color(for: status.tone))
                         .padding(.leading, 40)
                         .lineLimit(1)
+                        .help(status.detail ?? "")
                 }
-                .opacity(isPaidInactive ? 0.55 : 1)
+                .opacity(canSync ? 1 : 0.55)
                 Spacer(minLength: 12)
-                statusPill
-                // A paused paid sync can't run, so don't offer "Sync now" — the
-                // row taps through to the reactivate dialog instead.
-                if !isPaidInactive { syncNowButton }
+                SyncStatusChip(status: status)
+                if canSync {
+                    SyncNowButton(isBusy: isBusy, isDisabled: isBlocked, help: "Sync this now", action: onSyncNow)
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(theme.tertiary)
@@ -366,169 +417,12 @@ private struct SyncRowView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                    .strokeBorder(isHovered ? theme.borderStrong : theme.border, lineWidth: 1)
+                    .strokeBorder(isBusy ? theme.borderFocus : (isHovered ? theme.borderStrong : theme.border),
+                                  lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-    }
-
-    private var statusPill: some View {
-        HStack(spacing: 6) {
-            SyncStatusDot(status: flow.status, isSyncing: isSyncing)
-            Text(statusText)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(statusColor)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .background(Capsule().fill(statusColor.opacity(0.12)))
-    }
-
-    private var syncNowButton: some View {
-        Button(action: onSyncNow) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.muted)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .help("Sync this now")
-    }
-
-    private var statusText: String {
-        if isPaidInactive { return "Subscription inactive" }
-        if isSyncing { return "Syncing now…" }
-        if !flow.isEnabled { return "Off" }
-        switch flow.status {
-        case .neverRun: return "Not synced yet"
-        case .running:  return "Syncing…"
-        case .error:    return "Failed"
-        case .partial:  return "Partial"
-        case .success:
-            if let last = flow.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
-            return "Synced"
-        }
-    }
-
-    private var statusColor: Color {
-        if isPaidInactive { return theme.warning }
-        if isSyncing { return theme.primary }
-        if !flow.isEnabled { return theme.tertiary }
-        switch flow.status {
-        case .success:  return theme.success
-        case .partial:  return theme.warning
-        case .error:    return theme.destructive
-        case .running:  return theme.primary
-        case .neverRun: return theme.muted
-        }
-    }
-}
-
-// MARK: - Two-way task sync row
-
-private struct TaskSyncRowView: View {
-    let sync: TaskSync
-    let isSyncing: Bool
-    let onTap: () -> Void
-    let onSyncNow: () -> Void
-
-    @Environment(\.theme) private var theme
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 10) {
-                        Image("Reminders").resizable().interpolation(.high).scaledToFit().frame(width: 30, height: 30)
-                        Text(sync.remindersListName)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(theme.foreground).lineLimit(1)
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(theme.tertiary)
-                        DestinationIcon(kind: .notion, size: 26)
-                        Text(sync.provider.displayName)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(theme.foreground).lineLimit(1)
-                    }
-                    Text("Two-way · most recent edit wins")
-                        .font(.system(size: 12))
-                        .foregroundStyle(theme.tertiary)
-                        .padding(.leading, 40)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 12)
-                statusPill
-                syncNowButton
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(theme.tertiary)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
-            .background(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .fill(isHovered ? theme.cardElevated : theme.card))
-            .overlay(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                .strokeBorder(isHovered ? theme.borderStrong : theme.border, lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-
-
-    private var statusPill: some View {
-        HStack(spacing: 6) {
-            SyncStatusDot(status: isSyncing ? .running : sync.lastRunStatus, isSyncing: isSyncing)
-            Text(statusText)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(statusColor).lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .background(Capsule().fill(statusColor.opacity(0.12)))
-    }
-
-    private var syncNowButton: some View {
-        Button(action: onSyncNow) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.muted)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .help("Sync this now")
-    }
-
-    private var statusText: String {
-        if isSyncing { return "Syncing now…" }
-        if !sync.enabled { return "Off" }
-        switch sync.lastRunStatus {
-        case .neverRun: return "Not synced yet"
-        case .running:  return "Syncing…"
-        case .error:    return "Failed"
-        case .partial:  return "Partial"
-        case .success:
-            if let last = sync.lastRunAt { return "Synced \(Formatters.relativeLabel(for: last))" }
-            return "Synced"
-        }
-    }
-
-    private var statusColor: Color {
-        if isSyncing { return theme.primary }
-        if !sync.enabled { return theme.tertiary }
-        switch sync.lastRunStatus {
-        case .success:  return theme.success
-        case .partial:  return theme.warning
-        case .error:    return theme.destructive
-        case .running:  return theme.primary
-        case .neverRun: return theme.muted
-        }
     }
 }

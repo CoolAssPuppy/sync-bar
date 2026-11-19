@@ -6,6 +6,24 @@
     <description>SyncBar updates</description>
     <language>en</language>
     <item>
+      <title>Version 1.8.0</title>
+      <pubDate>Thu, 19 Nov 2026 22:26:37 +0000</pubDate>
+      <sparkle:version>33</sparkle:version>
+      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Pause stops the schedule only. Sync now always runs, and Resume syncs right away.</li><li>Paused, syncing, and failed states show on the menu bar icon, in the menu, and on the Syncs screen.</li><li>Reminders and Notion two-way syncs run on the schedule.</li><li>A failed sync shows its error, with a link to its log. The account's card shows a Reconnect button.</li><li>The sync editor asks before deleting or discarding changes and has an on/off switch.</li><li>Fixed: saving an older Markdown sync no longer rewrites every note. Upload in the menu bar opens the file picker.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://pub-9c8d72fe664b4ce18aac0d718b4e0346.r2.dev/apps/syncbar/SyncBar-1.8.0.dmg"
+        sparkle:edSignature="obokmOg1shOUuqd+lml08Se3NhFKy5aCaJu2pG2qrQNJa2PuiVsfyYhaE77QpmCRz5q6SwHYTZPQIHjf5pYxCg=="
+        length="8773273"
+        type="application/x-apple-diskimage" />
+    </item>
+
+    <item>
       <title>Version 1.7.0</title>
       <pubDate>Sun, 08 Nov 2026 07:48:08 +0000</pubDate>
       <sparkle:version>32</sparkle:version>

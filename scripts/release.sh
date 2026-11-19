@@ -12,7 +12,9 @@
 #   7. Verifies everything is live
 #
 # Prerequisites:
-#   - notarytool keychain profile "agent-server" (see scripts/SPARKLE.md)
+#   - SPARKLE_APP_SPECIFIC_PASSWORD in Doppler sync-bar/prd (notarization)
+#   - the SyncBar Developer ID provisioning profile installed locally (the
+#     script never asks Xcode to create or download profiles)
 #   - Sparkle sign_update at ~/bin/sparkle/sign_update
 #   - create-dmg installed (brew install create-dmg)
 #   - doppler CLI logged in with access to the sync-bar/prd config (provides
@@ -37,12 +39,7 @@ DIST="$REPO_ROOT/dist"
 SCRIPTS="$REPO_ROOT/scripts"
 
 NOTARY_PROFILE="${NOTARY_PROFILE:-agent-server}"
-# Optional: the keychain file that holds the profile, when it isn't in the
-# default search list (e.g. ~/Library/Keychains/agent-server-notary.keychain-db).
-NOTARY_KEYCHAIN="${NOTARY_KEYCHAIN:-}"
-NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
-[ -n "$NOTARY_KEYCHAIN" ] && NOTARY_AUTH+=(--keychain "$NOTARY_KEYCHAIN")
-export NOTARY_KEYCHAIN
+
 SPARKLE_SIGN_UPDATE="${SPARKLE_SIGN_UPDATE:-$HOME/bin/sparkle/sign_update}"
 SIGN_IDENTITY="Developer ID Application: Prashant Sridharan (955GSY56UT)"
 
@@ -81,10 +78,32 @@ if ! "${WRANGLER[@]}" --version >/dev/null 2>&1; then
   exit 1
 fi
 
+# Notary auth. The fleet's app-specific password lives in Doppler, so no
+# keychain profile is needed (same as meeting-notifier and command-center).
+# A stored keychain profile is the fallback.
+# The Apple ID comes from the environment or Doppler, never from this file.
+if [ -z "${NOTARY_APPLE_ID:-}" ]; then
+  NOTARY_APPLE_ID="$(doppler secrets get NOTARY_APPLE_ID \
+    --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" --plain 2>/dev/null || true)"
+fi
+NOTARY_TEAM_ID="${NOTARY_TEAM_ID:-955GSY56UT}"
+if [ -z "${NOTARY_PASSWORD:-}" ]; then
+  NOTARY_PASSWORD="$(doppler secrets get SPARKLE_APP_SPECIFIC_PASSWORD \
+    --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" --plain 2>/dev/null || true)"
+fi
+if [ -n "${NOTARY_PASSWORD:-}" ] && [ -n "$NOTARY_APPLE_ID" ]; then
+  NOTARY_AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
+  export NOTARY_APPLE_ID NOTARY_TEAM_ID NOTARY_PASSWORD
+elif xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+  NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+else
+  echo "Error: no notary credentials."
+  echo "Set NOTARY_APPLE_ID and SPARKLE_APP_SPECIFIC_PASSWORD in Doppler $DOPPLER_PROJECT/$DOPPLER_CONFIG,"
+  echo "or pass NOTARY_APPLE_ID in the environment."
+  exit 1
+fi
 if ! xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1; then
-  echo "Error: notarytool profile '$NOTARY_PROFILE' not found or invalid."
-  echo "If the profile lives in its own keychain, unlock it and set NOTARY_KEYCHAIN to its path."
-  echo "Otherwise run: xcrun notarytool store-credentials \"$NOTARY_PROFILE\" --apple-id ... --team-id ... --password ..."
+  echo "Error: Apple rejected the notary credentials."
   exit 1
 fi
 
@@ -143,7 +162,6 @@ xcodebuild -project "$REPO_ROOT/$APP_NAME.xcodeproj" \
   -scheme "$APP_NAME" \
   -configuration Release \
   -archivePath "$ARCHIVE" \
-  -allowProvisioningUpdates \
   archive | "${PRETTY[@]}"
 
 #----------------------------------------------------------------------
@@ -155,8 +173,7 @@ echo "==> Exporting .app"
 xcodebuild -exportArchive \
   -archivePath "$ARCHIVE" \
   -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist "$SCRIPTS/export-options.plist" \
-  -allowProvisioningUpdates >/dev/null
+  -exportOptionsPlist "$SCRIPTS/export-options.plist" >/dev/null
 
 APP_PATH="$EXPORT_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then

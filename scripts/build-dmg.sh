@@ -100,8 +100,12 @@ echo "Codesigning DMG with: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG_OUT"
 
 echo "Notarizing DMG (this can take several minutes)..."
-NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
-[ -n "${NOTARY_KEYCHAIN:-}" ] && NOTARY_AUTH+=(--keychain "$NOTARY_KEYCHAIN")
+# release.sh exports Apple ID credentials from Doppler; fall back to a profile.
+if [ -n "${NOTARY_PASSWORD:-}" ]; then
+  NOTARY_AUTH=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
+else
+  NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+fi
 xcrun notarytool submit "$DMG_OUT" "${NOTARY_AUTH[@]}" --wait
 
 echo ""

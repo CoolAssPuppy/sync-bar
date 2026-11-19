@@ -46,7 +46,7 @@ struct ActivityView: View {
                 Text("Activity")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(theme.foreground)
-                Text("\(ledger.events.count) event\(ledger.events.count == 1 ? "" : "s")")
+                Text(countLabel)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.muted)
             }
@@ -57,6 +57,13 @@ struct ActivityView: View {
         .padding(.horizontal, 28)
         .padding(.top, 26)
         .padding(.bottom, 16)
+    }
+
+    private var countLabel: String {
+        let total = ledger.events.count
+        let shown = SyncLogView.filter(ledger.events, search: search, eventType: selectedEventType).count
+        let noun = total == 1 ? "event" : "events"
+        return shown == total ? "\(total) \(noun)" : "\(shown) of \(total) \(noun)"
     }
 
     private var searchField: some View {

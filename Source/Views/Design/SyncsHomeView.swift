@@ -454,8 +454,7 @@ private struct SyncListRow: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous)
-                    .strokeBorder(isBusy ? theme.borderFocus : (isHovered ? theme.borderStrong : theme.border),
-                                  lineWidth: 1)
+                    .strokeBorder(isHovered ? theme.borderStrong : theme.border, lineWidth: 1)
             )
             .contentShape(Rectangle())
         }

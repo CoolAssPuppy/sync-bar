@@ -49,11 +49,13 @@ Phase 4 notes: deleted DestinationDetailScaffold, BindingEditorSheet, FolderPick
 
 ### Follow-ups from the final review (not done)
 - [ ] A failed row on the Syncs screen or in the popover should offer the fix itself (Reconnect), not only "View log".
-- [ ] One name per destination across screens: the list says "Markdown files", Connections and the editor say the account name ("Obsidian vault").
-- [ ] Connections cards: name the service on every card (Linear and Google cards show only the account).
-- [ ] Activity header count should reflect the filter ("1 of 7 events").
+- [x] One name per destination across screens: the list says "Markdown files", Connections and the editor say the account name ("Obsidian vault").
+- [x] Connections cards: name the service on every card (Linear and Google cards show only the account).
+- [x] Activity header count should reflect the filter ("1 of 7 events").
 - [ ] The popover footer is five unlabeled icons.
-- [ ] Editor layout: the destination form card nests inside the Customize card; the bottom row clips under the footer.
+- [x] Editor layout: the destination form card nests inside the Customize card; the bottom row clips under the footer.
+
+Polish pass (/impeccable polish, 2026-11-19): the single Customize card replaces nested form cards; PillButton has a readable disabled state; busy rows lose the extra gold border; the Add sheets drop labels that repeated their titles; Settings says "Transcription"; row summaries use one capitalization; Connections cards name their service; the Activity count follows the filter; Page order uses the native picker. Before and after renders: `build/ux-shots/polish-before/`, `build/ux-shots/polish-after/`. The Impeccable detector targets web UI, so it was not run on this SwiftUI app.
 
 ### Not in this pass
 - Splitting the 1,487-line SyncEditorView into a draft model and subviews. It's worth doing, but it's a refactor with its own risk.

@@ -14,7 +14,7 @@ struct MarkdownForm: View {
     let targets: [MarkdownTarget]
 
     var body: some View {
-        AppCard("Markdown Files") {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(spacing: 0) {
                 AppSettingRow("Folder") {
                     HStack(spacing: 6) {
@@ -30,7 +30,7 @@ struct MarkdownForm: View {
                     }
                 }
                 AppRowDivider().padding(.vertical, 10)
-                AppSettingRow("File name", description: "{folder_name} {notebook} {page_n} {date} {title}, / for subfolders") {
+                AppSettingRow("File name", description: "{notebook} {page_n} {date} {title} {folder_name}\nA / makes a subfolder.") {
                     TextField(MarkdownTarget.defaultFileNameTemplate, text: $binding.fileNameTemplate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)

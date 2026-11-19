@@ -83,11 +83,6 @@ struct AddDestinationSheet: View {
 
     private func kindPicker(theme: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Destination Type")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(theme.tertiary)
-                .textCase(.uppercase)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                 ForEach(DestinationKind.allCases) { kind in
                     KindTile(kind: kind, isSelected: selectedKind == kind) {

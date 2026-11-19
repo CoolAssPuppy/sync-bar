@@ -65,6 +65,15 @@ final class UXStateRenderTests: XCTestCase {
             try snapshot(editEditor.environment(\.theme, theme), size: CGSize(width: 680, height: 640),
                          to: outputDir.appendingPathComponent("8-editor-edit.png"))
         }
+        try snapshot(SettingsDrawer(isPresented: .constant(true), contentHeight: 900).environment(\.theme, theme),
+                     size: CGSize(width: 1000, height: 900),
+                     to: outputDir.appendingPathComponent("9-settings.png"))
+        try snapshot(AddSourceSheet(isPresented: .constant(true)).environment(\.theme, theme),
+                     size: CGSize(width: 560, height: 520),
+                     to: outputDir.appendingPathComponent("10-add-source.png"))
+        try snapshot(AddDestinationSheet(isPresented: .constant(true)).environment(\.theme, theme),
+                     size: CGSize(width: 560, height: 560),
+                     to: outputDir.appendingPathComponent("11-add-destination.png"))
         let noMatch = ActivityView(search: .constant("nothing matches this"), selectedEventType: .constant("all"))
         try snapshot(noMatch.environment(\.theme, theme), size: CGSize(width: 860, height: 420),
                      to: outputDir.appendingPathComponent("6-activity-no-match.png"))
@@ -113,7 +122,7 @@ final class UXStateRenderTests: XCTestCase {
                                             openSettings: {}, openNotionUrl: { _ in }, togglePause: {},
                                             uploadFiles: {}, quit: {})
         let popover = MenuBarPopover(coordinator: coordinator, taskCoordinator: tasks, actions: actions)
-        try snapshot(popover, size: CGSize(width: 380, height: 520), to: outputDir.appendingPathComponent("\(name)-popover.png"))
+        try snapshot(popover, size: nil, to: outputDir.appendingPathComponent("\(name)-popover.png"))
 
         let home = SyncsHomeView(coordinator: coordinator, taskCoordinator: tasks,
                                  onNew: {}, onEdit: { _ in }, onEditTask: { _ in })
@@ -122,9 +131,16 @@ final class UXStateRenderTests: XCTestCase {
         try snapshot(home, size: CGSize(width: 860, height: 620), to: outputDir.appendingPathComponent("\(name)-syncs.png"))
     }
 
-    private func snapshot<V: View>(_ view: V, size: CGSize, to url: URL) throws {
-        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        host.frame = CGRect(origin: .zero, size: size)
+    /// Renders at `size`, or at the view's own fitting size when nil.
+    private func snapshot<V: View>(_ view: V, size: CGSize?, to url: URL) throws {
+        let host: NSHostingView<AnyView>
+        if let size {
+            host = NSHostingView(rootView: AnyView(view.frame(width: size.width, height: size.height)))
+            host.frame = CGRect(origin: .zero, size: size)
+        } else {
+            host = NSHostingView(rootView: AnyView(view))
+            host.frame = CGRect(origin: .zero, size: host.fittingSize)
+        }
         host.appearance = NSAppearance(named: .darkAqua)
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))

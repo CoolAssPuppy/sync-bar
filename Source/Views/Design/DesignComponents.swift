@@ -192,6 +192,7 @@ struct PillButton: View {
     let action: () -> Void
 
     @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
 
     var body: some View {
@@ -202,21 +203,29 @@ struct PillButton: View {
                 }
                 Text(title).font(.system(size: 13, weight: filled ? .bold : .semibold))
             }
-            .foregroundStyle(filled ? theme.primaryForeground : theme.foregroundSoft)
+            .foregroundStyle(foreground)
             .padding(.horizontal, 15)
             .frame(height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(filled ? theme.primary.opacity(isHovered ? 0.92 : 1)
-                          : (isHovered ? theme.cardElevated : Color.clear))
-            )
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(fill))
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(filled ? Color.clear : theme.border, lineWidth: 1)
+                    .strokeBorder(filled && isEnabled ? Color.clear : theme.border, lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+
+    /// Disabled reads as a readable, inert control, never as dimmed gold.
+    private var foreground: Color {
+        guard isEnabled else { return theme.tertiary }
+        return filled ? theme.primaryForeground : theme.foregroundSoft
+    }
+
+    private var fill: Color {
+        guard isEnabled else { return theme.card }
+        if filled { return theme.primary.opacity(isHovered ? 0.92 : 1) }
+        return isHovered ? theme.cardElevated : Color.clear
     }
 }

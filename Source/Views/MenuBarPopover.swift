@@ -258,7 +258,7 @@ private struct MenuSyncRow: View {
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(isBusy ? theme.borderFocus : theme.border, lineWidth: 1))
+            .strokeBorder(theme.border, lineWidth: 1))
         .contentShape(Rectangle())
         .onTapGesture { onOpenWindow() }
     }

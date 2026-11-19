@@ -288,10 +288,10 @@ struct SyncEditorView: View {
                            systemImage: previewRunning ? nil : "eye",
                            filled: false,
                            action: previewNotionSource)
-                    .opacity(previewRunning ? 0.5 : 1).disabled(previewRunning)
+                    .disabled(previewRunning)
             }
             PillButton(title: "Cancel", filled: false, action: requestClose)
-            PillButton(title: "Save sync", action: save).opacity(canSave ? 1 : 0.5).disabled(!canSave)
+            PillButton(title: "Save sync", action: save).disabled(!canSave)
         }
         .padding(20)
         .overlay(alignment: .top) { Rectangle().fill(theme.divider).frame(height: 1) }
@@ -789,7 +789,7 @@ struct SyncEditorView: View {
     /// Mapping-only Notion form: the page/database is chosen in the To step, so
     /// Customize just maps note fields onto the database's columns.
     var notionMappingForm: some View {
-        AppCard("Column Mapping") {
+        VStack(alignment: .leading, spacing: 0) {
             if notionDestSchemaLoading {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -856,19 +856,11 @@ struct SyncEditorView: View {
                 }
                 rowDivider
                 optionRow("Page order") {
-                    Menu {
-                        Button("Chronological") { pageOrder = .chronological }
-                        Button("Reverse chronological") { pageOrder = .reverseChronological }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(pageOrder == .chronological ? "Chronological" : "Reverse")
-                                .font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.foregroundSoft)
-                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.muted)
-                        }
-                        .padding(.horizontal, 12).frame(height: 30)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                    Picker("", selection: $pageOrder) {
+                        Text("Chronological").tag(PageOrder.chronological)
+                        Text("Reverse chronological").tag(PageOrder.reverseChronological)
                     }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
                 }
                 rowDivider
                 optionRow("Only notes tagged", align: .top) { RequiredTagsControl(requiredTags: $requiredTags) }

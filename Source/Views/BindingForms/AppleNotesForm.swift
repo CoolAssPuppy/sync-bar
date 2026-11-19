@@ -23,7 +23,7 @@ struct AppleNotesForm: View {
     private var isCreatingNew: Bool { selection == Self.createNewTag }
 
     var body: some View {
-        AppCard("Apple Notes") {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(spacing: 0) {
                 AppSettingRow(routesByCategory ? "Fallback folder" : "Folder",
                               description: routesByCategory ? "For pages with no Category."

@@ -12,7 +12,7 @@ struct LinearForm: View {
     let accounts: [LinearAccount]
 
     var body: some View {
-        AppCard("Linear") {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(spacing: 0) {
                 AppSettingRow("Team", description: nil) {
                     Picker("", selection: $binding.workspaceId) {

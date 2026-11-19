@@ -286,7 +286,7 @@ struct ConnectionsView: View {
                         disconnect: { ledger.removeLinearAccount(id: acct.id) })
             }
             ForEach(ledger.googleAccounts) { acct in
-                appCard(kind: .googleDocs, name: acct.displayName, subtitle: acct.id,
+                appCard(kind: .googleDocs, name: acct.displayName, subtitle: acct.displayName == acct.id ? "" : acct.id,
                         matches: { if case .googleDocs(let c) = $0 { return c.accountEmail == acct.id }; return false },
                         rename: { ledger.renameGoogleAccount(id: acct.id, newName: $0) },
                         reconnect: { await reconnect { ledger.upsertGoogleAccount(try await GoogleAuthService.shared.connect()) } },
@@ -315,7 +315,7 @@ struct ConnectionsView: View {
         }
     }
 
-    private func notionSubtitle(_ ws: NotionWorkspace) -> String { "Notion" }
+    private func notionSubtitle(_ ws: NotionWorkspace) -> String { "" }
 
     // swiftlint:disable:next function_parameter_count
     private func appCard(kind: DestinationKind, name: String, subtitle: String,
@@ -325,7 +325,12 @@ struct ConnectionsView: View {
                          reconnect: (() async -> Void)?,
                          disconnect: @escaping () -> Void) -> some View {
         let count = ledger.bindings(matching: matches).count
-        let detail = count == 0 ? subtitle : "\(subtitle) · \(count) sync\(count == 1 ? "" : "s")"
+        // Every card names its service; the extra detail follows when it adds
+        // something the title doesn't already say.
+        let service = kind.label
+        let extra = (subtitle.isEmpty || subtitle == name || subtitle == service) ? nil : subtitle
+        let base = name == service ? (extra ?? service) : [service, extra].compactMap { $0 }.joined(separator: " · ")
+        let detail = count == 0 ? base : "\(base) · \(count) sync\(count == 1 ? "" : "s")"
         let failure = lastFailure(destination: matches, source: feeds)
         return ConnectionCard(
             icon: { AnyView(DestinationIcon(kind: kind, size: 32)) },

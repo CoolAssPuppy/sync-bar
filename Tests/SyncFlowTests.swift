@@ -54,7 +54,7 @@ final class SyncFlowTests: XCTestCase {
 
         let summary = SyncFlow(rule: rule, binding: binding).howSummary
         XCTAssertTrue(summary.contains("First line"))
-        XCTAssertTrue(summary.contains("transcribe all pages"))
+        XCTAssertTrue(summary.contains("Transcribe all pages"))
         XCTAssertTrue(summary.contains("work"))
     }
 

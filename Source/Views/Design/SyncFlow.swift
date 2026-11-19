@@ -53,14 +53,14 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
         guard rule.sourceKind == .remarkable else { return flowSummary }
         var parts: [String] = [titleShort + " as title"]
         switch ocrMode {
-        case .all:             parts.append("transcribe all pages")
-        case .handwrittenOnly: parts.append("transcribe handwriting")
-        case .none:            parts.append("no transcription")
+        case .all:             parts.append("Transcribe all pages")
+        case .handwrittenOnly: parts.append("Transcribe handwriting")
+        case .none:            parts.append("No transcription")
         }
         if requiredTags.isEmpty {
             // keep it short — no filter is the common case
         } else {
-            parts.append("tag: " + requiredTags.joined(separator: ", "))
+            parts.append("Tagged " + requiredTags.joined(separator: ", "))
         }
         return parts.joined(separator: " · ")
     }
@@ -70,7 +70,7 @@ struct SyncFlow: Identifiable, Equatable, Hashable {
         if let stream = xStreamLabel { return "Syncing \(stream) to \(destinationSummary)" }
         if rule.sourceKind == .safari {
             if case .chrome(let cfg) = binding.configuration {
-                return cfg.mirrorExactly ? "Exactly matches Safari" : "Adds & updates bookmarks"
+                return cfg.mirrorExactly ? "Matches Safari exactly" : "Adds and updates bookmarks"
             }
             return "Bookmarks"
         }

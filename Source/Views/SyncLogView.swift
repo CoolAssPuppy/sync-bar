@@ -53,9 +53,15 @@ struct SyncLogView: View {
     }
 
     private var filteredEvents: [SyncEvent] {
-        var output = ledger.events
-        if selectedEventType != "all" {
-            output = output.filter { $0.eventType.rawValue == selectedEventType }
+        Self.filter(ledger.events, search: search, eventType: selectedEventType)
+    }
+
+    /// Events matching the search text and type filter. Shared with the
+    /// Activity header so its count matches the list.
+    static func filter(_ events: [SyncEvent], search: String, eventType: String) -> [SyncEvent] {
+        var output = events
+        if eventType != "all" {
+            output = output.filter { $0.eventType.rawValue == eventType }
         }
         let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !trimmed.isEmpty {

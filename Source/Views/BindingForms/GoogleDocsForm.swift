@@ -12,7 +12,7 @@ struct GoogleDocsForm: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        AppCard("Google Docs") {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Drive folder")
                     .font(.system(size: 12, weight: .semibold))

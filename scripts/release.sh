@@ -162,6 +162,7 @@ xcodebuild -project "$REPO_ROOT/$APP_NAME.xcodeproj" \
   -scheme "$APP_NAME" \
   -configuration Release \
   -archivePath "$ARCHIVE" \
+  -allowProvisioningUpdates \
   archive | "${PRETTY[@]}"
 
 #----------------------------------------------------------------------
@@ -173,7 +174,8 @@ echo "==> Exporting .app"
 xcodebuild -exportArchive \
   -archivePath "$ARCHIVE" \
   -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist "$SCRIPTS/export-options.plist" >/dev/null
+  -exportOptionsPlist "$SCRIPTS/export-options.plist" \
+  -allowProvisioningUpdates >/dev/null
 
 APP_PATH="$EXPORT_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
